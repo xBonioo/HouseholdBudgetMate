@@ -49,6 +49,9 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("SupportsLineItems")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -133,8 +136,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<int>("ExpenseId")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime>("OccurredAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateOnly>("OccurredAt")
+                        .HasColumnType("date");
 
                     b.Property<int?>("TagId")
                         .HasColumnType("integer");

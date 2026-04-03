@@ -2,13 +2,16 @@
 using HouseholdBudgetMate.Abstractions.Contracts.Categories.Requests;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
+using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace HouseholdBudgetMate.Application.Services;
 
-public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbContextFactory) : ICategoryService
+public sealed class CategoryService(
+    IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    IDateTimeProvider dateTimeProvider) : ICategoryService
 {
     public async Task<IReadOnlyList<CategoryDto>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -22,6 +25,7 @@ public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbCo
                 Id = x.Id,
                 Name = x.Name,
                 Color = x.Color,
+                SupportsLineItems = x.SupportsLineItems,
                 Tags = x.Tags
                     .OrderBy(t => t.Name)
                     .Select(t => new TagDto
@@ -46,7 +50,8 @@ public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbCo
         var category = new Category
         {
             Name = request.Name.Trim(),
-            Color = request.Color.Trim()
+            Color = request.Color.Trim(),
+            SupportsLineItems = request.SupportsLineItems
         };
 
         dbContext.Categories.Add(category);
@@ -69,6 +74,7 @@ public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbCo
 
         category.Name = request.Name.Trim();
         category.Color = request.Color.Trim();
+        category.SupportsLineItems = request.SupportsLineItems;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -85,12 +91,12 @@ public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbCo
             ?? throw new NotFoundException("Category not found.");
 
         category.IsDeleted = true;
-        category.DeletedAtUtc = DateTime.UtcNow;
+        category.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
 
         foreach (var tag in category.Tags.Where(x => !x.IsDeleted))
         {
             tag.IsDeleted = true;
-            tag.DeletedAtUtc = DateTime.UtcNow;
+            tag.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -157,7 +163,7 @@ public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbCo
             ?? throw new NotFoundException("Tag not found.");
 
         tag.IsDeleted = true;
-        tag.DeletedAtUtc = DateTime.UtcNow;
+        tag.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -169,6 +175,7 @@ public sealed class CategoryService(IDbContextFactory<ApplicationDbContext> dbCo
             Id = category.Id,
             Name = category.Name,
             Color = category.Color,
+            SupportsLineItems = category.SupportsLineItems,
             Tags = category.Tags
                 .Where(x => !x.IsDeleted)
                 .OrderBy(x => x.Name)

@@ -19,7 +19,7 @@ public sealed class ExpenseLineItemConfiguration : IEntityTypeConfiguration<Expe
         builder.Property(x => x.Amount)
             .IsRequired();
 
-        builder.Property(x => x.OccurredAtUtc)
+        builder.Property(x => x.OccurredAt)
             .IsRequired();
 
         builder.Property(x => x.CreatedAtUtc)

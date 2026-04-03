@@ -20,6 +20,7 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Color = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    SupportsLineItems = table.Column<bool>(type: "boolean", nullable: false),
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -139,7 +140,7 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     ExpenseId = table.Column<int>(type: "integer", nullable: false),
                     Description = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
                     Amount = table.Column<decimal>(type: "numeric", nullable: false),
-                    OccurredAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    OccurredAt = table.Column<DateOnly>(type: "date", nullable: false),
                     TagId = table.Column<int>(type: "integer", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)

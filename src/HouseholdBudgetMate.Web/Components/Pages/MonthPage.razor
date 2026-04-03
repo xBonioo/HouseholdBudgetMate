@@ -10,6 +10,7 @@
 @inject ICategoryService CategoryService
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
 
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
@@ -17,9 +18,16 @@
 
 <MudStack Spacing="3" Class="pa-4">
     <MudPaper Class="hb-page-header">
-        <MudText Typo="Typo.h4">
-            Wydatki @(new DateTime(Year, Month, 1).ToString("MMMM", _culture) + " " + Year)
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+            <MudText Typo="Typo.h4">
+                Wydatki @(new DateTime(Year, Month, 1).ToString("MMMM", _culture) + " " + Year)
+            </MudText>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Color="Color.Primary" OnClick="NavigateToPreviousMonth" aria-label="Poprzedni miesiąc" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="NavigateToCurrentMonth">Bieżący</MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Primary" OnClick="NavigateToNextMonth" aria-label="Następny miesiąc" />
+            </MudStack>
+        </MudStack>
         <MudText Typo="Typo.body2" Class="hb-muted">Dodawaj, edytuj i monitoruj status planu miesiecznego.</MudText>
     </MudPaper>
 
@@ -71,7 +79,7 @@
                 <MudNumericField T="decimal" @bind-Value="_newExpense.PlannedAmount" Label="Planowana" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudNumericField T="decimal" @bind-Value="_newExpense.ActualAmount" Label="Realna" Variant="Variant.Outlined" />
+                <MudNumericField T="decimal" @bind-Value="_newExpense.ActualAmount" Label="Realna" Variant="Variant.Outlined" Disabled="@IsCategorySupportsLineItems(_newExpense.CategoryId)" />
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudSwitch @bind-Value="_newExpense.ShowRemainingInUI" Color="Color.Primary" Label="Pokaż pozostało" />
@@ -102,8 +110,8 @@
                     <MudTh>Status</MudTh>
                     <MudTh>Akcje</MudTh>
                 </HeaderContent>
-                <RowTemplate>
-                    @if (_editExpense?.Id == context.Id)
+                <RowTemplate Context="expense">
+                    @if (_editExpense?.Id == expense.Id)
                     {
                         <MudTd><MudTextField @bind-Value="_editExpense.Name" Variant="Variant.Outlined" /></MudTd>
                         <MudTd>
@@ -123,13 +131,10 @@
                             </MudSelect>
                         </MudTd>
                         <MudTd><MudNumericField T="decimal" @bind-Value="_editExpense.PlannedAmount" Variant="Variant.Outlined" /></MudTd>
-                        <MudTd><MudNumericField T="decimal" @bind-Value="_editExpense.ActualAmount" Variant="Variant.Outlined" /></MudTd>
+                        <MudTd><MudNumericField T="decimal" @bind-Value="_editExpense.ActualAmount" Variant="Variant.Outlined" Disabled="@HasLineItems(_editExpense.Id)" /></MudTd>
                         <MudTd>@FormatRemaining(_editExpense.ShowRemainingInUI, _editExpense.PlannedAmount - _editExpense.ActualAmount)</MudTd>
                         <MudTd>
                             <MudSwitch @bind-Value="_editExpense.ShowRemainingInUI" Color="Color.Primary" />
-                            <MudChip T="string" Color="@(IsDerivedUnplanned(_editExpense.PlannedAmount) ? Color.Warning : Color.Default)">
-                                @(IsDerivedUnplanned(_editExpense.PlannedAmount) ? "Nieplanowany" : "Planowany")
-                            </MudChip>
                         </MudTd>
                         <MudTd>
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
@@ -138,23 +143,112 @@
                     }
                     else
                     {
-                        <MudTd>@context.Name</MudTd>
-                        <MudTd>@context.CategoryName</MudTd>
-                        <MudTd>@(context.TagName ?? "-")</MudTd>
-                        <MudTd>@FormatPlannedAmount(context.PlannedAmount)</MudTd>
-                        <MudTd>@(context.ActualAmount ?? 0)</MudTd>
-                        <MudTd>@FormatRemainingForExpense(context)</MudTd>
+                        <MudTd>@expense.Name</MudTd>
+                        <MudTd>@expense.CategoryName</MudTd>
+                        <MudTd>@(expense.TagName ?? "-")</MudTd>
+                        <MudTd>@FormatPlannedAmount(expense.PlannedAmount)</MudTd>
+                        <MudTd>@(expense.ActualAmount ?? 0)</MudTd>
+                        <MudTd>@FormatRemainingForExpense(expense)</MudTd>
                         <MudTd>
-                            <MudChip T="string" Color="@(IsDerivedUnplanned(context.PlannedAmount) ? Color.Warning : Color.Success)">
-                                @(IsDerivedUnplanned(context.PlannedAmount) ? "Nieplanowany" : "Planowany")
+                            <MudChip T="string" Color="@(IsDerivedUnplanned(expense.PlannedAmount) ? Color.Warning : Color.Success)">
+                                @(IsDerivedUnplanned(expense.PlannedAmount) ? "Nieplanowany" : "Planowany")
                             </MudChip>
                         </MudTd>
                         <MudTd>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartEdit(context)">Edytuj</MudButton>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteExpenseAsync(context.Id)">Usuń</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartEdit(expense)">Edytuj</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteExpenseAsync(expense.Id)">Usuń</MudButton>
+                            @if (expense.SupportsLineItems)
+                            {
+                                <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small" OnClick="() => ToggleLineItems(expense.Id)">
+                                    @(IsLineItemsExpanded(expense.Id) ? "▲" : "▼")
+                                </MudButton>
+                            }
                         </MudTd>
                     }
                 </RowTemplate>
+                <ChildRowContent Context="expense">
+                    @if (expense.SupportsLineItems && IsLineItemsExpanded(expense.Id))
+                    {
+                        <MudTd colspan="8" Class="pa-3">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Pozycje wydatku</MudText>
+
+                                @if (expense.LineItems.Count == 0)
+                                {
+                                    <MudText Typo="Typo.caption" Class="hb-muted">Brak pozycji.</MudText>
+                                }
+                                else
+                                {
+                                    <MudTable Items="expense.LineItems" Dense="true" Hover="true">
+                                        <HeaderContent>
+                                            <MudTh>Opis</MudTh>
+                                            <MudTh>Kwota</MudTh>
+                                            <MudTh>Data</MudTh>
+                                            <MudTh>Tag</MudTh>
+                                            <MudTh>Akcje</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate Context="lineItem">
+                                            @if (_editLineItem is not null && _editLineItem.Id == lineItem.Id)
+                                            {
+                                                <MudTd><MudTextField @bind-Value="_editLineItem.Description" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudTd>
+                                                <MudTd><MudNumericField T="decimal" @bind-Value="_editLineItem.Amount" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudTd>
+                                                <MudTd><MudDatePicker Date="@ToDateTime(_editLineItemDate)" DateChanged="OnEditLineItemDateChanged" Margin="Margin.Dense" /></MudTd>
+                                                <MudTd>
+                                                    <MudSelect T="int?" @bind-Value="_editLineItem.TagId" Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
+                                                        @foreach (var tag in GetTagsForCategory(GetExpenseById(_editLineItemExpenseId ?? 0)?.CategoryId ?? 0))
+                                                        {
+                                                            <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                                                        }
+                                                    </MudSelect>
+                                                </MudTd>
+                                                <MudTd>
+                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveLineItemEditAsync">Zapisz</MudButton>
+                                                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelLineItemEdit">Anuluj</MudButton>
+                                                </MudTd>
+                                            }
+                                            else
+                                            {
+                                                <MudTd>@lineItem.Description</MudTd>
+                                                <MudTd>@lineItem.Amount.ToString("0.##")</MudTd>
+                                                <MudTd>@lineItem.OccurredAt.ToString("yyyy-MM-dd")</MudTd>
+                                                <MudTd>@(lineItem.TagName ?? "-")</MudTd>
+                                                <MudTd>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginLineItemEdit(lineItem, GetParentExpenseIdForLineItem(lineItem.Id))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteLineItemAsync(lineItem.Id)" />
+                                                </MudTd>
+                                            }
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+
+                                <MudDivider />
+
+                                <MudGrid>
+                                    <MudItem xs="12" md="4">
+                                        <MudTextField @bind-Value="GetLineItemCreateModel(expense.Id).Description" Label="Opis pozycji" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudNumericField T="decimal" Value="GetLineItemCreateModel(expense.Id).Amount" ValueChanged="(v) => OnCreateLineItemAmountChanged(expense.Id, v)" Label="Kwota" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudDatePicker Date="@ToDateTime(GetLineItemCreateModel(expense.Id).OccurredAt)" DateChanged="(d) => OnCreateLineItemDateChanged(expense.Id, d)" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudSelect T="int?" Value="GetLineItemCreateModel(expense.Id).TagId" ValueChanged="(v) => OnCreateLineItemTagChanged(expense.Id, v)" Label="Tag" Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
+                                            @foreach (var tag in GetTagsForCategory(GetExpenseById(expense.Id)?.CategoryId ?? 0))
+                                            {
+                                                <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2" Class="d-flex align-center">
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => CreateLineItemAsync(expense.Id)">Dodaj pozycję</MudButton>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudStack>
+                        </MudTd>
+                    }
+                </ChildRowContent>
             </MudTable>
         }
     </MudPaper>
@@ -180,6 +274,11 @@
     };
 
     private UpdateExpenseRequest? _editExpense;
+    private readonly HashSet<int> _expandedExpenseIds = [];
+    private readonly Dictionary<int, LineItemCreateModel> _lineItemCreateModels = new();
+    private UpdateExpenseLineItemRequest? _editLineItem;
+    private DateOnly _editLineItemDate = DateOnly.FromDateTime(DateTime.Today);
+    private int? _editLineItemExpenseId;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -193,6 +292,7 @@
         {
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
             _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
+            _expandedExpenseIds.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
 
             CalculateSummary();
 
@@ -220,6 +320,10 @@
     {
         _newExpense.CategoryId = categoryId;
         _newExpense.TagId = null;
+        if (IsCategorySupportsLineItems(categoryId))
+        {
+            _newExpense.ActualAmount = 0;
+        }
         return Task.CompletedTask;
     }
 
@@ -256,7 +360,7 @@
         _plannedTotal = plannedExpenses.Sum(x => x.PlannedAmount ?? 0);
         _actualTotal = _monthPlan.Expenses.Sum(x => x.ActualAmount ?? 0);
         var actualForPlanned = plannedExpenses.Sum(x => x.ActualAmount ?? 0);
-        _remainingTotal = visibleRemainingExpenses.Sum(x => (x.PlannedAmount ?? 0) - (x.ActualAmount ?? 0));
+        _remainingTotal = visibleRemainingExpenses.Sum(x => Math.Max(0, (x.PlannedAmount ?? 0) - (x.ActualAmount ?? 0)));
         _usagePercent = _plannedTotal <= 0 ? 0 : Math.Min(150, (double)(actualForPlanned / _plannedTotal * 100));
     }
 
@@ -277,7 +381,7 @@
 
     private static string FormatRemaining(bool showRemaining, decimal remaining)
     {
-        return showRemaining ? remaining.ToString("0.##") : "-";
+        return showRemaining ? Math.Max(0, remaining).ToString("0.##") : "-";
     }
 
     private static string FormatPlannedAmount(decimal? plannedAmount)
@@ -339,6 +443,11 @@
             ShowRemainingInUI = expense.ShowRemainingInUI,
             IsUnplanned = expense.IsUnplanned
         };
+
+        if (expense.HasLineItems)
+        {
+            _editExpense.ActualAmount = expense.LineItems.Sum(x => x.Amount);
+        }
     }
 
     private void CancelEdit()
@@ -386,5 +495,213 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
-}
 
+    private void NavigateToPreviousMonth()
+    {
+        var targetMonth = new DateTime(Year, Month, 1).AddMonths(-1);
+        _editExpense = null;
+        NavigationManager.NavigateTo($"/month/{targetMonth.Year}/{targetMonth.Month}");
+    }
+
+    private void NavigateToCurrentMonth()
+    {
+        var currentMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+        _editExpense = null;
+        NavigationManager.NavigateTo($"/month/{currentMonth.Year}/{currentMonth.Month}");
+    }
+
+    private void NavigateToNextMonth()
+    {
+        var targetMonth = new DateTime(Year, Month, 1).AddMonths(1);
+        _editExpense = null;
+        NavigationManager.NavigateTo($"/month/{targetMonth.Year}/{targetMonth.Month}");
+    }
+
+    private bool IsCategorySupportsLineItems(int categoryId)
+    {
+        return _categories.FirstOrDefault(x => x.Id == categoryId)?.SupportsLineItems == true;
+    }
+
+    private bool HasLineItems(int expenseId)
+    {
+        return GetExpenseById(expenseId)?.HasLineItems == true;
+    }
+
+    private ExpenseDto? GetExpenseById(int expenseId)
+    {
+        return _monthPlan?.Expenses.FirstOrDefault(x => x.Id == expenseId);
+    }
+
+    private int GetParentExpenseIdForLineItem(int lineItemId)
+    {
+        return _monthPlan?.Expenses.FirstOrDefault(x => x.LineItems.Any(li => li.Id == lineItemId))?.Id ?? 0;
+    }
+
+    private void ToggleLineItems(int expenseId)
+    {
+        if (!_expandedExpenseIds.Add(expenseId))
+        {
+            _expandedExpenseIds.Remove(expenseId);
+            if (_editLineItemExpenseId == expenseId)
+            {
+                CancelLineItemEdit();
+            }
+        }
+    }
+
+    private bool IsLineItemsExpanded(int expenseId)
+    {
+        return _expandedExpenseIds.Contains(expenseId);
+    }
+
+    private LineItemCreateModel GetLineItemCreateModel(int expenseId)
+    {
+        if (_lineItemCreateModels.TryGetValue(expenseId, out var model))
+        {
+            return model;
+        }
+
+        model = new LineItemCreateModel();
+        _lineItemCreateModels[expenseId] = model;
+        return model;
+    }
+
+    private void OnCreateLineItemAmountChanged(int expenseId, decimal value)
+    {
+        GetLineItemCreateModel(expenseId).Amount = value;
+    }
+
+    private void OnCreateLineItemDateChanged(int expenseId, DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            GetLineItemCreateModel(expenseId).OccurredAt = DateOnly.FromDateTime(date.Value);
+        }
+    }
+
+    private void OnCreateLineItemTagChanged(int expenseId, int? tagId)
+    {
+        GetLineItemCreateModel(expenseId).TagId = tagId;
+    }
+
+    private async Task CreateLineItemAsync(int expenseId)
+    {
+        var model = GetLineItemCreateModel(expenseId);
+        if (string.IsNullOrWhiteSpace(model.Description))
+        {
+            Snackbar.Add("Podaj opis pozycji.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            await ExpenseService.CreateExpenseLineItemAsync(new CreateExpenseLineItemRequest
+            {
+                ExpenseId = expenseId,
+                Description = model.Description,
+                Amount = model.Amount,
+                OccurredAt = model.OccurredAt,
+                TagId = model.TagId
+            }, CancellationToken.None);
+
+            _lineItemCreateModels[expenseId] = new LineItemCreateModel();
+            await LoadAsync();
+            _expandedExpenseIds.Add(expenseId);
+            Snackbar.Add("Dodano pozycję.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void BeginLineItemEdit(ExpenseLineItemDto lineItem, int expenseId)
+    {
+        _editLineItem = new UpdateExpenseLineItemRequest
+        {
+            Id = lineItem.Id,
+            Description = lineItem.Description,
+            Amount = lineItem.Amount,
+            OccurredAt = lineItem.OccurredAt,
+            TagId = lineItem.TagId
+        };
+        _editLineItemDate = lineItem.OccurredAt;
+        _editLineItemExpenseId = expenseId;
+    }
+
+    private Task OnEditLineItemDateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _editLineItemDate = DateOnly.FromDateTime(date.Value);
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveLineItemEditAsync()
+    {
+        if (_editLineItem is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _editLineItem.OccurredAt = _editLineItemDate;
+            await ExpenseService.UpdateExpenseLineItemAsync(_editLineItem, CancellationToken.None);
+
+            var expandedExpenseId = _editLineItemExpenseId;
+            CancelLineItemEdit();
+            await LoadAsync();
+            if (expandedExpenseId.HasValue)
+            {
+                _expandedExpenseIds.Add(expandedExpenseId.Value);
+            }
+
+            Snackbar.Add("Zapisano pozycję.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void CancelLineItemEdit()
+    {
+        _editLineItem = null;
+        _editLineItemDate = DateOnly.FromDateTime(DateTime.Today);
+        _editLineItemExpenseId = null;
+    }
+
+    private async Task DeleteLineItemAsync(int lineItemId)
+    {
+        var expenseId = GetParentExpenseIdForLineItem(lineItemId);
+        try
+        {
+            await ExpenseService.DeleteExpenseLineItemAsync(new DeleteExpenseLineItemRequest { Id = lineItemId }, CancellationToken.None);
+            await LoadAsync();
+            if (expenseId > 0)
+            {
+                _expandedExpenseIds.Add(expenseId);
+            }
+            Snackbar.Add("Usunięto pozycję.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private sealed class LineItemCreateModel
+    {
+        public string Description { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public DateOnly OccurredAt { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public int? TagId { get; set; }
+    }
+
+    private static DateTime ToDateTime(DateOnly value)
+    {
+        return value.ToDateTime(TimeOnly.MinValue);
+    }
+}

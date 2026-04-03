@@ -11,7 +11,10 @@ public sealed class ExpenseDto
     public string? TagName { get; set; }
     public decimal? PlannedAmount { get; set; }
     public decimal? ActualAmount { get; set; }
+    public bool SupportsLineItems { get; set; }
     public bool ShowRemainingInUI { get; set; }
+    public IReadOnlyList<ExpenseLineItemDto> LineItems { get; set; } = [];
+    public bool HasLineItems => LineItems.Count > 0;
     public bool IsUnplanned => PlannedAmount is null or <= 0;
     public decimal RemainingAmount => (PlannedAmount ?? 0) - (ActualAmount ?? 0);
 }

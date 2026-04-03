@@ -60,7 +60,7 @@
                     {
                         var yearGroup = _monthGroups[i];
                         <MudMenuItem Disabled="true">@yearGroup.Year</MudMenuItem>
-                        @foreach (var monthItem in yearGroup.Months)
+                        @foreach (var monthItem in yearGroup.Months.OrderBy(x => x.Month))
                         {
                             <MudMenuItem OnClick="@(() => NavigationManager.NavigateTo($"/month/{monthItem.Year}/{monthItem.Month}"))">
                                 @monthItem.Label

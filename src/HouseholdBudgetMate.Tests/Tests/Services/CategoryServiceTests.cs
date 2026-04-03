@@ -3,6 +3,7 @@ using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
+using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace HouseholdBudgetMate.Tests.Tests.Services;
@@ -20,7 +21,7 @@ public sealed class CategoryServiceTests
             await context.SaveChangesAsync();
         }
 
-        var service = new CategoryService(new TestDbContextFactory(options));
+        var service = new CategoryService(new TestDbContextFactory(options), new StaticDateTimeProvider(DateTime.UtcNow));
 
         await Assert.ThrowsAsync<ConflictException>(() => service.CreateCategoryAsync(new CreateCategoryRequest
         {
@@ -47,7 +48,7 @@ public sealed class CategoryServiceTests
             categoryId = category.Id;
         }
 
-        var service = new CategoryService(new TestDbContextFactory(options));
+        var service = new CategoryService(new TestDbContextFactory(options), new StaticDateTimeProvider(DateTime.UtcNow));
         await service.DeleteCategoryAsync(new DeleteCategoryRequest { Id = categoryId }, CancellationToken.None);
 
         await using var verifyContext = new ApplicationDbContext(options);

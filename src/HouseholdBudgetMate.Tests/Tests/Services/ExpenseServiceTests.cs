@@ -14,7 +14,7 @@ public sealed class ExpenseServiceTests
         var dbName = Guid.NewGuid().ToString();
         var factory = TestDbContextFactory.CreateFactory(dbName);
 
-        var service = new ExpenseService(factory);
+        var service = new ExpenseService(factory, new StaticDateTimeProvider(DateTime.UtcNow));
         var result = await service.GetMonthAsync(2026, 4, CancellationToken.None);
 
         Assert.Equal(2026, result.Year);
@@ -54,7 +54,7 @@ public sealed class ExpenseServiceTests
             expenseId = expense.Id;
         }
 
-        var service = new ExpenseService(factory);
+        var service = new ExpenseService(factory, new StaticDateTimeProvider(DateTime.UtcNow));
         await service.DeleteExpenseAsync(new DeleteExpenseRequest { Id = expenseId }, CancellationToken.None);
 
         await using var verifyContext = TestDbContextFactory.CreateDbContext(dbName);

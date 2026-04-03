@@ -10,5 +10,8 @@ public interface IExpenseService
     Task<ExpenseDto> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken);
     Task<ExpenseDto> UpdateExpenseAsync(UpdateExpenseRequest request, CancellationToken cancellationToken);
     Task DeleteExpenseAsync(DeleteExpenseRequest request, CancellationToken cancellationToken);
+    Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request, CancellationToken cancellationToken);
+    Task<ExpenseLineItemDto> UpdateExpenseLineItemAsync(UpdateExpenseLineItemRequest request, CancellationToken cancellationToken);
+    Task DeleteExpenseLineItemAsync(DeleteExpenseLineItemRequest request, CancellationToken cancellationToken);
 }
 

@@ -1,8 +1,6 @@
-﻿using HouseholdBudgetMate.Domain.Infrastructure;
+﻿namespace HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 
-namespace HouseholdBudgetMate.Domain.Entities;
-
-public sealed class ExpenseLineItem : ATimestampable, IEntityId
+public sealed class ExpenseLineItemDto
 {
     public int Id { get; set; }
     public int ExpenseId { get; set; }
@@ -10,8 +8,6 @@ public sealed class ExpenseLineItem : ATimestampable, IEntityId
     public decimal Amount { get; set; }
     public DateOnly OccurredAt { get; set; }
     public int? TagId { get; set; }
-
-    public Expense Expense { get; set; } = null!;
-    public Tag? Tag { get; set; }
+    public string? TagName { get; set; }
 }
 

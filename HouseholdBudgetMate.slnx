@@ -1,0 +1,22 @@
+<Solution>
+    <Folder Name="/docs/">
+        <File Path="docs/ai_rules_for_sprints.md" />
+        <File Path="docs/DOMAIN.md" />
+        <File Path="docs/Plan Apki.txt" />
+        <File Path="docs/sprints.md" />
+    </Folder>
+    <Folder Name="/docs/architecture/">
+        <File Path="docs/architecture/architecture-guide.md" />
+    </Folder>
+    <Folder Name="/docs/performance/">
+        <File Path="docs/performance/optimization.md" />
+    </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/HouseholdBudgetMate.Abstractions/HouseholdBudgetMate.Abstractions.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Application/HouseholdBudgetMate.Application.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Domain/HouseholdBudgetMate.Domain.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Migrations/HouseholdBudgetMate.Migrations.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Web/HouseholdBudgetMate.Web.csproj" />
+    </Folder>
+</Solution>

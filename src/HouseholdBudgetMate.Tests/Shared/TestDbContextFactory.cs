@@ -1,0 +1,64 @@
+﻿using Microsoft.EntityFrameworkCore;
+using HouseholdBudgetMate.Migrations;
+
+namespace HouseholdBudgetMate.Tests.Shared;
+
+public static class TestDbContextFactory
+{
+    public static ApplicationDbContext CreateDbContext(string? dbName = null)
+    {
+        var name = dbName ?? Guid.NewGuid().ToString();
+        var options = BuildOptions(name);
+        return new ApplicationDbContext(options);
+    }
+
+    public static ApplicationDbContext CreateDbContext(out IDbContextFactory<ApplicationDbContext> factory, string? dbName = null)
+    {
+        var name = dbName ?? Guid.NewGuid().ToString();
+        var options = BuildOptions(name);
+        factory = new InMemoryDbContextFactory(options);
+        return new ApplicationDbContext(options);
+    }
+
+    public static IDbContextFactory<ApplicationDbContext> CreateFactory(string? dbName = null)
+    {
+        var name = dbName ?? Guid.NewGuid().ToString();
+        var options = BuildOptions(name);
+        return new InMemoryDbContextFactory(options);
+    }
+
+    public static IDbContextFactory<ApplicationDbContext> CreateThrowingFactory(string dbName, bool throwOnSave)
+    {
+        var options = BuildOptions(dbName);
+        return new ThrowingDbContextFactory(options, throwOnSave);
+    }
+
+    private static DbContextOptions<ApplicationDbContext> BuildOptions(string dbName)
+    {
+        return new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+    }
+
+    private sealed class InMemoryDbContextFactory(DbContextOptions<ApplicationDbContext> options)
+        : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext() => new(options);
+
+        public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CreateDbContext());
+        }
+    }
+
+    private sealed class ThrowingDbContextFactory(DbContextOptions<ApplicationDbContext> options, bool throwOnSave)
+        : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext() => new ThrowingApplicationDbContext(options, throwOnSave);
+
+        public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CreateDbContext());
+        }
+    }
+}

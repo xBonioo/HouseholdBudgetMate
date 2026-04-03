@@ -1,0 +1,136 @@
+﻿.categories-page {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.categories-header {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(14, 165, 233, 0.08));
+    border: 1px solid #e5e7eb;
+}
+
+.category-nav-shell {
+    overflow: hidden;
+}
+
+.category-nav-tabs {
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.quick-actions {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(14, 165, 233, 0.08));
+}
+
+.category-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.category-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.category-row {
+    min-height: 48px;
+    gap: 12px;
+    overflow-x: auto;
+}
+
+.category-row-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.category-row-actions {
+    flex-shrink: 0;
+}
+
+.category-name-field {
+    min-width: 220px;
+}
+
+.category-hex-field {
+    min-width: 140px;
+}
+
+.quick-tag-field {
+    min-width: 180px;
+}
+
+.category-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+}
+
+.color-editor-inline {
+    width: 100%;
+}
+
+.hb-color-picker {
+    width: 42px;
+    height: 42px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
+    padding: 4px;
+    cursor: pointer;
+}
+
+.color-picker-field {
+    width: 58px;
+    min-width: 58px;
+}
+
+.hex-field {
+    flex: 1;
+    min-width: 110px;
+}
+
+.tag-inline-row {
+    border-left: 4px solid #6366f1;
+}
+
+.tag-inline-main {
+    min-width: 0;
+    flex: 1;
+    overflow-x: auto;
+}
+
+.tag-inline-actions {
+    flex-shrink: 0;
+}
+
+.tag-create-row {
+    overflow-x: auto;
+}
+
+.tag-create-name {
+    min-width: 220px;
+}
+
+.tag-row {
+    border-left: 4px solid #6366f1;
+}
+
+.tag-row-content {
+    gap: 12px;
+    overflow-x: auto;
+}
+
+.tag-row-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.tag-row-actions {
+    flex-shrink: 0;
+}
+
+@media (max-width: 960px) {
+    .tag-row-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+

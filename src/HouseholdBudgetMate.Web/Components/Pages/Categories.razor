@@ -1,0 +1,426 @@
+﻿@page "/categories"
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Requests
+@using MudBlazor
+@using System.Text.RegularExpressions
+@using HouseholdBudgetMate.Abstractions.Interfaces
+
+@inject ICategoryService CategoryService
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudStack Spacing="3" Class="categories-page pa-4">
+    <MudPaper Class="categories-header hb-page-header">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Category Management</MudText>
+                <MudText Typo="Typo.body2" Class="hb-muted">Buduj strukture kategorii i tagów.</MudText>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                <MudChip T="string" Color="Color.Primary">Kategorie: @_categories.Count</MudChip>
+                <MudChip T="string" Color="Color.Secondary">Tagi: @_categories.Sum(x => x.Tags.Count)</MudChip>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+                <MudPaper Class="pa-4 hb-panel">
+                    <MudGrid>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_newCategory.Name" Label="Nazwa kategorii" Variant="Variant.Outlined" Required="true"/>
+                        </MudItem>
+                        <MudItem xs="12" md="3" >
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="color-editor-inline">
+                                <input type="color" class="hb-color-picker" @bind="_newCategory.Color" aria-label="Wybierz kolor kategorii" />
+                                <MudTextField @bind-Value="_newCategory.Color" Label="Kolor HEX" Variant="Variant.Outlined" Required="true" Margin="Margin.Dense"/>
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="12" md="2" Class="d-flex align-center">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateCategoryAsync">
+                                Dodaj
+                            </MudButton>
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudTextField @bind-Value="_searchText" Label="Szukaj kategorii lub tagu" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"/>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+
+                @if (FilteredCategories.Count == 0)
+                {
+                    <MudPaper Class="pa-6 hb-panel mt-3">
+                        <MudText Typo="Typo.subtitle1">Brak wynikow</MudText>
+                        <MudText Typo="Typo.body2" Class="hb-muted">Zmien filtr lub dodaj pierwsza kategorie.</MudText>
+                    </MudPaper>
+                }
+                else
+                {
+                    <MudStack Spacing="2" Class="mt-3">
+                        @foreach (var category in FilteredCategories)
+                        {
+                            <MudPaper Class="pa-4 hb-panel category-card">
+                                @if (_editCategory is not null && _editCategory.Id == category.Id)
+                                {
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="category-row">
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="category-row-main" Wrap="Wrap.NoWrap">
+                                            <MudTextField @bind-Value="_editCategory.Name" Label="Nazwa" Variant="Variant.Outlined" Margin="Margin.Dense" Class="category-name-field"/>
+                                            <input type="color" class="hb-color-picker" @bind="_editCategory.Color" aria-label="Wybierz kolor kategorii" />
+                                            <MudTextField @bind-Value="_editCategory.Color" Label="HEX" Variant="Variant.Outlined" Margin="Margin.Dense" Class="category-hex-field"/>
+                                            <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
+                                        </MudStack>
+
+                                        <MudStack Row="true" Spacing="1" Class="category-row-actions">
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveCategoryEditAsync">Zapisz</MudButton>
+                                            <MudButton Variant="Variant.Text" OnClick="CancelCategoryEdit">Anuluj</MudButton>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteCategoryAsync(category)" />
+                                        </MudStack>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="category-row">
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="category-row-main" Wrap="Wrap.NoWrap">
+                                            <span class="category-color-dot" style="@($"background-color:{category.Color}")"></span>
+                                            <MudText Typo="Typo.subtitle1">@category.Name</MudText>
+                                            <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
+                                        </MudStack>
+
+                                        <MudStack Row="true" Spacing="1" Class="category-row-actions">
+                                            <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.LocalOffer" OnClick="() => ToggleCategoryTags(category.Id)">
+                                                @(IsCategoryExpanded(category.Id) ? "Zwin tagi" : "Tagi")
+                                            </MudButton>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginCategoryEdit(category)" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteCategoryAsync(category)" />
+                                        </MudStack>
+                                    </MudStack>
+                                }
+
+                                @if (IsCategoryExpanded(category.Id))
+                                {
+                                    <MudDivider Class="my-3" />
+
+                                    <MudStack Spacing="2">
+                                        <MudText Typo="Typo.subtitle2">Tagi kategorii</MudText>
+
+                                        @if (category.Tags.Count == 0)
+                                        {
+                                            <MudText Typo="Typo.caption" Class="hb-muted">Brak tagow.</MudText>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var tag in category.Tags.OrderBy(x => x.Name))
+                                            {
+                                                <MudPaper Class="pa-2 hb-panel tag-inline-row">
+                                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                                        @if (_editTag is not null && _editTag.Id == tag.Id)
+                                                        {
+                                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-inline-main">
+                                                                <MudTextField @bind-Value="_editTag.Name" Label="Edytuj tag" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTagEditAsync">Zapisz</MudButton>
+                                                                <MudButton Variant="Variant.Text" OnClick="CancelTagEdit">Anuluj</MudButton>
+                                                            </MudStack>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.subtitle2">@tag.Name</MudText>
+                                                        }
+
+                                                        <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginTagEdit(tag)" />
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteTagAsync(tag.Id)" />
+                                                        </MudStack>
+                                                    </MudStack>
+                                                </MudPaper>
+                                            }
+                                        }
+
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-create-row">
+                                            <MudTextField @bind-Value="GetTagCreateModel(category.Id).Name" Label="Nowy tag" Variant="Variant.Outlined" Margin="Margin.Dense" Class="tag-create-name" />
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => CreateTagAsync(category.Id)">Dodaj tag</MudButton>
+                                        </MudStack>
+                                    </MudStack>
+                                }
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+        
+    </MudPaper>
+</MudStack>
+
+@code {
+    private bool _isLoading;
+    private string _searchText = string.Empty;
+    private List<CategoryDto> _categories = [];
+
+    private CreateCategoryRequest _newCategory = new()
+    {
+        Color = "#4CAF50"
+    };
+
+    private UpdateCategoryRequest? _editCategory;
+    private UpdateTagRequest? _editTag;
+
+    private readonly Dictionary<int, TagCreateModel> _tagCreateModels = new();
+    private readonly HashSet<int> _expandedCategoryIds = [];
+
+    private static readonly Regex HexColorRegex = new("^#(?:[0-9a-fA-F]{6})$", RegexOptions.Compiled);
+
+    private List<CategoryDto> FilteredCategories => _categories
+        .Where(IsCategoryMatch)
+        .OrderBy(x => x.Name)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private bool IsCategoryMatch(CategoryDto category)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+        {
+            return true;
+        }
+
+        var query = _searchText.Trim();
+
+        return category.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+               || category.Tags.Any(t => t.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+
+            _expandedCategoryIds.RemoveWhere(categoryId => _categories.All(x => x.Id != categoryId));
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CreateCategoryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newCategory.Name))
+        {
+            Snackbar.Add("Podaj nazwe kategorii.", Severity.Warning);
+            return;
+        }
+
+        if (!IsValidHexColor(_newCategory.Color))
+        {
+            Snackbar.Add("Kolor musi byc w formacie HEX, np. #4CAF50.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            await CategoryService.CreateCategoryAsync(_newCategory, CancellationToken.None);
+            _newCategory = new CreateCategoryRequest { Color = "#4CAF50" };
+            await LoadAsync();
+            Snackbar.Add("Dodano kategorie.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void BeginCategoryEdit(CategoryDto category)
+    {
+        _editCategory = new UpdateCategoryRequest
+        {
+            Id = category.Id,
+            Name = category.Name,
+            Color = category.Color
+        };
+    }
+
+    private async Task SaveCategoryEditAsync()
+    {
+        if (_editCategory is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editCategory.Name))
+        {
+            Snackbar.Add("Nazwa kategorii nie moze byc pusta.", Severity.Warning);
+            return;
+        }
+
+        if (!IsValidHexColor(_editCategory.Color))
+        {
+            Snackbar.Add("Kolor musi byc w formacie HEX, np. #4CAF50.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            await CategoryService.UpdateCategoryAsync(_editCategory, CancellationToken.None);
+            _editCategory = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano kategorie.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void CancelCategoryEdit()
+    {
+        _editCategory = null;
+    }
+
+    private async Task DeleteCategoryAsync(CategoryDto category)
+    {
+        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", $"Usunac kategorie '{category.Name}'?");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            await CategoryService.DeleteCategoryAsync(new DeleteCategoryRequest { Id = category.Id }, CancellationToken.None);
+            _expandedCategoryIds.Remove(category.Id);
+            _tagCreateModels.Remove(category.Id);
+            await LoadAsync();
+            Snackbar.Add("Usunieto kategorie.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private TagCreateModel GetTagCreateModel(int categoryId)
+    {
+        if (_tagCreateModels.TryGetValue(categoryId, out var model))
+        {
+            return model;
+        }
+
+        model = new TagCreateModel();
+        _tagCreateModels[categoryId] = model;
+        return model;
+    }
+
+    private async Task CreateTagAsync(int categoryId)
+    {
+        var model = GetTagCreateModel(categoryId);
+
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            Snackbar.Add("Podaj nazwe tagu.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            await CategoryService.CreateTagAsync(new CreateTagRequest
+            {
+                CategoryId = categoryId,
+                Name = model.Name
+            }, CancellationToken.None);
+
+            _tagCreateModels[categoryId] = new TagCreateModel();
+            await LoadAsync();
+            Snackbar.Add("Dodano tag.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void BeginTagEdit(TagDto tag)
+    {
+        _editTag = new UpdateTagRequest
+        {
+            Id = tag.Id,
+            CategoryId = tag.CategoryId,
+            Name = tag.Name
+        };
+    }
+
+    private async Task SaveTagEditAsync()
+    {
+        if (_editTag is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editTag.Name))
+        {
+            Snackbar.Add("Nazwa tagu nie moze byc pusta.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            await CategoryService.UpdateTagAsync(_editTag, CancellationToken.None);
+            _editTag = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano tag.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void CancelTagEdit()
+    {
+        _editTag = null;
+    }
+
+    private async Task DeleteTagAsync(int tagId)
+    {
+        try
+        {
+            await CategoryService.DeleteTagAsync(new DeleteTagRequest { Id = tagId }, CancellationToken.None);
+            await LoadAsync();
+            Snackbar.Add("Usunieto tag.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private bool IsValidHexColor(string? color)
+    {
+        return !string.IsNullOrWhiteSpace(color) && HexColorRegex.IsMatch(color);
+    }
+
+    private void ToggleCategoryTags(int categoryId)
+    {
+        if (!_expandedCategoryIds.Add(categoryId))
+        {
+            _expandedCategoryIds.Remove(categoryId);
+            _editTag = null;
+        }
+    }
+
+    private bool IsCategoryExpanded(int categoryId)
+    {
+        return _expandedCategoryIds.Contains(categoryId);
+    }
+
+    private sealed class TagCreateModel
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+}

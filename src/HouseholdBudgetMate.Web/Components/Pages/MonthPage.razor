@@ -1,0 +1,390 @@
+﻿@page "/month/{Year:int}/{Month:int}"
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using MudBlazor
+
+@inject IExpenseService ExpenseService
+@inject ICategoryService CategoryService
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudStack Spacing="3" Class="pa-4">
+    <MudPaper Class="hb-page-header">
+        <MudText Typo="Typo.h4">
+            Wydatki @(new DateTime(Year, Month, 1).ToString("MMMM", _culture) + " " + Year)
+        </MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">Dodawaj, edytuj i monitoruj status planu miesiecznego.</MudText>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Planowane</MudText>
+                <MudText Class="hb-kpi-value">@_plannedTotal.ToString("0.00") PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Wydane</MudText>
+                <MudText Class="hb-kpi-value">@_actualTotal.ToString("0.00") PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Pozostalo</MudText>
+                <MudText Class="hb-kpi-value">@_remainingTotal.ToString("0.00") PLN</MudText>
+                <MudProgressLinear Class="mt-2" Rounded="true" Value="@_usagePercent" Color="@(_usagePercent >= 100 ? Color.Error : Color.Primary)" />
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Nowy wydatek</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_newExpense.Name" Label="Nazwa" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="int" Value="_newExpense.CategoryId" ValueChanged="OnCreateCategoryChanged" Label="Kategoria" Variant="Variant.Outlined">
+                    @foreach (var category in _categories)
+                    {
+                        <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="int?" @bind-Value="_newExpense.TagId" Label="Tag" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var tag in GetTagsForCategory(_newExpense.CategoryId))
+                    {
+                        <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudNumericField T="decimal" @bind-Value="_newExpense.PlannedAmount" Label="Planowana" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudNumericField T="decimal" @bind-Value="_newExpense.ActualAmount" Label="Realna" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSwitch @bind-Value="_newExpense.ShowRemainingInUI" Color="Color.Primary" Label="Pokaż pozostało" />
+            </MudItem>
+            <MudItem xs="12" md="9" Class="d-flex justify-end align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateExpenseAsync">Dodaj wydatek</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Lista wydatków</MudText>
+
+        @if (_monthPlan is null || _monthPlan.Expenses.Count == 0)
+        {
+            <MudText Typo="Typo.body2">Brak wydatków w tym miesiącu.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_monthPlan.Expenses" Dense="true" Hover="true" RowClassFunc="GetRowClass">
+                <HeaderContent>
+                    <MudTh>Nazwa</MudTh>
+                    <MudTh>Kategoria</MudTh>
+                    <MudTh>Tag</MudTh>
+                    <MudTh>Planowana</MudTh>
+                    <MudTh>Realna</MudTh>
+                    <MudTh>Pozostało</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Akcje</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @if (_editExpense?.Id == context.Id)
+                    {
+                        <MudTd><MudTextField @bind-Value="_editExpense.Name" Variant="Variant.Outlined" /></MudTd>
+                        <MudTd>
+                            <MudSelect T="int" Value="_editExpense.CategoryId" ValueChanged="OnEditCategoryChanged" Variant="Variant.Outlined">
+                                @foreach (var category in _categories)
+                                {
+                                    <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd>
+                            <MudSelect T="int?" @bind-Value="_editExpense.TagId" Variant="Variant.Outlined" Clearable="true">
+                                @foreach (var tag in GetTagsForCategory(_editExpense.CategoryId))
+                                {
+                                    <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd><MudNumericField T="decimal" @bind-Value="_editExpense.PlannedAmount" Variant="Variant.Outlined" /></MudTd>
+                        <MudTd><MudNumericField T="decimal" @bind-Value="_editExpense.ActualAmount" Variant="Variant.Outlined" /></MudTd>
+                        <MudTd>@FormatRemaining(_editExpense.ShowRemainingInUI, _editExpense.PlannedAmount - _editExpense.ActualAmount)</MudTd>
+                        <MudTd>
+                            <MudSwitch @bind-Value="_editExpense.ShowRemainingInUI" Color="Color.Primary" />
+                            <MudChip T="string" Color="@(IsDerivedUnplanned(_editExpense.PlannedAmount) ? Color.Warning : Color.Default)">
+                                @(IsDerivedUnplanned(_editExpense.PlannedAmount) ? "Nieplanowany" : "Planowany")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelEdit">Anuluj</MudButton>
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd>@context.Name</MudTd>
+                        <MudTd>@context.CategoryName</MudTd>
+                        <MudTd>@(context.TagName ?? "-")</MudTd>
+                        <MudTd>@FormatPlannedAmount(context.PlannedAmount)</MudTd>
+                        <MudTd>@(context.ActualAmount ?? 0)</MudTd>
+                        <MudTd>@FormatRemainingForExpense(context)</MudTd>
+                        <MudTd>
+                            <MudChip T="string" Color="@(IsDerivedUnplanned(context.PlannedAmount) ? Color.Warning : Color.Success)">
+                                @(IsDerivedUnplanned(context.PlannedAmount) ? "Nieplanowany" : "Planowany")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartEdit(context)">Edytuj</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteExpenseAsync(context.Id)">Usuń</MudButton>
+                        </MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter] public int Year { get; set; }
+    [Parameter] public int Month { get; set; }
+
+    private bool _isLoading;
+    private MonthPlanDto? _monthPlan;
+    private List<CategoryDto> _categories = [];
+    private decimal _plannedTotal;
+    private decimal _actualTotal;
+    private decimal _remainingTotal;
+    private double _usagePercent;
+    
+    private readonly CultureInfo _culture = new("pl-PL");
+
+    private readonly CreateExpenseRequest _newExpense = new()
+    {
+        ShowRemainingInUI = true
+    };
+
+    private UpdateExpenseRequest? _editExpense;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+            _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
+
+            CalculateSummary();
+
+            if (_newExpense.CategoryId == 0 && _categories.Count > 0)
+            {
+                _newExpense.CategoryId = _categories[0].Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private IReadOnlyList<TagDto> GetTagsForCategory(int categoryId)
+    {
+        return _categories.FirstOrDefault(x => x.Id == categoryId)?.Tags ?? [];
+    }
+
+    private Task OnCreateCategoryChanged(int categoryId)
+    {
+        _newExpense.CategoryId = categoryId;
+        _newExpense.TagId = null;
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditCategoryChanged(int categoryId)
+    {
+        if (_editExpense is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _editExpense.CategoryId = categoryId;
+        _editExpense.TagId = null;
+        return Task.CompletedTask;
+    }
+
+    private void CalculateSummary()
+    {
+        if (_monthPlan is null)
+        {
+            _plannedTotal = 0;
+            _actualTotal = 0;
+            _remainingTotal = 0;
+            _usagePercent = 0;
+            return;
+        }
+
+        var plannedExpenses = _monthPlan.Expenses
+            .Where(x => !IsDerivedUnplanned(x.PlannedAmount) && !x.IsUnplanned)
+            .ToList();
+        var visibleRemainingExpenses = plannedExpenses
+            .Where(x => x.ShowRemainingInUI)
+            .ToList();
+
+        _plannedTotal = plannedExpenses.Sum(x => x.PlannedAmount ?? 0);
+        _actualTotal = _monthPlan.Expenses.Sum(x => x.ActualAmount ?? 0);
+        var actualForPlanned = plannedExpenses.Sum(x => x.ActualAmount ?? 0);
+        _remainingTotal = visibleRemainingExpenses.Sum(x => (x.PlannedAmount ?? 0) - (x.ActualAmount ?? 0));
+        _usagePercent = _plannedTotal <= 0 ? 0 : Math.Min(150, (double)(actualForPlanned / _plannedTotal * 100));
+    }
+
+    private string GetRowClass(ExpenseDto expense, int _)
+    {
+        if (IsDerivedUnplanned(expense.PlannedAmount))
+        {
+            return "hb-warning-row";
+        }
+
+        if ((expense.ActualAmount ?? 0) > (expense.PlannedAmount ?? 0))
+        {
+            return "hb-danger-row";
+        }
+
+        return string.Empty;
+    }
+
+    private static string FormatRemaining(bool showRemaining, decimal remaining)
+    {
+        return showRemaining ? remaining.ToString("0.##") : "-";
+    }
+
+    private static string FormatPlannedAmount(decimal? plannedAmount)
+    {
+        return IsDerivedUnplanned(plannedAmount) ? "-" : (plannedAmount ?? 0).ToString("0.##");
+    }
+
+    private static string FormatRemainingForExpense(ExpenseDto expense)
+    {
+        if (expense.IsUnplanned || IsDerivedUnplanned(expense.PlannedAmount))
+        {
+            return "-";
+        }
+
+        return FormatRemaining(expense.ShowRemainingInUI, expense.RemainingAmount);
+    }
+
+    private static bool IsDerivedUnplanned(decimal? plannedAmount)
+    {
+        return !plannedAmount.HasValue || plannedAmount <= 0;
+    }
+
+    private async Task CreateExpenseAsync()
+    {
+        try
+        {
+            _newExpense.Year = Year;
+            _newExpense.Month = Month;
+            _newExpense.IsUnplanned = IsDerivedUnplanned(_newExpense.PlannedAmount);
+
+            await ExpenseService.CreateExpenseAsync(_newExpense, CancellationToken.None);
+
+            _newExpense.Name = string.Empty;
+            _newExpense.TagId = null;
+            _newExpense.PlannedAmount = 0;
+            _newExpense.ActualAmount = 0;
+            _newExpense.IsUnplanned = true;
+            _newExpense.ShowRemainingInUI = true;
+
+            await LoadAsync();
+            Snackbar.Add("Dodano wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartEdit(ExpenseDto expense)
+    {
+        _editExpense = new UpdateExpenseRequest
+        {
+            Id = expense.Id,
+            Name = expense.Name,
+            CategoryId = expense.CategoryId,
+            TagId = expense.TagId,
+            PlannedAmount = expense.PlannedAmount ?? 0,
+            ActualAmount = expense.ActualAmount ?? 0,
+            ShowRemainingInUI = expense.ShowRemainingInUI,
+            IsUnplanned = expense.IsUnplanned
+        };
+    }
+
+    private void CancelEdit()
+    {
+        _editExpense = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editExpense is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _editExpense.IsUnplanned = IsDerivedUnplanned(_editExpense.PlannedAmount);
+            await ExpenseService.UpdateExpenseAsync(_editExpense, CancellationToken.None);
+            _editExpense = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteExpenseAsync(int expenseId)
+    {
+        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", "Usunac wydatek? (soft delete)");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            await ExpenseService.DeleteExpenseAsync(new DeleteExpenseRequest { Id = expenseId }, CancellationToken.None);
+            await LoadAsync();
+            Snackbar.Add("Usunięto wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}
+

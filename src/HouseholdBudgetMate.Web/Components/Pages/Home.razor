@@ -1,0 +1,138 @@
+﻿@page "/"
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Application.Kernel.Timing
+@using MudBlazor
+
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IDateTimeProvider DateTimeProvider
+@inject IExpenseService ExpenseService
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudPaper Class="hb-page-header">
+    <MudText Typo="Typo.h4">Dashboard budzetu</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted">Szybki podglad aktualnego miesiaca i najwazniejszych akcji.</MudText>
+
+    <MudStack Direction="Direction.Row" Spacing="1" Class="mt-3">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CalendarMonth" OnClick="GoToCurrentMonth">
+            Otworz miesiac
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Category" OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
+            Zarzadzaj kategoriami
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+<MudGrid Class="mt-1">
+    <MudItem xs="12" md="4">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Suma planowana</MudText>
+            <MudText Class="hb-kpi-value">@_plannedTotal.ToString("0.00") PLN</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Suma wydana</MudText>
+            <MudText Class="hb-kpi-value">@_actualTotal.ToString("0.00") PLN</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Pozostalo</MudText>
+            <MudText Class="hb-kpi-value">@_remainingTotal.ToString("0.00") PLN</MudText>
+            <MudProgressLinear Class="mt-2" Rounded="true" Value="@_usagePercent" Color="@(_usagePercent >= 100 ? Color.Error : Color.Primary)" />
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h6">Ostatnie wydatki</MudText>
+        <MudChip T="string" Color="Color.Primary">@_monthLabel</MudChip>
+    </MudStack>
+
+    @if (_recentExpenses.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak wydatkow. Dodaj pierwszy wpis, aby zobaczyc postep miesiaca.</MudText>
+    }
+    else
+    {
+        <MudList T="ExpenseDto" Dense="true" Class="mt-2">
+            @foreach (var expense in _recentExpenses)
+            {
+                <MudListItem T="ExpenseDto">
+                    <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" Style="width:100%;">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body1">@expense.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="hb-muted">@expense.CategoryName @(string.IsNullOrWhiteSpace(expense.TagName) ? string.Empty : $"/ {expense.TagName}")</MudText>
+                        </MudStack>
+                        <MudStack Spacing="0" AlignItems="AlignItems.End">
+                            <MudText Typo="Typo.body1">@((expense.ActualAmount ?? 0).ToString("0.00")) PLN</MudText>
+                            <MudText Typo="Typo.caption" Class="hb-muted">plan: @((expense.PlannedAmount ?? 0).ToString("0.00")) PLN</MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    }
+</MudPaper>
+
+@code {
+    private bool _isLoading;
+    private MonthPlanDto? _monthPlan;
+    private decimal _plannedTotal;
+    private decimal _actualTotal;
+    private decimal _remainingTotal;
+    private double _usagePercent;
+    private string _monthLabel = string.Empty;
+    private List<ExpenseDto> _recentExpenses = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync(bool showOverlay = true)
+    {
+        if (showOverlay)
+        {
+            _isLoading = true;
+        }
+
+        try
+        {
+            var now = DateTimeProvider.GetLocalDateTime();
+            _monthPlan = await ExpenseService.GetMonthAsync(now.Year, now.Month, CancellationToken.None);
+            _monthLabel = $"{now:MMMM yyyy}";
+
+            var expenses = _monthPlan.Expenses;
+            _plannedTotal = expenses.Sum(x => x.PlannedAmount ?? 0);
+            _actualTotal = expenses.Sum(x => x.ActualAmount ?? 0);
+            _remainingTotal = _plannedTotal - _actualTotal;
+            _usagePercent = _plannedTotal <= 0 ? 0 : Math.Min(150, (double)(_actualTotal / _plannedTotal * 100));
+            _recentExpenses = expenses
+                .OrderByDescending(x => x.Id)
+                .Take(6)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void GoToCurrentMonth()
+    {
+        var now = DateTimeProvider.GetLocalDateTime();
+        NavigationManager.NavigateTo($"/month/{now.Year}/{now.Month}");
+    }
+
+}

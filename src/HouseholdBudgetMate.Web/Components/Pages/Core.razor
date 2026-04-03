@@ -1,0 +1,52 @@
+﻿@page "/core"
+@using HouseholdBudgetMate.Application.Kernel.Timing
+@using MudBlazor
+
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@inject IDateTimeProvider DateTimeProvider
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudPaper Class="pa-4 mt-4">
+    <h1>Core</h1>
+</MudPaper>
+
+@code {
+    private bool _isLoading;
+    private bool _isSearching;
+
+    private readonly Dictionary<int, int> filesCount = new();
+    private readonly Dictionary<string, bool> _wzScans = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData(bool showOverlay = true)
+    {
+        if (showOverlay)
+        {
+            _isLoading = true;
+            _isSearching = true;
+        }
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
+        try
+        {
+            
+        }
+        finally
+        {
+            _isLoading = false;
+            _isSearching = false;
+        }
+    }
+
+}

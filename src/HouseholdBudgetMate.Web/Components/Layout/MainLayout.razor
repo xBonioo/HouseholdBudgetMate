@@ -1,0 +1,180 @@
+﻿@using HouseholdBudgetMate.Application.Kernel.Configurations
+@using HouseholdBudgetMate.Web.Components.Themes
+@using HouseholdBudgetMate.Application.Kernel.Timing
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using MudBlazor
+
+@inherits LayoutComponentBase
+
+@inject NavigationManager NavigationManager
+@inject ApplicationConfiguration ApplicationConfiguration
+@inject IDateTimeProvider DateTimeProvider
+@inject IExpenseService ExpenseService
+
+@* Required *@
+<MudThemeProvider Theme="@AppTheme.Default"/>
+<MudPopoverProvider/>
+
+@* Needed for dialogs *@
+<MudDialogProvider/>
+
+@* Needed for snackbars *@
+<MudSnackbarProvider/>
+
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudButton Variant="Variant.Text"
+                       Class="@GetNavClass("/")"
+                       StartIcon="@Icons.Material.Filled.Dashboard"
+                       OnClick="@(() => NavigationManager.NavigateTo("/"))">
+                Dashboard
+            </MudButton>
+            <MudButton Variant="Variant.Text"
+                       Class="@GetNavClass("/categories")"
+                       StartIcon="@Icons.Material.Filled.Category"
+                       OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
+                Kategorie
+            </MudButton>
+            <MudButton Variant="Variant.Text"
+                       Class="@GetNavClass("/month")"
+                       StartIcon="@Icons.Material.Filled.CalendarMonth"
+                       OnClick="GoToCurrentMonth">
+                Miesiac
+            </MudButton>
+
+            <MudMenu Variant="Variant.Text"
+                     Color="Color.Inherit"
+                     Label="Archiwum"
+                     Class="appbar-button"
+                     StartIcon="@Icons.Material.Filled.DateRange">
+                @if (_monthGroups.Count == 0)
+                {
+                    <MudMenuItem Disabled="true">Brak danych</MudMenuItem>
+                }
+                else
+                {
+                    @for (var i = 0; i < _monthGroups.Count; i++)
+                    {
+                        var yearGroup = _monthGroups[i];
+                        <MudMenuItem Disabled="true">@yearGroup.Year</MudMenuItem>
+                        @foreach (var monthItem in yearGroup.Months)
+                        {
+                            <MudMenuItem OnClick="@(() => NavigationManager.NavigateTo($"/month/{monthItem.Year}/{monthItem.Month}"))">
+                                @monthItem.Label
+                            </MudMenuItem>
+                        }
+
+                        @if (i < _monthGroups.Count - 1)
+                        {
+                            <MudDivider />
+                        }
+                    }
+                }
+            </MudMenu>
+        </MudHidden>
+
+        <div class="appbar-logo-center">
+            <img src="images/logo.png" alt="logo" class="brand-logo"/>
+        </div>
+
+        <MudSpacer/>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   Class="quick-add-button"
+                   OnClick="GoToCurrentMonth">
+            Dodaj wydatek
+        </MudButton>
+    </MudAppBar>
+
+    <MudMainContent Class="app-main-content">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet
+     style="background-color:#c62828;color:white;padding:12px 16px;border-radius:4px;">
+    An unhandled error has occurred.
+    <a href="." class="reload" style="color:#fff;font-weight:bold;">Reload</a>
+    <span class="dismiss" style="cursor:pointer;">🗙</span>
+</div>
+
+@code {
+    private readonly CultureInfo _culture = new("pl-PL");
+    private List<YearMonthGroup> _monthGroups = [];
+
+    private sealed class YearMonthGroup
+    {
+        public int Year { get; init; }
+        public IReadOnlyList<MonthLink> Months { get; init; } = [];
+    }
+
+    private sealed class MonthLink
+    {
+        public int Year { get; init; }
+        public int Month { get; init; }
+        public string Label { get; init; } = string.Empty;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadArchiveMonthsAsync();
+    }
+
+    private string GetNavClass(string pathPrefix)
+    {
+        var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        var normalized = string.IsNullOrWhiteSpace(currentPath) ? "/" : $"/{currentPath}";
+        return normalized.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase)
+            ? "appbar-button appbar-button-active"
+            : "appbar-button";
+    }
+
+    private async Task LoadArchiveMonthsAsync()
+    {
+        var months = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
+
+        _monthGroups = months
+            .GroupBy(x => x.Year)
+            .OrderByDescending(x => x.Key)
+            .Select(yearGroup => new YearMonthGroup
+            {
+                Year = yearGroup.Key,
+                Months = yearGroup
+                    .OrderByDescending(x => x.Month)
+                    .Select(x => new MonthLink
+                    {
+                        Year = x.Year,
+                        Month = x.Month,
+                        Label = $"{new DateTime(x.Year, x.Month, 1).ToString("MMMM", _culture)}"
+                    })
+                    .ToList()
+            })
+            .ToList();
+
+        if (_monthGroups.Count == 0)
+        {
+            var now = DateTimeProvider.GetLocalDateTime();
+            _monthGroups =
+            [
+                new YearMonthGroup
+                {
+                    Year = now.Year,
+                    Months = [new MonthLink { Year = now.Year, Month = now.Month, Label = $"{now.Month:00} {now.ToString("MMMM", _culture)}" }]
+                }
+            ];
+        }
+    }
+
+    private void GoToCurrentMonth()
+    {
+        var now = DateTimeProvider.GetLocalDateTime();
+        NavigationManager.NavigateTo($"/month/{now.Year}/{now.Month}");
+    }
+}

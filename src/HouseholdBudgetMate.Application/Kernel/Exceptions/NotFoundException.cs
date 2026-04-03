@@ -1,0 +1,3 @@
+﻿namespace HouseholdBudgetMate.Application.Kernel.Exceptions;
+
+public class NotFoundException(string message) : Exception(message);

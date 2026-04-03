@@ -1,0 +1,168 @@
+Aplikacja do zarządzania budżetem - Household Budget Mate
+- self-hosted
+- działa w LAN
+- .NET 10
+- mobile przez przeglądarkę
+- możliwość rozwoju
+
+1. CORE STACK (fundament)
+	- Backend + Frontend
+		ASP.NET Core (.NET 10)
+		Blazor Server (SSR + interactivity)
+	- Baza danych
+		PostgreSQL
+		Entity Framework Core
+	- ORM / Data
+		EF Core
+		Migrations
+	- Chciałbym aby aplikacja działało jako exe, który się odpala i jest web w przeglądarce lub mobile przez przeglądarke, więc:
+		- Przy pierwszym uruchomieniu:
+			- otwiera się /setup
+			- user wpisuje:
+				connection string
+			zapisujesz do:
+			pliku np. config.json obok exe
+
+2. UI / FRONTEND
+	- UI
+		Blazor Components
+		Razor Pages
+	- Styling
+		MudBlazor
+		Tailwind (możliwe jeśli będzie potrzebne)
+	- Wykresy
+		Chart.js (przez JSInterop)
+	- Multi language
+		Na start polski i angielski, ale chciałbym aby użytkownicy githuba mogli dodawać swoje języki do projektu (resources)
+
+3. HOSTING (self-hosted)
+	- Lokalny serwer
+		Na razie laptop w przyszłości serwer w domu
+	- Dostęp
+		LAN: http://192.168.x.x:7134
+
+4. SECURITY
+- Na start:
+	brak auth (LAN only)
+	Później:
+	- ASP.NET Identity
+	- PIN / hasło
+
+5. Architektura warstowa
+	- Abstractions
+	- Application
+	- Domain
+	- Migrations
+	- Tests
+	- Web
+
+5.1 1. 
+	- Event-driven (lekko)
+		statystyk
+		notyfikacji
+		OCR processing
+		- np:
+			ExpenseCreatedEvent
+			ReceiptScannedEvent
+			BudgetExceededEvent
+	- Background jobs (np: Hangfire / Quartz.NET)
+		- OCR
+		- cykliczne wydatki
+		- statystyki
+
+
+6. OCR
+	Tesseract OCR
+	(backend processing zdjęć)
+
+7. Funkcjonalność:
+	- Planowanie wydatków dla każdego miesiąca 
+		- każdy miesiąc powinien móc mieć około 50 pozycji wydatków (oczywiście chciałbym aby to było dynamicznie, bo jeden miesiąc może mieć 15, a inny 50 czy 35)
+		- możliwość dodania nie planowanych wydatków
+		- możliwość ustawienie budżetu „envelope” dla niektórych kategorii
+		Envelope to miesięczny limit wydatków dla kategorii. Przekroczenie nie blokuje dodania wydatku, ale UI sygnalizuje przekroczenie. Limit nie przenosi się na kolejny miesiąc
+		- Wydatki cykliczne (abonamenty, kredyt etc)
+		Przy zamknięciu/otwarciu miesiąca system auto-generuje pozycje planu dla wszystkich aktywnych wydatków cyklicznych. Generowanie idempotentne — podwójne wywołanie nie duplikuje rekordów.
+	- Wydatki:
+		- tutaj powinny być pola dla nazwy, kategorii (zdefiniowane w aplikacji), planowana kwota, realna wydana kwota, pole czy UI ma uwzglednić czy pokazywać ilość pozostałej kwoty czy nie
+		- dodawanie wydatku
+		- edycja wydatku
+		- usuwanie wydatku
+		- do niektórcch wydatków chciałbym dodawać pozycje, na przykład paliwo chciałbym dodać tam kilka wierszy z tankowań do realnej wydanej kwoty, suplementy w jakich aptekach i ile wydałem etc
+	- Kategorie
+		- lista kategorii
+		- dodawanie kategorii
+		- edycja kategorii
+		- usuwanie kategorii
+	- Tagi (obok kategorii)
+		- Chodzi o to, że każda kategoeria będzie mogła mieć swoje tagi np Spożywcze to sklepy, internetowe to allegro, aliexpress etc
+	- Dashboard
+		- suma wydatków w bieżącym miesiącu
+		- liczba transakcji
+		- lista rozplanowanych wydatków:
+			- suma kwotowa planów
+			- ile zostało już wydane
+			- ile pozostało
+		- Wyszukiwarka + filtry
+	- Konta
+		- dodawanie konta:
+			- gotówka
+			- bank
+			- inne
+		- saldo konta na koniec miesiąca i w nowym miesiącu saldo kont łączy się z wpływami
+		Saldo bieżące = suma sald wszystkich kont + suma wpływów w miesiącu − suma realnych wydatków w miesiącu. Saldo jest live
+	- Wpływy
+		- dodawanie przychodów
+		- możliwość wprowadzenia którego dnia wpływa wypłata, kiedy dostaje jakieś dodatki
+	- Wykresy
+		- wydatki per kategoria (pie chart)
+		- wydatki per miesiąc (bar chart)
+	- Analiza
+		- porównanie miesiąc do miesiąca
+		- trendy wydatków
+	- Statystyki
+		- średnie wydatki dla kategorii, sklepu, roku
+		- największe kategorie
+		- historia roczna
+		- możliwość zaplanowania podejrzewanych rocznych wpływów, wydatków i oszczędności 
+		- średnie miesięczne wpływy, wydatki i oszczędności 
+		- wprowadzenie ubiegłorocznych średnich statystyk z kategorii kredytu, wydatków na budowe domu etc
+		- medianę (nie tylko średnią)
+		- odchylenie
+		- sezonowość
+	- UX mobilny (KLUCZOWE)
+		- szybkie dodanie wydatku (1 ekran max)
+		- duże przyciski
+		- “quick add” (kwota + kategoria + enter)
+	- OCR
+		- możliwość skanowania paragonów z różnych sklepów (spożywcze, ciuchy etc)
+		- odczyt:
+			- nazwy produkty
+			- kwoty
+			- daty
+		- mapowanie produktów → kategorii, tag
+		- agregacja paragonu do jednej transakcji
+	- Historii zmian (audit trail), np:
+		ExpenseUpdated:
+			- oldAmount: 100
+			- newAmount: 150
+			- changedAt
+			- operacja (czy to zmiana w kontach bankowych, kosztoprysie miesiąca, wydatkach etc)
+
+
+8. Przyszłościowo: (ale chyba warto uwzględnić aby za dużo nie przerabiać przy dodawaniu tych funkcjonalności)
+	- Dostep spoza domu (VPN)
+	- Portfele inwestycyjne
+	- Cele finansowe
+	- Alerty / powiadomienia
+	- Prognozowanie na bazie historii:
+		- np:
+			- “wydasz ~3200 zł w tym miesiącu”
+			- “za 3 miesiące saldo = X”
+	- Multi-user / household
+	- Multi-currency (na podpunkt 7 na razie tylko PLN)
+	- Backup'y
+	- Api do getów aby móc sprawoć apke z home assist czy coś
+	
+	
+ 

@@ -8,4 +8,3 @@ public class UpdateAccountRequest
     public string Name { get; set; } = null!;
     public AccountType Type { get; set; }
 }
-

@@ -7,4 +7,3 @@ public class UpsertAccountMonthBalanceRequest
     public int Month { get; set; }
     public decimal ClosingBalance { get; set; }
 }
-

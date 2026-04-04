@@ -18,3 +18,56 @@
     right: 0.75rem;
     top: 0.5rem;
 }
+
+.layout-root ::deep .appbar-button {
+    text-transform: none;
+    font-weight: 600;
+    border: none !important;
+    color: #e5e7eb !important;
+    border-radius: 10px;
+    height: 36px;
+    padding: 0 14px;
+    margin-right: 4px;
+}
+
+.layout-root ::deep .appbar-button:hover {
+    background-color: rgba(255,255,255,0.14);
+}
+
+.layout-root ::deep .appbar-button-active {
+    background-color: rgba(255,255,255,0.2);
+    color: #ffffff !important;
+}
+
+.layout-root ::deep .app-shell-bar {
+    position: relative;
+    backdrop-filter: blur(12px);
+    background: linear-gradient(90deg, #1f2937 0%, #111827 100%) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.layout-root .brand-logo {
+    height: 34px;
+    width: auto;
+    max-width: 180px;
+    object-fit: contain;
+}
+
+.layout-root .appbar-logo-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.layout-root ::deep .quick-add-button {
+    text-transform: none;
+    font-weight: 700;
+}
+
+.layout-root ::deep .app-main-content {
+    min-height: calc(100vh - 64px);
+    background: radial-gradient(circle at top right, #eef2ff 0%, #f8fafc 40%, #f3f4f6 100%);
+}

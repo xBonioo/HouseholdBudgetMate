@@ -12,4 +12,3 @@ public sealed class AccountMonthBalance : ATimestampable, IEntityId
 
     public Account Account { get; set; } = null!;
 }
-

@@ -9,18 +9,25 @@ namespace HouseholdBudgetMate.Tests.Tests.Services;
 
 public sealed class AccountServiceTests
 {
+    private readonly string _dbName = Guid.NewGuid().ToString();
+    
+    private AccountService CreateService()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var provider = new StaticDateTimeProvider(DateTime.UtcNow);
+        return new AccountService(factory, provider);
+    }
+    
     [Fact]
     public async Task CreateAndUpsertMonthBalance_Should_Update_CurrentBalance()
     {
-        var dbName = Guid.NewGuid().ToString();
-        var factory = TestDbContextFactory.CreateFactory(dbName);
-        var service = new AccountService(factory, new StaticDateTimeProvider(DateTime.UtcNow));
+        var service = CreateService();
 
         var created = await service.CreateAccountAsync(new CreateAccountRequest
         {
             Name = "Bank główny",
             Type = AccountType.Bank,
-            OpeningBalance = 1000m
+            ClosingBalance = 1000m
         }, CancellationToken.None);
 
         await service.UpsertMonthBalanceAsync(new UpsertAccountMonthBalanceRequest
@@ -41,11 +48,8 @@ public sealed class AccountServiceTests
     [Fact]
     public async Task SetAccountArchivedAsync_Should_Set_Archive_Flag()
     {
-        var dbName = Guid.NewGuid().ToString();
-        var factory = TestDbContextFactory.CreateFactory(dbName);
-
         int accountId;
-        await using (var context = TestDbContextFactory.CreateDbContext(dbName))
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
             var account = new Account
             {
@@ -58,10 +62,10 @@ public sealed class AccountServiceTests
             accountId = account.Id;
         }
 
-        var service = new AccountService(factory, new StaticDateTimeProvider(DateTime.UtcNow));
+        var service = CreateService();
         await service.SetAccountArchivedAsync(new SetAccountArchivedRequest { Id = accountId, IsArchived = true }, CancellationToken.None);
 
-        await using var verifyContext = TestDbContextFactory.CreateDbContext(dbName);
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var archived = await verifyContext.Accounts.IgnoreQueryFilters().SingleAsync(x => x.Id == accountId);
         Assert.True(archived.IsArchived);
     }

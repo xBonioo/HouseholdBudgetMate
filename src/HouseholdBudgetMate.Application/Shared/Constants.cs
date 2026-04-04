@@ -20,5 +20,5 @@ public static class Constants
     public static readonly IReadOnlyCollection<string> AllowedExtensions =
         [Pdf, Jpg, Jpeg, Png, Doc, Docx, Xls, Xlsx];
     
-    public const int ClaimsCacheDurationInMinutes = 30;
+    public const int CacheDurationInMinutes = 30;
 }

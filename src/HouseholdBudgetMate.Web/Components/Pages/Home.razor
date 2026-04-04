@@ -1,5 +1,6 @@
 ﻿@page "/"
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Application.Kernel.Timing
 @using MudBlazor
@@ -8,6 +9,7 @@
 @inject NavigationManager NavigationManager
 @inject IDateTimeProvider DateTimeProvider
 @inject IExpenseService ExpenseService
+@inject IIncomeService IncomeService
 
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
@@ -51,13 +53,39 @@
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
     <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h6">Live balance</MudText>
+        <MudChip T="string" Color="Color.Primary">@_liveBalance.CurrentBalance.ToString("0.00") PLN</MudChip>
+    </MudStack>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Konta bez oszczędności</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.AccountsBaseTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.IncomesTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Realne wydatki miesiąca</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.ExpensesTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Oszczędności miesiąca</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.SavingsTransfersTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h6">Ostatnie wydatki</MudText>
         <MudChip T="string" Color="Color.Primary">@_monthLabel</MudChip>
     </MudStack>
 
     @if (_recentExpenses.Count == 0)
     {
-        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak wydatkow. Dodaj pierwszy wpis, aby zobaczyc postep miesiaca.</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak wydatków. Dodaj pierwszy wpis, aby zobaczyć postęp miesiąca.</MudText>
     }
     else
     {
@@ -90,6 +118,7 @@
     private double _usagePercent;
     private string _monthLabel = string.Empty;
     private List<ExpenseDto> _recentExpenses = [];
+    private LiveBalanceDto _liveBalance = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -107,6 +136,7 @@
         {
             var now = DateTimeProvider.GetLocalDateTime();
             _monthPlan = await ExpenseService.GetMonthAsync(now.Year, now.Month, CancellationToken.None);
+            _liveBalance = await IncomeService.GetLiveBalanceAsync(now.Year, now.Month, CancellationToken.None);
             _monthLabel = $"{now:MMMM yyyy}";
 
             var expenses = _monthPlan.Expenses;
@@ -132,7 +162,7 @@
     private void GoToCurrentMonth()
     {
         var now = DateTimeProvider.GetLocalDateTime();
-        NavigationManager.NavigateTo($"/month/{now.Year}/{now.Month}");
+        NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
 
 }

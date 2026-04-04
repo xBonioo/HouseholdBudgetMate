@@ -5,4 +5,3 @@ public class UpdateAccountMonthBalanceAmountRequest
     public int Id { get; set; }
     public decimal ClosingBalance { get; set; }
 }
-

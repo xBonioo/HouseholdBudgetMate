@@ -6,4 +6,3 @@ public class CreateCategoryRequest
     public string Color { get; set; } = null!;
     public bool SupportsLineItems { get; set; }
 }
-

@@ -1,10 +1,9 @@
-﻿using HouseholdBudgetMate.Abstractions.Interfaces;
-using HouseholdBudgetMate.Application.Kernel.Timing;
+﻿using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 
-namespace HouseholdBudgetMate.Application.Services;
+namespace HouseholdBudgetMate.Application.Seeds;
 
 public sealed class MonthPlanSeedService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,

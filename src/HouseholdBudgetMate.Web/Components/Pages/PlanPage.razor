@@ -1,13 +1,18 @@
-﻿@page "/month/{Year:int}/{Month:int}"
+﻿@page "/plan/{Year:int}/{Month:int}"
 @using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests
+@using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using MudBlazor
 
 @inject IExpenseService ExpenseService
 @inject ICategoryService CategoryService
+@inject IIncomeService IncomeService
+@inject IAccountService AccountService
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
@@ -32,26 +37,217 @@
     </MudPaper>
 
     <MudGrid>
-        <MudItem xs="12" md="4">
+        <MudItem xs="12" md="3">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Planowane</MudText>
                 <MudText Class="hb-kpi-value">@_plannedTotal.ToString("0.00") PLN</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" md="4">
+        <MudItem xs="12" md="3">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Wydane</MudText>
                 <MudText Class="hb-kpi-value">@_actualTotal.ToString("0.00") PLN</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" md="4">
+        <MudItem xs="12" md="3">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Pozostalo</MudText>
                 <MudText Class="hb-kpi-value">@_remainingTotal.ToString("0.00") PLN</MudText>
                 <MudProgressLinear Class="mt-2" Rounded="true" Value="@_remainingPercent" Color="@GetRemainingBarColor()" />
             </MudPaper>
         </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.CurrentBalance.ToString("0.00", _culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Konta + wpływy - wydatki - oszczednosci</MudText>
+            </MudPaper>
+        </MudItem>
     </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Konta (bez oszczędności)</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.AccountsBaseTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.IncomesTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Realne wydatki miesiąca</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.ExpensesTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Przelew na oszczednosci</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.SavingsTransfersTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Oszczędności w tym miesiącu</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="5">
+                <MudNumericField T="decimal" @bind-Value="_newSavingsTransfer.Amount" Label="Kwota do odlozenia" Variant="Variant.Outlined" Culture="_culture" Format="0.00" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudDatePicker Date="@ToDateTime(_newSavingsTransfer.TransferDate)" DateChanged="OnCreateSavingsTransferDateChanged" Label="Data przelewu" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateSavingsTransferAsync">Dodaj</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_monthPlan?.SavingsTransfers.Count > 0)
+        {
+            <MudTable Items="_monthPlan.SavingsTransfers" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Kwota</MudTh>
+                    <MudTh>Data przelewu</MudTh>
+                    <MudTh>Akcje</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    @if (_editSavingsTransfer?.Id == item.Id)
+                    {
+                        <MudTd>
+                            <MudNumericField T="decimal" @bind-Value="_editSavingsTransfer.Amount" Variant="Variant.Outlined" Culture="_culture" Format="0.00" Immediate="true" />
+                        </MudTd>
+                        <MudTd>
+                            <MudDatePicker Date="@ToDateTime(_editSavingsTransferDate)" DateChanged="OnEditSavingsTransferDateChanged" Variant="Variant.Outlined" />
+                        </MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveSavingsTransferEditAsync">Zapisz</MudButton>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelSavingsTransferEdit">Anuluj</MudButton>
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd>@item.Amount.ToString("0.00", _culture) PLN</MudTd>
+                        <MudTd>@item.TransferDate.ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartSavingsTransferEdit(item)">Edytuj</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteSavingsTransferAsync(item.Id)">Usun</MudButton>
+                        </MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6">Wpływy miesiąca</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Repeat" OnClick="NavigateToRegularIncomes">
+                Zarzadzaj regularnymi
+            </MudButton>
+        </MudStack>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_newIncome.Name" Label="Nazwa wpływu" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="int" @bind-Value="_newIncome.AccountId" Label="Konto" Variant="Variant.Outlined">
+                    @foreach (var account in GetIncomeAccounts())
+                    {
+                        <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudNumericField T="decimal" @bind-Value="_newIncome.Amount"
+                                 Label="Kwota"
+                                 Variant="Variant.Outlined"
+                                 Culture="_culture"
+                                 Format="0.00"
+                                 Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker Date="@ToDateTime(_newIncome.ExpectedDayOfMonth)"
+                               DateChanged="OnCreateIncomeDateChanged"
+                               Label="Oczekiwany dzień"
+                               Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateIncomeAsync">Dodaj</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_incomes.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mt-3 hb-muted">Brak wpływów w tym miesiącu.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_incomes" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Nazwa</MudTh>
+                    <MudTh>Konto</MudTh>
+                    <MudTh>Typ</MudTh>
+                    <MudTh>Kwota</MudTh>
+                    <MudTh>Planowana data</MudTh>
+                    <MudTh>Akcje</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="income">
+                    @if (!income.IsRegular && _editIncome?.Id == income.Id)
+                    {
+                        <MudTd><MudTextField @bind-Value="_editIncome.Name" Variant="Variant.Outlined" /></MudTd>
+                        <MudTd>
+                            <MudSelect T="int" @bind-Value="_editIncome.AccountId" Variant="Variant.Outlined">
+                                @foreach (var account in GetIncomeAccounts())
+                                {
+                                    <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd><MudChip T="string" Color="Color.Info">Nieregularny</MudChip></MudTd>
+                        <MudTd>
+                            <MudNumericField T="decimal" @bind-Value="_editIncome.Amount"
+                                             Variant="Variant.Outlined"
+                                             Culture="_culture"
+                                             Format="0.00"
+                                             Immediate="true" />
+                        </MudTd>
+                        <MudTd>
+                            <MudDatePicker Date="@ToDateTime(_editIncomeDate)" DateChanged="OnEditIncomeDateChanged" Variant="Variant.Outlined" />
+                        </MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveIncomeEditAsync">Zapisz</MudButton>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelIncomeEdit">Anuluj</MudButton>
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd>@income.Name</MudTd>
+                        <MudTd>@income.AccountName</MudTd>
+                        <MudTd>
+                            <MudChip T="string" Color="@(income.IsRegular ? Color.Primary : Color.Info)">@(income.IsRegular ? "Regularny" : "Nieregularny")</MudChip>
+                        </MudTd>
+                        <MudTd>@income.Amount.ToString("0.00", _culture) PLN</MudTd>
+                        <MudTd>@income.ExpectedDayOfMonth.ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd>
+                            @if (income.IsRegular)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small" OnClick="() => PrepareBonusFromIncome(income)">Dodaj bonus</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartIncomeEdit(income)">Edytuj</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteIncomeAsync(income.Id)">Usuń</MudButton>
+                            }
+                        </MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
 
     <MudPaper Class="pa-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Nowy wydatek</MudText>
@@ -267,10 +463,19 @@
     private bool _isLoading;
     private MonthPlanDto? _monthPlan;
     private List<CategoryDto> _categories = [];
+    private List<AccountDto> _accounts = [];
+    private List<IncomeDto> _incomes = [];
+    private LiveBalanceDto _liveBalance = new();
     private decimal _plannedTotal;
     private decimal _actualTotal;
     private decimal _remainingTotal;
     private double _remainingPercent;
+    private readonly CreateMonthSavingsTransferItemRequest _newSavingsTransfer = new()
+    {
+        TransferDate = DateOnly.FromDateTime(DateTime.Today)
+    };
+    private UpdateMonthSavingsTransferItemRequest? _editSavingsTransfer;
+    private DateOnly _editSavingsTransferDate = DateOnly.FromDateTime(DateTime.Today);
     
     private readonly CultureInfo _culture = new("pl-PL");
 
@@ -279,7 +484,15 @@
         ShowRemainingInUI = true
     };
 
+    private readonly CreateIncomeRequest _newIncome = new()
+    {
+        Name = string.Empty,
+        ExpectedDayOfMonth = DateOnly.FromDateTime(DateTime.Today)
+    };
+
     private UpdateExpenseRequest? _editExpense;
+    private UpdateIncomeRequest? _editIncome;
+    private DateOnly _editIncomeDate = DateOnly.FromDateTime(DateTime.Today);
     private readonly HashSet<int> _expandedExpenseIds = [];
     private readonly Dictionary<int, LineItemCreateModel> _lineItemCreateModels = new();
     private UpdateExpenseLineItemRequest? _editLineItem;
@@ -297,7 +510,11 @@
         try
         {
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+            _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
             _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
+            await IncomeService.SyncRegularIncomesForMonthAsync(Year, Month, CancellationToken.None);
+            _incomes = (await IncomeService.GetMonthIncomesAsync(Year, Month, CancellationToken.None)).ToList();
+            _liveBalance = await IncomeService.GetLiveBalanceAsync(Year, Month, CancellationToken.None);
             _expandedExpenseIds.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
 
             CalculateSummary();
@@ -306,6 +523,18 @@
             {
                 _newExpense.CategoryId = _categories[0].Id;
             }
+
+            if (_newIncome.AccountId == 0 && _accounts.Count > 0)
+            {
+                _newIncome.AccountId = _accounts[0].Id;
+            }
+
+            _newIncome.ExpectedDayOfMonth = EnsureDateInCurrentMonth(_newIncome.ExpectedDayOfMonth);
+            _newSavingsTransfer.Year = Year;
+            _newSavingsTransfer.Month = Month;
+            _newSavingsTransfer.TransferDate = _newSavingsTransfer.TransferDate == default
+                ? new DateOnly(Year, Month, 1)
+                : EnsureDateInCurrentMonth(_newSavingsTransfer.TransferDate);
         }
         catch (Exception ex)
         {
@@ -430,7 +659,6 @@
         {
             _newExpense.Year = Year;
             _newExpense.Month = Month;
-            _newExpense.IsUnplanned = IsDerivedUnplanned(_newExpense.PlannedAmount);
 
             await ExpenseService.CreateExpenseAsync(_newExpense, CancellationToken.None);
 
@@ -438,7 +666,6 @@
             _newExpense.TagId = null;
             _newExpense.PlannedAmount = 0;
             _newExpense.ActualAmount = 0;
-            _newExpense.IsUnplanned = true;
             _newExpense.ShowRemainingInUI = true;
 
             await LoadAsync();
@@ -461,7 +688,6 @@
             PlannedAmount = expense.PlannedAmount ?? 0,
             ActualAmount = expense.ActualAmount ?? 0,
             ShowRemainingInUI = expense.ShowRemainingInUI,
-            IsUnplanned = expense.IsUnplanned
         };
 
         if (expense.HasLineItems)
@@ -484,11 +710,121 @@
 
         try
         {
-            _editExpense.IsUnplanned = IsDerivedUnplanned(_editExpense.PlannedAmount);
             await ExpenseService.UpdateExpenseAsync(_editExpense, CancellationToken.None);
             _editExpense = null;
             await LoadAsync();
             Snackbar.Add("Zapisano wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private IReadOnlyList<AccountDto> GetIncomeAccounts()
+    {
+        return _accounts;
+    }
+
+    private Task OnCreateIncomeDateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _newIncome.ExpectedDayOfMonth = EnsureDateInCurrentMonth(DateOnly.FromDateTime(date.Value));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditIncomeDateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _editIncomeDate = EnsureDateInCurrentMonth(DateOnly.FromDateTime(date.Value));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task CreateIncomeAsync()
+    {
+        try
+        {
+            _newIncome.Year = Year;
+            _newIncome.Month = Month;
+            _newIncome.ExpectedDayOfMonth = EnsureDateInCurrentMonth(_newIncome.ExpectedDayOfMonth);
+            _newIncome.IsRegular = false;
+
+            await IncomeService.CreateIncomeAsync(_newIncome, CancellationToken.None);
+
+            _newIncome.Name = string.Empty;
+            _newIncome.Amount = 0;
+            _newIncome.ExpectedDayOfMonth = new DateOnly(Year, Month, 1);
+
+            await LoadAsync();
+            Snackbar.Add("Dodano wpływ.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartIncomeEdit(IncomeDto income)
+    {
+        _editIncome = new UpdateIncomeRequest
+        {
+            Id = income.Id,
+            Name = income.Name,
+            Amount = income.Amount,
+            AccountId = income.AccountId,
+            ExpectedDayOfMonth = income.ExpectedDayOfMonth,
+            IsRegular = false
+        };
+
+        _editIncomeDate = income.ExpectedDayOfMonth;
+    }
+
+    private void CancelIncomeEdit()
+    {
+        _editIncome = null;
+        _editIncomeDate = new DateOnly(Year, Month, 1);
+    }
+
+    private async Task SaveIncomeEditAsync()
+    {
+        if (_editIncome is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _editIncome.ExpectedDayOfMonth = EnsureDateInCurrentMonth(_editIncomeDate);
+            await IncomeService.UpdateIncomeAsync(_editIncome, CancellationToken.None);
+            _editIncome = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano wpływ.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteIncomeAsync(int incomeId)
+    {
+        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", "Usunac wpływ?");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            await IncomeService.DeleteIncomeAsync(new DeleteIncomeRequest { Id = incomeId }, CancellationToken.None);
+            await LoadAsync();
+            Snackbar.Add("Usunięto wpływ.", Severity.Success);
         }
         catch (Exception ex)
         {
@@ -520,21 +856,128 @@
     {
         var targetMonth = new DateTime(Year, Month, 1).AddMonths(-1);
         _editExpense = null;
-        NavigationManager.NavigateTo($"/month/{targetMonth.Year}/{targetMonth.Month}");
+        NavigationManager.NavigateTo($"/plan/{targetMonth.Year}/{targetMonth.Month}");
     }
 
     private void NavigateToCurrentMonth()
     {
         var currentMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
         _editExpense = null;
-        NavigationManager.NavigateTo($"/month/{currentMonth.Year}/{currentMonth.Month}");
+        NavigationManager.NavigateTo($"/plan/{currentMonth.Year}/{currentMonth.Month}");
     }
 
     private void NavigateToNextMonth()
     {
         var targetMonth = new DateTime(Year, Month, 1).AddMonths(1);
         _editExpense = null;
-        NavigationManager.NavigateTo($"/month/{targetMonth.Year}/{targetMonth.Month}");
+        NavigationManager.NavigateTo($"/plan/{targetMonth.Year}/{targetMonth.Month}");
+    }
+
+    private void NavigateToRegularIncomes()
+    {
+        NavigationManager.NavigateTo("/regular-incomes");
+    }
+
+    private void PrepareBonusFromIncome(IncomeDto income)
+    {
+        _newIncome.Name = $"{income.Name} - bonus";
+        _newIncome.AccountId = income.AccountId;
+        _newIncome.Amount = 0;
+        _newIncome.ExpectedDayOfMonth = EnsureDateInCurrentMonth(DateOnly.FromDateTime(DateTime.Today));
+    }
+
+    private Task OnCreateSavingsTransferDateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _newSavingsTransfer.TransferDate = EnsureDateInCurrentMonth(DateOnly.FromDateTime(date.Value));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditSavingsTransferDateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _editSavingsTransferDate = EnsureDateInCurrentMonth(DateOnly.FromDateTime(date.Value));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task CreateSavingsTransferAsync()
+    {
+        try
+        {
+            _newSavingsTransfer.Year = Year;
+            _newSavingsTransfer.Month = Month;
+            _newSavingsTransfer.TransferDate = EnsureDateInCurrentMonth(_newSavingsTransfer.TransferDate);
+
+            await ExpenseService.CreateMonthSavingsTransferItemAsync(_newSavingsTransfer, CancellationToken.None);
+
+            _newSavingsTransfer.Amount = 0;
+            _newSavingsTransfer.TransferDate = new DateOnly(Year, Month, 1);
+
+            await LoadAsync();
+            Snackbar.Add("Dodano pozycje oszczednosci.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartSavingsTransferEdit(MonthSavingsTransferItemDto item)
+    {
+        _editSavingsTransfer = new UpdateMonthSavingsTransferItemRequest
+        {
+            Id = item.Id,
+            Amount = item.Amount,
+            TransferDate = item.TransferDate
+        };
+        _editSavingsTransferDate = item.TransferDate;
+    }
+
+    private void CancelSavingsTransferEdit()
+    {
+        _editSavingsTransfer = null;
+        _editSavingsTransferDate = new DateOnly(Year, Month, 1);
+    }
+
+    private async Task SaveSavingsTransferEditAsync()
+    {
+        if (_editSavingsTransfer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _editSavingsTransfer.TransferDate = EnsureDateInCurrentMonth(_editSavingsTransferDate);
+            await ExpenseService.UpdateMonthSavingsTransferItemAsync(_editSavingsTransfer, CancellationToken.None);
+            _editSavingsTransfer = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano pozycje oszczednosci.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteSavingsTransferAsync(int id)
+    {
+        try
+        {
+            await ExpenseService.DeleteMonthSavingsTransferItemAsync(new DeleteMonthSavingsTransferItemRequest { Id = id }, CancellationToken.None);
+            await LoadAsync();
+            Snackbar.Add("Usunieto pozycje oszczednosci.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private bool IsCategorySupportsLineItems(int categoryId)
@@ -723,5 +1166,12 @@
     private static DateTime ToDateTime(DateOnly value)
     {
         return value.ToDateTime(TimeOnly.MinValue);
+    }
+
+
+    private DateOnly EnsureDateInCurrentMonth(DateOnly value)
+    {
+        var day = Math.Min(value.Day, DateTime.DaysInMonth(Year, Month));
+        return new DateOnly(Year, Month, day);
     }
 }

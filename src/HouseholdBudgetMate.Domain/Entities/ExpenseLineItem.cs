@@ -14,4 +14,3 @@ public sealed class ExpenseLineItem : ATimestampable, IEntityId
     public Expense Expense { get; set; } = null!;
     public Tag? Tag { get; set; }
 }
-

@@ -9,6 +9,4 @@ public class UpdateExpenseRequest
     public decimal PlannedAmount { get; set; }
     public decimal ActualAmount { get; set; }
     public bool ShowRemainingInUI { get; set; }
-    public bool IsUnplanned { get; set; }
 }
-

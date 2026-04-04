@@ -8,4 +8,3 @@ public class CreateExpenseLineItemRequest
     public DateOnly OccurredAt { get; set; }
     public int? TagId { get; set; }
 }
-

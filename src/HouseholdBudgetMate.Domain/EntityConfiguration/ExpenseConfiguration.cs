@@ -25,6 +25,7 @@ public sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.Property(x => x.ShowRemainingInUI)
             .IsRequired();
         
+        builder.HasQueryFilter(x => !x.IsDeleted);
         builder.Property(x => x.IsDeleted)
             .IsRequired();
 
@@ -48,8 +49,6 @@ public sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .WithMany()
             .HasForeignKey(x => x.TagId)
             .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasQueryFilter(x => !x.IsDeleted);
     }
 }
 

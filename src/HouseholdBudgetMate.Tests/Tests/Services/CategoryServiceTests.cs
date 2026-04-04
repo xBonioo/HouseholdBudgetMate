@@ -2,7 +2,6 @@
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
-using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,18 +9,25 @@ namespace HouseholdBudgetMate.Tests.Tests.Services;
 
 public sealed class CategoryServiceTests
 {
+    private readonly string _dbName = Guid.NewGuid().ToString();
+    
+    private CategoryService CreateService()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var provider = new StaticDateTimeProvider(DateTime.UtcNow);
+        return new CategoryService(factory, provider);
+    }
+    
     [Fact]
     public async Task CreateCategoryAsync_Should_Reject_Duplicate_Name_Ignoring_Case()
     {
-        var options = CreateOptions();
-
-        await using (var context = new ApplicationDbContext(options))
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
-            context.Categories.Add(new Category { Name = "Spozywcze", Color = "#4CAF50" });
+            context.Categories.Add(new Category { Name = "Spozywcze", Color = "#111111" });
             await context.SaveChangesAsync();
         }
 
-        var service = new CategoryService(new TestDbContextFactory(options), new StaticDateTimeProvider(DateTime.UtcNow));
+        var service = CreateService();
 
         await Assert.ThrowsAsync<ConflictException>(() => service.CreateCategoryAsync(new CreateCategoryRequest
         {
@@ -33,11 +39,9 @@ public sealed class CategoryServiceTests
     [Fact]
     public async Task DeleteCategoryAsync_Should_SoftDelete_Category_And_Its_Tags()
     {
-        var options = CreateOptions();
-
         int categoryId;
 
-        await using (var context = new ApplicationDbContext(options))
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
             var category = new Category { Name = "Transport", Color = "#1E88E5" };
             context.Categories.Add(category);
@@ -48,10 +52,10 @@ public sealed class CategoryServiceTests
             categoryId = category.Id;
         }
 
-        var service = new CategoryService(new TestDbContextFactory(options), new StaticDateTimeProvider(DateTime.UtcNow));
+        var service = CreateService();
         await service.DeleteCategoryAsync(new DeleteCategoryRequest { Id = categoryId }, CancellationToken.None);
 
-        await using var verifyContext = new ApplicationDbContext(options);
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
 
         var deletedCategory = await verifyContext.Categories.IgnoreQueryFilters().SingleAsync(x => x.Id == categoryId);
         var deletedTag = await verifyContext.Tags.IgnoreQueryFilters().SingleAsync(x => x.CategoryId == categoryId);
@@ -61,23 +65,4 @@ public sealed class CategoryServiceTests
         Assert.True(deletedTag.IsDeleted);
         Assert.NotNull(deletedTag.DeletedAtUtc);
     }
-
-    private static DbContextOptions<ApplicationDbContext> CreateOptions()
-    {
-        return new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-    }
-
-    private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
-        : IDbContextFactory<ApplicationDbContext>
-    {
-        public ApplicationDbContext CreateDbContext() => new(options);
-
-        public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(CreateDbContext());
-        }
-    }
 }
-

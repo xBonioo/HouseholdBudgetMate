@@ -226,6 +226,57 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.ToTable("ExpenseLineItems");
                 });
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Income", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("ExpectedDayOfMonth")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsRegular")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int?>("RegularIncomeDefinitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("RegularIncomeDefinitionId");
+
+                    b.HasIndex("Year", "Month");
+
+                    b.ToTable("Incomes");
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.LogEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -289,6 +340,78 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("MonthPlans");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthSavingsTransferItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MonthPlanId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("TransferDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthPlanId");
+
+                    b.HasIndex("TransferDate");
+
+                    b.ToTable("MonthSavingsTransferItems");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.RegularIncomeDefinition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayOfMonth")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("IsActive");
+
+                    b.ToTable("RegularIncomeDefinitions");
                 });
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Tag", b =>
@@ -381,6 +504,46 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Income", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.RegularIncomeDefinition", "RegularIncomeDefinition")
+                        .WithMany()
+                        .HasForeignKey("RegularIncomeDefinitionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Account");
+
+                    b.Navigation("RegularIncomeDefinition");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthSavingsTransferItem", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.MonthPlan", "MonthPlan")
+                        .WithMany("SavingsTransfers")
+                        .HasForeignKey("MonthPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MonthPlan");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.RegularIncomeDefinition", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Tag", b =>
                 {
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.Category", "Category")
@@ -410,6 +573,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthPlan", b =>
                 {
                     b.Navigation("Expenses");
+
+                    b.Navigation("SavingsTransfers");
                 });
 #pragma warning restore 612, 618
         }

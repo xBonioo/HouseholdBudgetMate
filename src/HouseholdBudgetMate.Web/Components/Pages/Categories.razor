@@ -9,6 +9,7 @@
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 
+<div class="categories-page-root">
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
@@ -29,7 +30,6 @@
     </MudPaper>
 
     <MudPaper Class="pa-4 hb-panel">
-                <MudPaper Class="pa-4 hb-panel">
                     <MudGrid>
                         <MudItem xs="12" md="4">
                             <MudTextField @bind-Value="_newCategory.Name" Label="Nazwa kategorii" Variant="Variant.Outlined" Required="true"/>
@@ -156,9 +156,8 @@
                         }
                     </MudStack>
                 }
-        
-    </MudPaper>
 </MudStack>
+</div>
 
 @code {
     private bool _isLoading;

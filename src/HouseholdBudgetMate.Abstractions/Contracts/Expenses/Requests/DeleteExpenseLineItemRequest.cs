@@ -4,4 +4,3 @@ public class DeleteExpenseLineItemRequest
 {
     public int Id { get; set; }
 }
-

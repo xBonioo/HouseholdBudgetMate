@@ -39,4 +39,3 @@ public sealed class ExpenseLineItemConfiguration : IEntityTypeConfiguration<Expe
             .OnDelete(DeleteBehavior.SetNull);
     }
 }
-

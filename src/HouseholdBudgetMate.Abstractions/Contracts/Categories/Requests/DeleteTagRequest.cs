@@ -4,4 +4,3 @@ public class DeleteTagRequest
 {
     public int Id { get; set; }
 }
-

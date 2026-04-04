@@ -1,8 +1,10 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Categories.Requests;
 using HouseholdBudgetMate.Abstractions.Interfaces;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
+using HouseholdBudgetMate.Application.Mapping;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
@@ -39,9 +41,10 @@ public sealed class CategoryService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest request, CancellationToken cancellationToken)
+    public async Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest request,
+        CancellationToken cancellationToken)
     {
-        var normalizedName = NormalizeName(request.Name);
+        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -57,18 +60,19 @@ public sealed class CategoryService(
         dbContext.Categories.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapCategory(category);
+        return category.MapCategory();
     }
 
-    public async Task<CategoryDto> UpdateCategoryAsync(UpdateCategoryRequest request, CancellationToken cancellationToken)
+    public async Task<CategoryDto> UpdateCategoryAsync(UpdateCategoryRequest request,
+        CancellationToken cancellationToken)
     {
-        var normalizedName = NormalizeName(request.Name);
+        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var category = await dbContext.Categories
-            .Include(x => x.Tags)
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Category not found.");
+                           .Include(x => x.Tags)
+                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                       ?? throw new NotFoundException("Category not found.");
 
         await EnsureCategoryNameUniqueAsync(dbContext, normalizedName, category.Id, cancellationToken);
 
@@ -78,7 +82,7 @@ public sealed class CategoryService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapCategory(category);
+        return category.MapCategory();
     }
 
     public async Task DeleteCategoryAsync(DeleteCategoryRequest request, CancellationToken cancellationToken)
@@ -86,9 +90,9 @@ public sealed class CategoryService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var category = await dbContext.Categories
-            .Include(x => x.Tags)
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Category not found.");
+                           .Include(x => x.Tags)
+                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                       ?? throw new NotFoundException("Category not found.");
 
         category.IsDeleted = true;
         category.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
@@ -104,7 +108,7 @@ public sealed class CategoryService(
 
     public async Task<TagDto> CreateTagAsync(CreateTagRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = NormalizeName(request.Name);
+        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -125,18 +129,18 @@ public sealed class CategoryService(
         dbContext.Tags.Add(tag);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapTag(tag);
+        return tag.MapTag();
     }
 
     public async Task<TagDto> UpdateTagAsync(UpdateTagRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = NormalizeName(request.Name);
+        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var tag = await dbContext.Tags
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Tag not found.");
+                      .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
 
         var categoryExists = await dbContext.Categories.AnyAsync(x => x.Id == request.CategoryId, cancellationToken);
         if (!categoryExists)
@@ -151,7 +155,7 @@ public sealed class CategoryService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapTag(tag);
+        return tag.MapTag();
     }
 
     public async Task DeleteTagAsync(DeleteTagRequest request, CancellationToken cancellationToken)
@@ -159,49 +163,13 @@ public sealed class CategoryService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var tag = await dbContext.Tags
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Tag not found.");
+                      .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
 
         tag.IsDeleted = true;
         tag.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
 
         await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private static CategoryDto MapCategory(Category category)
-    {
-        return new CategoryDto
-        {
-            Id = category.Id,
-            Name = category.Name,
-            Color = category.Color,
-            SupportsLineItems = category.SupportsLineItems,
-            Tags = category.Tags
-                .Where(x => !x.IsDeleted)
-                .OrderBy(x => x.Name)
-                .Select(MapTag)
-                .ToList()
-        };
-    }
-
-    private static TagDto MapTag(Tag tag)
-    {
-        return new TagDto
-        {
-            Id = tag.Id,
-            CategoryId = tag.CategoryId,
-            Name = tag.Name
-        };
-    }
-
-    private static string NormalizeName(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new BadRequestException("Name is required.");
-        }
-
-        return value.Trim().ToUpperInvariant();
     }
 
     private static async Task EnsureCategoryNameUniqueAsync(
@@ -244,4 +212,3 @@ public sealed class CategoryService(
         }
     }
 }
-

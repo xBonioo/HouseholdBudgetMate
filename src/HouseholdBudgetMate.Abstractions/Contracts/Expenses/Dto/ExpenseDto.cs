@@ -18,4 +18,3 @@ public sealed class ExpenseDto
     public bool IsUnplanned => PlannedAmount is null or <= 0;
     public decimal RemainingAmount => (PlannedAmount ?? 0) - (ActualAmount ?? 0);
 }
-

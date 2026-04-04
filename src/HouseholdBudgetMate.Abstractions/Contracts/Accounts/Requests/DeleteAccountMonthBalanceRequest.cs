@@ -4,4 +4,3 @@ public class DeleteAccountMonthBalanceRequest
 {
     public int Id { get; set; }
 }
-

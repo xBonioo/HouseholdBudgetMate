@@ -20,4 +20,3 @@ public sealed class Expense : ATimestampable, IEntityId
     public Tag? Tag { get; set; }
     public ICollection<ExpenseLineItem> LineItems { get; set; } = new List<ExpenseLineItem>();
 }
-

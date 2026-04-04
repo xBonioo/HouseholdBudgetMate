@@ -7,4 +7,3 @@ public class UpdateCategoryRequest
     public string Color { get; set; } = null!;
     public bool SupportsLineItems { get; set; }
 }
-

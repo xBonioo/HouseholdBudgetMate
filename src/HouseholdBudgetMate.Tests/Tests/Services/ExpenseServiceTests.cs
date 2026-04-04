@@ -8,19 +8,26 @@ namespace HouseholdBudgetMate.Tests.Tests.Services;
 
 public sealed class ExpenseServiceTests
 {
+    private readonly string _dbName = Guid.NewGuid().ToString();
+
+    private ExpenseService CreateService()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var provider = new StaticDateTimeProvider(DateTime.UtcNow);
+        return new ExpenseService(factory, provider);
+    }
+
     [Fact]
     public async Task GetMonthAsync_Should_Create_MonthPlan_When_Missing()
     {
-        var dbName = Guid.NewGuid().ToString();
-        var factory = TestDbContextFactory.CreateFactory(dbName);
+        var service = CreateService();
 
-        var service = new ExpenseService(factory, new StaticDateTimeProvider(DateTime.UtcNow));
         var result = await service.GetMonthAsync(2026, 4, CancellationToken.None);
 
         Assert.Equal(2026, result.Year);
         Assert.Equal(4, result.Month);
 
-        await using var verifyContext = TestDbContextFactory.CreateDbContext(dbName);
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var monthPlans = await verifyContext.MonthPlans.ToListAsync();
         Assert.Single(monthPlans);
     }
@@ -28,11 +35,8 @@ public sealed class ExpenseServiceTests
     [Fact]
     public async Task DeleteExpenseAsync_Should_SoftDelete_Expense()
     {
-        var dbName = Guid.NewGuid().ToString();
-        var factory = TestDbContextFactory.CreateFactory(dbName);
-
         int expenseId;
-        await using (var context = TestDbContextFactory.CreateDbContext(dbName))
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
             var category = new Category { Name = "Transport", Color = "#1E88E5" };
             var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
@@ -54,13 +58,40 @@ public sealed class ExpenseServiceTests
             expenseId = expense.Id;
         }
 
-        var service = new ExpenseService(factory, new StaticDateTimeProvider(DateTime.UtcNow));
+        var service = CreateService();
         await service.DeleteExpenseAsync(new DeleteExpenseRequest { Id = expenseId }, CancellationToken.None);
 
-        await using var verifyContext = TestDbContextFactory.CreateDbContext(dbName);
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var deleted = await verifyContext.Expenses.IgnoreQueryFilters().SingleAsync(x => x.Id == expenseId);
         Assert.True(deleted.IsDeleted);
         Assert.NotNull(deleted.DeletedAtUtc);
     }
-}
 
+    [Fact]
+    public async Task SavingsTransferItems_Crud_Should_Work()
+    {
+        var service = CreateService();
+
+        var created = await service.CreateMonthSavingsTransferItemAsync(new CreateMonthSavingsTransferItemRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Amount = 300m,
+            TransferDate = new DateOnly(2026, 4, 10)
+        }, CancellationToken.None);
+
+        var updated = await service.UpdateMonthSavingsTransferItemAsync(new UpdateMonthSavingsTransferItemRequest
+        {
+            Id = created.Id,
+            Amount = 350m,
+            TransferDate = new DateOnly(2026, 4, 12)
+        }, CancellationToken.None);
+
+        Assert.Equal(350m, updated.Amount);
+
+        await service.DeleteMonthSavingsTransferItemAsync(new DeleteMonthSavingsTransferItemRequest { Id = created.Id }, CancellationToken.None);
+
+        var month = await service.GetMonthAsync(2026, 4, CancellationToken.None);
+        Assert.Empty(month.SavingsTransfers);
+    }
+}

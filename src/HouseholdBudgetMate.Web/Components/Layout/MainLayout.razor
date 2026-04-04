@@ -23,27 +23,39 @@
 @* Needed for snackbars *@
 <MudSnackbarProvider/>
 
+<div class="layout-root">
 <MudLayout>
     <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
         <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            
             <MudButton Variant="Variant.Text"
                        Class="@GetNavClass("/")"
                        StartIcon="@Icons.Material.Filled.Dashboard"
                        OnClick="@(() => NavigationManager.NavigateTo("/"))">
                 Dashboard
             </MudButton>
+
             <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/month")"
+                       Class="@GetNavClass("/plan")"
                        StartIcon="@Icons.Material.Filled.CalendarMonth"
                        OnClick="GoToCurrentMonth">
                 Plan
             </MudButton>
+
             <MudButton Variant="Variant.Text"
                        Class="@GetNavClass("/accounts")"
                        StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
                        OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
                 Konta
             </MudButton>
+
+            <MudButton Variant="Variant.Text"
+                       Class="@GetNavClass("/regular-incomes")"
+                       StartIcon="@Icons.Material.Filled.Repeat"
+                       OnClick="@(() => NavigationManager.NavigateTo("/regular-incomes"))">
+                Wpływy regularne
+            </MudButton>
+
             <MudButton Variant="Variant.Text"
                        Class="@GetNavClass("/categories")"
                        StartIcon="@Icons.Material.Filled.Category"
@@ -68,14 +80,14 @@
                         <MudMenuItem Disabled="true">@yearGroup.Year</MudMenuItem>
                         @foreach (var monthItem in yearGroup.Months.OrderBy(x => x.Month))
                         {
-                            <MudMenuItem OnClick="@(() => NavigationManager.NavigateTo($"/month/{monthItem.Year}/{monthItem.Month}"))">
+                            <MudMenuItem OnClick="@(() => NavigationManager.NavigateTo($"/plan/{monthItem.Year}/{monthItem.Month}"))">
                                 @monthItem.Label
                             </MudMenuItem>
                         }
 
                         @if (i < _monthGroups.Count - 1)
                         {
-                            <MudDivider />
+                            <MudDivider/>
                         }
                     }
                 }
@@ -103,6 +115,7 @@
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet
      style="background-color:#c62828;color:white;padding:12px 16px;border-radius:4px;">
@@ -181,6 +194,6 @@
     private void GoToCurrentMonth()
     {
         var now = DateTimeProvider.GetLocalDateTime();
-        NavigationManager.NavigateTo($"/month/{now.Year}/{now.Month}");
+        NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
 }

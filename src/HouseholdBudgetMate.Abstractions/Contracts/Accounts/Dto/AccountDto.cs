@@ -13,4 +13,3 @@ public sealed class AccountDto
     public DateTime? ArchivedAtUtc { get; set; }
     public IReadOnlyList<AccountMonthBalanceDto> MonthBalances { get; set; } = [];
 }
-

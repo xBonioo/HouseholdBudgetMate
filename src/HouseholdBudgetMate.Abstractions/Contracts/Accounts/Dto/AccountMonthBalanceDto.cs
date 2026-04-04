@@ -9,4 +9,3 @@ public sealed class AccountMonthBalanceDto
     public string MonthName { get; set; } = string.Empty;
     public decimal ClosingBalance { get; set; }
 }
-

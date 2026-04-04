@@ -17,8 +17,8 @@
 
 <MudStack Spacing="3" Class="pa-4">
     <MudPaper Class="hb-page-header">
-        <MudText Typo="Typo.h4">Konta</MudText>
-        <MudText Typo="Typo.body2" Class="hb-muted">Kolejnosc kont ustawisz drag and drop. Salda edytujesz szybko dla wybranego miesiaca.</MudText>
+        <MudText Typo="Typo.h4">Stan kont na koniec miesiąca</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">Kolejność kont ustawisz drag and drop. Salda edytujesz szybko dla wybranego miesiaca.</MudText>
     </MudPaper>
 
     <MudGrid>
@@ -57,7 +57,7 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudNumericField T="decimal" @bind-Value="_createModel.OpeningBalance" Label="Saldo" Variant="Variant.Outlined" />
+                <MudNumericField T="decimal" @bind-Value="_createModel.ClosingBalance" Label="Saldo" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12" md="2" Class="d-flex align-center">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAccountAsync">Dodaj konto</MudButton>

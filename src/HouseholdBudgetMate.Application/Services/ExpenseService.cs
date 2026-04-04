@@ -1,8 +1,10 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Interfaces;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
+using HouseholdBudgetMate.Application.Mapping;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
@@ -48,8 +50,22 @@ public sealed class ExpenseService(
             .ToListAsync(cancellationToken);
 
         var expenses = expenseEntities
-            .Select(MapExpenseToDto)
+            .Select(x => x.MapExpenseToDto())
             .ToList();
+
+        var savingsTransfers = await dbContext.MonthSavingsTransferItems
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == monthPlan.Id)
+            .OrderBy(x => x.TransferDate)
+            .ThenBy(x => x.Id)
+            .Select(x => new MonthSavingsTransferItemDto
+            {
+                Id = x.Id,
+                MonthPlanId = x.MonthPlanId,
+                Amount = x.Amount,
+                TransferDate = x.TransferDate
+            })
+            .ToListAsync(cancellationToken);
 
         return new MonthPlanDto
         {
@@ -57,8 +73,125 @@ public sealed class ExpenseService(
             Year = monthPlan.Year,
             Month = monthPlan.Month,
             IsClosed = monthPlan.IsClosed,
+            SavingsTransfers = savingsTransfers,
             Expenses = expenses
         };
+    }
+
+    public async Task<MonthPlanDto> UpdateMonthSavingsTransferAsync(UpdateMonthSavingsTransferRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidateMonth(request.Year, request.Month);
+
+        if (request.Amount < 0)
+        {
+            throw new BadRequestException("Savings transfer amount cannot be negative.");
+        }
+
+        if (request.Amount > 0)
+        {
+            if (!request.TransferDate.HasValue)
+            {
+                throw new BadRequestException("Transfer date is required when amount is greater than zero.");
+            }
+
+            if (request.TransferDate.Value.Year != request.Year || request.TransferDate.Value.Month != request.Month)
+            {
+                throw new BadRequestException("Transfer date must belong to selected month and year.");
+            }
+        }
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var expenses = await dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == monthPlan.Id)
+            .Include(x => x.Category)
+            .Include(x => x.Tag)
+            .Include(x => x.LineItems)
+            .ThenInclude(x => x.Tag)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        return new MonthPlanDto
+        {
+            Id = monthPlan.Id,
+            Year = monthPlan.Year,
+            Month = monthPlan.Month,
+            IsClosed = monthPlan.IsClosed,
+            SavingsTransfers = await dbContext.MonthSavingsTransferItems
+                .AsNoTracking()
+                .Where(x => x.MonthPlanId == monthPlan.Id)
+                .OrderBy(x => x.TransferDate)
+                .ThenBy(x => x.Id)
+                .Select(x => new MonthSavingsTransferItemDto
+                {
+                    Id = x.Id,
+                    MonthPlanId = x.MonthPlanId,
+                    Amount = x.Amount,
+                    TransferDate = x.TransferDate
+                })
+                .ToListAsync(cancellationToken),
+            Expenses = expenses.Select(x => x.MapExpenseToDto()).ToList()
+        };
+    }
+
+    public async Task<MonthSavingsTransferItemDto> CreateMonthSavingsTransferItemAsync(
+        CreateMonthSavingsTransferItemRequest request, CancellationToken cancellationToken)
+    {
+        ValidateMonth(request.Year, request.Month);
+        ValidateSavingsTransfer(request.Amount, request.TransferDate, request.Year, request.Month);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+
+        var item = new MonthSavingsTransferItem
+        {
+            MonthPlanId = monthPlan.Id,
+            Amount = request.Amount,
+            TransferDate = request.TransferDate
+        };
+
+        dbContext.MonthSavingsTransferItems.Add(item);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return item.MapSavingsTransferToDto();
+    }
+
+    public async Task<MonthSavingsTransferItemDto> UpdateMonthSavingsTransferItemAsync(
+        UpdateMonthSavingsTransferItemRequest request, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var item = await dbContext.MonthSavingsTransferItems
+                       .Include(x => x.MonthPlan)
+                       .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                   ?? throw new NotFoundException("Savings transfer item not found.");
+
+        ValidateSavingsTransfer(request.Amount, request.TransferDate, item.MonthPlan.Year, item.MonthPlan.Month);
+
+        item.Amount = request.Amount;
+        item.TransferDate = request.TransferDate;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return item.MapSavingsTransferToDto();
+    }
+
+    public async Task DeleteMonthSavingsTransferItemAsync(DeleteMonthSavingsTransferItemRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var item = await dbContext.MonthSavingsTransferItems
+                       .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                   ?? throw new NotFoundException("Savings transfer item not found.");
+
+        dbContext.MonthSavingsTransferItems.Remove(item);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ExpenseDto> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken)
@@ -76,17 +209,17 @@ public sealed class ExpenseService(
         var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
 
         var category = await dbContext.Categories
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken)
-            ?? throw new NotFoundException("Category not found.");
+                           .AsNoTracking()
+                           .FirstOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken)
+                       ?? throw new NotFoundException("Category not found.");
 
         Tag? tag = null;
         if (request.TagId.HasValue)
         {
             tag = await dbContext.Tags
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
-                ?? throw new NotFoundException("Tag not found.");
+                      .AsNoTracking()
+                      .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
 
             if (tag.CategoryId != request.CategoryId)
             {
@@ -111,7 +244,8 @@ public sealed class ExpenseService(
         return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, tag?.Name);
     }
 
-    public async Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request, CancellationToken cancellationToken)
+    public async Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request,
+        CancellationToken cancellationToken)
     {
         var normalizedDescription = request.Description.Trim();
         if (string.IsNullOrWhiteSpace(normalizedDescription))
@@ -122,10 +256,10 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var expense = await dbContext.Expenses
-            .Include(x => x.Category)
-            .Include(x => x.LineItems)
-            .FirstOrDefaultAsync(x => x.Id == request.ExpenseId, cancellationToken)
-            ?? throw new NotFoundException("Expense not found.");
+                          .Include(x => x.Category)
+                          .Include(x => x.LineItems)
+                          .FirstOrDefaultAsync(x => x.Id == request.ExpenseId, cancellationToken)
+                      ?? throw new NotFoundException("Expense not found.");
 
         if (!expense.Category.SupportsLineItems)
         {
@@ -136,9 +270,9 @@ public sealed class ExpenseService(
         if (request.TagId.HasValue)
         {
             tag = await dbContext.Tags
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
-                ?? throw new NotFoundException("Tag not found.");
+                      .AsNoTracking()
+                      .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
 
             if (tag.CategoryId != expense.CategoryId)
             {
@@ -156,8 +290,11 @@ public sealed class ExpenseService(
         };
 
         dbContext.ExpenseLineItems.Add(lineItem);
+
         await dbContext.SaveChangesAsync(cancellationToken);
+
         await RecalculateActualAmountAsync(dbContext, expense.Id, cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new ExpenseLineItemDto
@@ -172,7 +309,8 @@ public sealed class ExpenseService(
         };
     }
 
-    public async Task<ExpenseLineItemDto> UpdateExpenseLineItemAsync(UpdateExpenseLineItemRequest request, CancellationToken cancellationToken)
+    public async Task<ExpenseLineItemDto> UpdateExpenseLineItemAsync(UpdateExpenseLineItemRequest request,
+        CancellationToken cancellationToken)
     {
         var normalizedDescription = request.Description.Trim();
         if (string.IsNullOrWhiteSpace(normalizedDescription))
@@ -183,10 +321,10 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var lineItem = await dbContext.ExpenseLineItems
-            .Include(x => x.Expense)
-            .ThenInclude(x => x.Category)
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Line item not found.");
+                           .Include(x => x.Expense)
+                           .ThenInclude(x => x.Category)
+                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                       ?? throw new NotFoundException("Line item not found.");
 
         if (!lineItem.Expense.Category.SupportsLineItems)
         {
@@ -197,9 +335,9 @@ public sealed class ExpenseService(
         if (request.TagId.HasValue)
         {
             tag = await dbContext.Tags
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
-                ?? throw new NotFoundException("Tag not found.");
+                      .AsNoTracking()
+                      .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
 
             if (tag.CategoryId != lineItem.Expense.CategoryId)
             {
@@ -228,13 +366,14 @@ public sealed class ExpenseService(
         };
     }
 
-    public async Task DeleteExpenseLineItemAsync(DeleteExpenseLineItemRequest request, CancellationToken cancellationToken)
+    public async Task DeleteExpenseLineItemAsync(DeleteExpenseLineItemRequest request,
+        CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var lineItem = await dbContext.ExpenseLineItems
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Line item not found.");
+                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                       ?? throw new NotFoundException("Line item not found.");
 
         var expenseId = lineItem.ExpenseId;
         dbContext.ExpenseLineItems.Remove(lineItem);
@@ -255,21 +394,21 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var expense = await dbContext.Expenses
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Expense not found.");
+                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                      ?? throw new NotFoundException("Expense not found.");
 
         var category = await dbContext.Categories
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken)
-            ?? throw new NotFoundException("Category not found.");
+                           .AsNoTracking()
+                           .FirstOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken)
+                       ?? throw new NotFoundException("Category not found.");
 
         Tag? tag = null;
         if (request.TagId.HasValue)
         {
             tag = await dbContext.Tags
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
-                ?? throw new NotFoundException("Tag not found.");
+                      .AsNoTracking()
+                      .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
 
             if (tag.CategoryId != request.CategoryId)
             {
@@ -285,6 +424,7 @@ public sealed class ExpenseService(
         {
             expense.ActualAmount = request.ActualAmount;
         }
+
         expense.ShowRemainingInUI = request.ShowRemainingInUI;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -300,8 +440,8 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var expense = await dbContext.Expenses
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Expense not found.");
+                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                      ?? throw new NotFoundException("Expense not found.");
 
         expense.IsDeleted = true;
         expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
@@ -355,9 +495,9 @@ public sealed class ExpenseService(
         CancellationToken cancellationToken)
     {
         var expense = await dbContext.Expenses
-            .Include(x => x.LineItems)
-            .FirstOrDefaultAsync(x => x.Id == expenseId, cancellationToken)
-            ?? throw new NotFoundException("Expense not found.");
+                          .Include(x => x.LineItems)
+                          .FirstOrDefaultAsync(x => x.Id == expenseId, cancellationToken)
+                      ?? throw new NotFoundException("Expense not found.");
 
         if (expense.LineItems.Count == 0)
         {
@@ -375,16 +515,16 @@ public sealed class ExpenseService(
         string? tagNameOverride = null)
     {
         var expense = await dbContext.Expenses
-            .AsNoTracking()
-            .Where(x => x.Id == expenseId)
-            .Include(x => x.Category)
-            .Include(x => x.Tag)
-            .Include(x => x.LineItems)
-            .ThenInclude(x => x.Tag)
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException("Expense not found.");
+                          .AsNoTracking()
+                          .Where(x => x.Id == expenseId)
+                          .Include(x => x.Category)
+                          .Include(x => x.Tag)
+                          .Include(x => x.LineItems)
+                          .ThenInclude(x => x.Tag)
+                          .FirstOrDefaultAsync(cancellationToken)
+                      ?? throw new NotFoundException("Expense not found.");
 
-        var dto = MapExpenseToDto(expense);
+        var dto = expense.MapExpenseToDto();
 
         if (!string.IsNullOrWhiteSpace(categoryNameOverride))
         {
@@ -399,41 +539,13 @@ public sealed class ExpenseService(
         return dto;
     }
 
-    private static ExpenseDto MapExpenseToDto(Expense expense)
+    private static void ValidateSavingsTransfer(decimal amount, DateOnly transferDate, int year, int month)
     {
-        return new ExpenseDto
-        {
-            Id = expense.Id,
-            MonthPlanId = expense.MonthPlanId,
-            Name = expense.Name,
-            CategoryId = expense.CategoryId,
-            CategoryName = expense.Category.Name,
-            TagId = expense.TagId,
-            TagName = expense.Tag?.Name,
-            PlannedAmount = expense.PlannedAmount,
-            ActualAmount = expense.LineItems.Count > 0 ? expense.LineItems.Sum(li => li.Amount) : expense.ActualAmount,
-            SupportsLineItems = expense.Category.SupportsLineItems,
-            ShowRemainingInUI = expense.ShowRemainingInUI,
-            LineItems = expense.LineItems
-                .OrderByDescending(li => li.OccurredAt)
-                .ThenBy(li => li.Id)
-                .Select(MapLineItemToDto)
-                .ToList()
-        };
-    }
+        BudgetHelper.ValidateAmount(amount);
 
-    private static ExpenseLineItemDto MapLineItemToDto(ExpenseLineItem lineItem)
-    {
-        return new ExpenseLineItemDto
+        if (transferDate.Year != year || transferDate.Month != month)
         {
-            Id = lineItem.Id,
-            ExpenseId = lineItem.ExpenseId,
-            Description = lineItem.Description,
-            Amount = lineItem.Amount,
-            OccurredAt = lineItem.OccurredAt,
-            TagId = lineItem.TagId,
-            TagName = lineItem.Tag?.Name
-        };
+            throw new BadRequestException("Savings transfer date must belong to selected month and year.");
+        }
     }
 }
-

@@ -10,6 +10,7 @@ using HouseholdBudgetMate.Application.Shared;
 using HouseholdBudgetMate.Web;
 using HouseholdBudgetMate.Web.Middleware;
 using HouseholdBudgetMate.Abstractions.Interfaces;
+using HouseholdBudgetMate.Application.Seeds;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Web.Components;
@@ -79,6 +80,7 @@ builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IIncomeService, IncomeService>();
 
 builder.Services.AddScoped<CategorySeedService>();
 builder.Services.AddScoped<MonthPlanSeedService>();

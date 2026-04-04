@@ -23,6 +23,7 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.Property(x => x.SupportsLineItems)
             .IsRequired();
 
+        builder.HasQueryFilter(x => !x.IsDeleted);
         builder.Property(x => x.IsDeleted)
             .IsRequired();
 
@@ -36,7 +37,5 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
             .WithOne(x => x.Category)
             .HasForeignKey(x => x.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasQueryFilter(x => !x.IsDeleted);
     }
 }

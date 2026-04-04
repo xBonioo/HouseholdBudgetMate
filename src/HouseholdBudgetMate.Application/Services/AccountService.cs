@@ -8,6 +8,8 @@ using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using HouseholdBudgetMate.Application.Helpers;
+using HouseholdBudgetMate.Application.Mapping;
 
 namespace HouseholdBudgetMate.Application.Services;
 
@@ -26,12 +28,12 @@ public sealed class AccountService(
             .ThenBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
-        return accounts.Select(MapToDto).ToList();
+        return accounts.Select(x => x.MapToDto()).ToList();
     }
 
     public async Task<AccountDto> CreateAccountAsync(CreateAccountRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = NormalizeName(request.Name);
+        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
         ValidateType(request.Type);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -56,26 +58,27 @@ public sealed class AccountService(
             AccountId = account.Id,
             Year = now.Year,
             Month = now.Month,
-            ClosingBalance = request.OpeningBalance
+            ClosingBalance = request.ClosingBalance
         });
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await dbContext.Entry(account).Collection(x => x.MonthBalances).LoadAsync(cancellationToken);
 
-        return MapToDto(account);
+        return account.MapToDto();
     }
 
     public async Task<AccountDto> UpdateAccountAsync(UpdateAccountRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = NormalizeName(request.Name);
+        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
         ValidateType(request.Type);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var account = await dbContext.Accounts
-            .Include(x => x.MonthBalances)
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Account not found.");
+                          .Include(x => x.MonthBalances)
+                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                      ?? throw new NotFoundException("Account not found.");
 
         await EnsureNameUniqueAsync(dbContext, normalizedName, request.Id, cancellationToken);
 
@@ -84,7 +87,7 @@ public sealed class AccountService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToDto(account);
+        return account.MapToDto();
     }
 
     public async Task DeleteAccountAsync(DeleteAccountRequest request, CancellationToken cancellationToken)
@@ -92,9 +95,9 @@ public sealed class AccountService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var account = await dbContext.Accounts
-            .Include(x => x.MonthBalances)
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Account not found.");
+                          .Include(x => x.MonthBalances)
+                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                      ?? throw new NotFoundException("Account not found.");
 
         dbContext.AccountMonthBalances.RemoveRange(account.MonthBalances);
         dbContext.Accounts.Remove(account);
@@ -107,11 +110,12 @@ public sealed class AccountService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var account = await dbContext.Accounts
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Account not found.");
+                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                      ?? throw new NotFoundException("Account not found.");
 
         account.IsArchived = request.IsArchived;
         account.ArchivedAtUtc = request.IsArchived ? dateTimeProvider.GetUtcDateTime() : null;
+
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -142,9 +146,10 @@ public sealed class AccountService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<AccountMonthBalanceDto> UpsertMonthBalanceAsync(UpsertAccountMonthBalanceRequest request, CancellationToken cancellationToken)
+    public async Task<AccountMonthBalanceDto> UpsertMonthBalanceAsync(UpsertAccountMonthBalanceRequest request,
+        CancellationToken cancellationToken)
     {
-        ValidateMonth(request.Year, request.Month);
+        BudgetHelper.ValidateMonth(request.Year, request.Month);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -155,7 +160,9 @@ public sealed class AccountService(
         }
 
         var balance = await dbContext.AccountMonthBalances
-            .FirstOrDefaultAsync(x => x.AccountId == request.AccountId && x.Year == request.Year && x.Month == request.Month, cancellationToken);
+            .FirstOrDefaultAsync(
+                x => x.AccountId == request.AccountId && x.Year == request.Year && x.Month == request.Month,
+                cancellationToken);
 
         if (balance is null)
         {
@@ -181,18 +188,19 @@ public sealed class AccountService(
             AccountId = balance.AccountId,
             Year = balance.Year,
             Month = balance.Month,
-            MonthName = GetMonthName(balance.Month),
+            MonthName = BudgetHelper.GetMonthName(balance.Month),
             ClosingBalance = balance.ClosingBalance
         };
     }
 
-    public async Task<AccountMonthBalanceDto> UpdateMonthBalanceAmountAsync(UpdateAccountMonthBalanceAmountRequest request, CancellationToken cancellationToken)
+    public async Task<AccountMonthBalanceDto> UpdateMonthBalanceAmountAsync(
+        UpdateAccountMonthBalanceAmountRequest request, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var balance = await dbContext.AccountMonthBalances
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Month balance not found.");
+                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                      ?? throw new NotFoundException("Month balance not found.");
 
         balance.ClosingBalance = request.ClosingBalance;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -203,92 +211,9 @@ public sealed class AccountService(
             AccountId = balance.AccountId,
             Year = balance.Year,
             Month = balance.Month,
-            MonthName = GetMonthName(balance.Month),
+            MonthName = BudgetHelper.GetMonthName(balance.Month),
             ClosingBalance = balance.ClosingBalance
         };
-    }
-
-    public async Task DeleteMonthBalanceAsync(DeleteAccountMonthBalanceRequest request, CancellationToken cancellationToken)
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-
-        var balance = await dbContext.AccountMonthBalances
-            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
-            ?? throw new NotFoundException("Month balance not found.");
-
-        dbContext.AccountMonthBalances.Remove(balance);
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private static AccountDto MapToDto(Account account)
-    {
-        var orderedBalances = account.MonthBalances
-            .OrderByDescending(x => x.Year)
-            .ThenByDescending(x => x.Month)
-            .ToList();
-
-        var currentBalance = orderedBalances.FirstOrDefault()?.ClosingBalance ?? 0;
-
-        return new AccountDto
-        {
-            Id = account.Id,
-            Name = account.Name,
-            Type = ParseType(account.Type),
-            Order = account.Order,
-            CurrentBalance = currentBalance,
-            IsArchived = account.IsArchived,
-            ArchivedAtUtc = account.ArchivedAtUtc,
-            MonthBalances = orderedBalances.Select(x => new AccountMonthBalanceDto
-            {
-                Id = x.Id,
-                AccountId = x.AccountId,
-                Year = x.Year,
-                Month = x.Month,
-                MonthName = GetMonthName(x.Month),
-                ClosingBalance = x.ClosingBalance
-            }).ToList()
-        };
-    }
-
-    private static string NormalizeName(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new BadRequestException("Account name is required.");
-        }
-
-        return value.Trim().ToUpperInvariant();
-    }
-
-    private static AccountType ParseType(int value)
-    {
-        if (!Enum.IsDefined(typeof(AccountType), value))
-        {
-            return AccountType.Other;
-        }
-
-        return (AccountType)value;
-    }
-
-    private static void ValidateType(AccountType type)
-    {
-        if (!Enum.IsDefined(typeof(AccountType), type))
-        {
-            throw new BadRequestException("Account type is invalid.");
-        }
-    }
-
-    private static void ValidateMonth(int year, int month)
-    {
-        if (year is < 2000 or > 3000)
-        {
-            throw new BadRequestException("Year is out of allowed range.");
-        }
-
-        if (month is < 1 or > 12)
-        {
-            throw new BadRequestException("Month must be in range 1..12.");
-        }
     }
 
     private static async Task EnsureNameUniqueAsync(
@@ -308,9 +233,11 @@ public sealed class AccountService(
         }
     }
 
-    private static string GetMonthName(int month)
+    private static void ValidateType(AccountType type)
     {
-        return new DateTime(2000, month, 1).ToString("MMMM", new CultureInfo("pl-PL"));
+        if (!Enum.IsDefined(typeof(AccountType), type))
+        {
+            throw new BadRequestException("Account type is invalid.");
+        }
     }
 }
-

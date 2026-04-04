@@ -153,6 +153,7 @@ Aplikacja do zarządzania budżetem - Household Budget Mate
 8. Przyszłościowo: (ale chyba warto uwzględnić aby za dużo nie przerabiać przy dodawaniu tych funkcjonalności)
 	- Dostep spoza domu (VPN)
 	- Portfele inwestycyjne
+	- Zarządzanie kosztami swojego JDG / firmą
 	- Cele finansowe
 	- Alerty / powiadomienia
 	- Prognozowanie na bazie historii:
@@ -162,7 +163,7 @@ Aplikacja do zarządzania budżetem - Household Budget Mate
 	- Multi-user / household
 	- Multi-currency (na podpunkt 7 na razie tylko PLN)
 	- Backup'y
-	- Api do getów aby móc sprawoć apke z home assist czy coś
+	- Api do getów aby móc sparować apke z home assist czy coś
 	
 	
  

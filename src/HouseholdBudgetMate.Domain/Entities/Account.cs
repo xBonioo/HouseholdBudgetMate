@@ -13,4 +13,3 @@ public sealed class Account : ATimestampable, IEntityId
 
     public ICollection<AccountMonthBalance> MonthBalances { get; set; } = new List<AccountMonthBalance>();
 }
-

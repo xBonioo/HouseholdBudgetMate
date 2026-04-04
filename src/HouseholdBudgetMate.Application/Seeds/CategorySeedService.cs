@@ -1,10 +1,9 @@
-﻿using HouseholdBudgetMate.Abstractions.Interfaces;
-using HouseholdBudgetMate.Domain.Entities;
+﻿using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace HouseholdBudgetMate.Application.Services;
+namespace HouseholdBudgetMate.Application.Seeds;
 
 public sealed class CategorySeedService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,

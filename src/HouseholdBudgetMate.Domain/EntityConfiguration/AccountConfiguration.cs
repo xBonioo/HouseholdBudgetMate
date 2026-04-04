@@ -16,6 +16,7 @@ public sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
             .HasMaxLength(120)
             .IsRequired();
 
+        builder.HasIndex(x => x.Order);
         builder.Property(x => x.Order)
             .IsRequired();
 
@@ -35,8 +36,6 @@ public sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
             .WithOne(x => x.Account)
             .HasForeignKey(x => x.AccountId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasIndex(x => x.Order);
     }
 }
 

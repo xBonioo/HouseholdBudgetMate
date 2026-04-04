@@ -1,0 +1,520 @@
+﻿@page "/accounts"
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Requests
+@using HouseholdBudgetMate.Abstractions.Enums
+@using HouseholdBudgetMate.Abstractions.Extensions
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using MudBlazor
+
+@inject IAccountService AccountService
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudStack Spacing="3" Class="pa-4">
+    <MudPaper Class="hb-page-header">
+        <MudText Typo="Typo.h4">Konta</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">Kolejnosc kont ustawisz drag and drop. Salda edytujesz szybko dla wybranego miesiaca.</MudText>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Liczba kont</MudText>
+                <MudText Class="hb-kpi-value">@_accounts.Count</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Łączne saldo aktywnych kont</MudText>
+                <MudText Class="hb-kpi-value">@_accounts.Where(x => !x.IsArchived && x.Type != AccountType.Savings).Sum(x => x.CurrentBalance).ToString("0.00") PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Saldo + oszczędności</MudText>
+                <MudText Class="hb-kpi-value">@_accounts.Where(x => !x.IsArchived).Sum(x => x.CurrentBalance).ToString("0.00") PLN</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Nowe konto</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_createModel.Name" Label="Nazwa" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="AccountType" @bind-Value="_createModel.Type" Label="Typ" Variant="Variant.Outlined">
+                    @foreach (var accountType in _accountTypes)
+                    {
+                        <MudSelectItem Value="@accountType">@accountType.GetDisplayName()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal" @bind-Value="_createModel.OpeningBalance" Label="Saldo" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAccountAsync">Dodaj konto</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.h6">Salda miesięczne</MudText>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudSelect T="int" Value="_selectedYear" ValueChanged="OnSelectedYearChanged" Label="Rok" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var year in _availableYears)
+                    {
+                        <MudSelectItem Value="@year">@year</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    @foreach (var month in _availableMonthsForSelectedYear)
+                    {
+                        <MudChip T="int"
+                                 Value="@month"
+                                 Variant="@(_selectedMonth == month ? Variant.Filled : Variant.Outlined)"
+                                 Color="@(_selectedMonth == month ? Color.Primary : Color.Default)"
+                                 OnClick="() => OnSelectedMonthChipClicked(month)">
+                            @GetMonthLabel(month)
+                        </MudChip>
+                    }
+                    @if (TryGetNextMonthCandidate() is int nextMonth)
+                    {
+                        <MudChip T="int" Variant="Variant.Outlined" Color="Color.Secondary" OnClick="() => AddNextMonthToSelection(nextMonth)">
+                            + @GetMonthLabel(nextMonth)
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudStack>
+
+        <MudTable Items="_accounts.Where(x => !x.IsArchived).OrderBy(x => x.Order)" Dense="true" Hover="true" Class="mt-2">
+            <HeaderContent>
+                <MudTh>Konto</MudTh>
+                <MudTh>Typ</MudTh>
+                <MudTh>Saldo dla wybranego miesiaca</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="account">
+                <MudTd>@account.Name</MudTd>
+                <MudTd>@account.Type.GetDisplayName()</MudTd>
+                <MudTd>
+                    <MudNumericField T="decimal"
+                                     Value="GetSelectedMonthAmount(account.Id)"
+                                     ValueChanged="(value) => SetSelectedMonthAmount(account.Id, value)"
+                                     Culture="_culture"
+                                     Format="0.00"
+                                     Immediate="true"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAllSelectedMonthBalancesAsync">Zapisz wszystkie</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Konta</MudText>
+        <MudTable Items="_accounts.OrderBy(x => x.Order)" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Kolejnosc</MudTh>
+                <MudTh>Nazwa</MudTh>
+                <MudTh>Typ</MudTh>
+                <MudTh>Najnowszy wynik</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Akcje</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="account">
+                @if (_editModel?.Id == account.Id)
+                {
+                    <MudTd>
+                        <div draggable="true" @ondragstart="() => OnAccountDragStart(account.Id)" @ondragover:preventDefault @ondrop="() => OnAccountDropAsync(account.Id)" class="d-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.DragIndicator" />
+                        </div>
+                    </MudTd>
+                    <MudTd><MudTextField @bind-Value="_editModel.Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudTd>
+                    <MudTd>
+                        <MudSelect T="AccountType" @bind-Value="_editModel.Type" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (var accountType in _accountTypes)
+                            {
+                                <MudSelectItem Value="@accountType">@accountType.GetDisplayName()</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd>@account.CurrentBalance.ToString("0.00") PLN</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
+                            @(account.IsArchived ? "Archiwalne" : "Aktywne")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelEdit">Anuluj</MudButton>
+                    </MudTd>
+                }
+                else
+                {
+                    <MudTd>
+                        <div draggable="true" @ondragstart="() => OnAccountDragStart(account.Id)" @ondragover:preventDefault @ondrop="() => OnAccountDropAsync(account.Id)" class="d-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.DragIndicator" />
+                            <MudText Typo="Typo.caption" Class="ml-1">@account.Order</MudText>
+                        </div>
+                    </MudTd>
+                    <MudTd>@account.Name</MudTd>
+                    <MudTd>@account.Type.GetDisplayName()</MudTd>
+                    <MudTd>@account.CurrentBalance.ToString("0.00") PLN</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
+                            @(account.IsArchived ? "Archiwalne" : "Aktywne")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => BeginEdit(account)">Edytuj</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="@(account.IsArchived ? Color.Success : Color.Warning)" Size="Size.Small" OnClick="() => ToggleArchiveAsync(account)">
+                            @(account.IsArchived ? "Przywróc" : "Archiwizuj")
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteAccountAsync(account)">Usuń</MudButton>
+                    </MudTd>
+                }
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private bool _isLoading;
+    private List<AccountDto> _accounts = [];
+    private readonly CultureInfo _culture = new("pl-PL");
+
+    private CreateAccountRequest _createModel = new() { Type = AccountType.Bank };
+    private UpdateAccountRequest? _editModel;
+    private readonly AccountType[] _accountTypes = Enum.GetValues<AccountType>();
+    private readonly IReadOnlyList<MonthOption> _monthOptions = Enumerable.Range(1, 12)
+        .Select(month => new MonthOption(month, new DateTime(2000, month, 1).ToString("MMMM", new CultureInfo("pl-PL"))))
+        .ToList();
+
+    private int _selectedYear = DateTime.Now.Year;
+    private int _selectedMonth = DateTime.Now.Month;
+    private List<int> _availableYears = [DateTime.Now.Year];
+    private List<int> _availableMonthsForSelectedYear = [];
+    private readonly Dictionary<int, decimal> _selectedMonthAmounts = new();
+    private int? _draggedAccountId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).OrderBy(x => x.Order).ToList();
+            _availableYears = _accounts
+                .SelectMany(x => x.MonthBalances)
+                .Select(x => x.Year)
+                .Distinct()
+                .OrderByDescending(x => x)
+                .ToList();
+
+            if (!_availableYears.Contains(_selectedYear))
+            {
+                _selectedYear = _availableYears.Count > 0 ? _availableYears[0] : DateTime.Now.Year;
+            }
+
+            SyncAvailableMonthsForSelectedYear();
+
+            SyncSelectedMonthAmounts();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CreateAccountAsync()
+    {
+        try
+        {
+            await AccountService.CreateAccountAsync(_createModel, CancellationToken.None);
+            _createModel = new CreateAccountRequest { Type = AccountType.Bank };
+            await LoadAsync();
+            Snackbar.Add("Dodano konto.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void BeginEdit(AccountDto account)
+    {
+        _editModel = new UpdateAccountRequest
+        {
+            Id = account.Id,
+            Name = account.Name,
+            Type = account.Type
+        };
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editModel is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await AccountService.UpdateAccountAsync(_editModel, CancellationToken.None);
+            _editModel = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano konto.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void CancelEdit()
+    {
+        _editModel = null;
+    }
+
+    private async Task DeleteAccountAsync(AccountDto account)
+    {
+        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", $"Usunac konto '{account.Name}'?");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            await AccountService.DeleteAccountAsync(new DeleteAccountRequest { Id = account.Id }, CancellationToken.None);
+            await LoadAsync();
+            Snackbar.Add("Usunieto konto.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ToggleArchiveAsync(AccountDto account)
+    {
+        try
+        {
+            await AccountService.SetAccountArchivedAsync(new SetAccountArchivedRequest
+            {
+                Id = account.Id,
+                IsArchived = !account.IsArchived
+            }, CancellationToken.None);
+
+            await LoadAsync();
+            Snackbar.Add(account.IsArchived ? "Przywrócono konto." : "Zarchiwizowano konto.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void OnAccountDragStart(int accountId)
+    {
+        _draggedAccountId = accountId;
+    }
+
+
+    private async Task OnAccountDropAsync(int targetAccountId)
+    {
+        if (!_draggedAccountId.HasValue || _draggedAccountId.Value == targetAccountId)
+        {
+            return;
+        }
+
+        var ordered = _accounts.OrderBy(x => x.Order).ToList();
+        var dragged = ordered.FirstOrDefault(x => x.Id == _draggedAccountId.Value);
+        var target = ordered.FirstOrDefault(x => x.Id == targetAccountId);
+        if (dragged is null || target is null)
+        {
+            return;
+        }
+
+        ordered.Remove(dragged);
+        var targetIndex = ordered.IndexOf(target);
+        ordered.Insert(targetIndex, dragged);
+
+        try
+        {
+            await AccountService.ReorderAccountsAsync(new ReorderAccountsRequest
+            {
+                AccountIds = ordered.Select(x => x.Id).ToList()
+            }, CancellationToken.None);
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _draggedAccountId = null;
+        }
+    }
+
+    private AccountMonthBalanceDto? TryGetSelectedMonthBalance(int accountId)
+    {
+        return _accounts.FirstOrDefault(x => x.Id == accountId)?.MonthBalances
+            .FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth);
+    }
+
+    private decimal GetSelectedMonthAmount(int accountId)
+    {
+        if (_selectedMonthAmounts.TryGetValue(accountId, out var value))
+        {
+            return value;
+        }
+
+        var fallback = TryGetSelectedMonthBalance(accountId)?.ClosingBalance ?? 0;
+        _selectedMonthAmounts[accountId] = fallback;
+        return fallback;
+    }
+
+    private void SetSelectedMonthAmount(int accountId, decimal amount)
+    {
+        _selectedMonthAmounts[accountId] = amount;
+    }
+
+    private async Task SaveAllSelectedMonthBalancesAsync()
+    {
+        try
+        {
+            foreach (var account in _accounts.Where(x => !x.IsArchived))
+            {
+                var amount = GetSelectedMonthAmount(account.Id);
+                var existing = TryGetSelectedMonthBalance(account.Id);
+
+                if (existing is null)
+                {
+                    await AccountService.UpsertMonthBalanceAsync(new UpsertAccountMonthBalanceRequest
+                    {
+                        AccountId = account.Id,
+                        Year = _selectedYear,
+                        Month = _selectedMonth,
+                        ClosingBalance = amount
+                    }, CancellationToken.None);
+                }
+                else
+                {
+                    await AccountService.UpdateMonthBalanceAmountAsync(new UpdateAccountMonthBalanceAmountRequest
+                    {
+                        Id = existing.Id,
+                        ClosingBalance = amount
+                    }, CancellationToken.None);
+                }
+            }
+
+            await LoadAsync();
+            Snackbar.Add("Zapisano salda dla wszystkich aktywnych kont.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void SyncSelectedMonthAmounts()
+    {
+        foreach (var account in _accounts.Where(x => !x.IsArchived))
+        {
+            var existing = account.MonthBalances.FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth);
+            _selectedMonthAmounts[account.Id] = existing?.ClosingBalance ?? 0;
+        }
+
+        var accountIds = _accounts.Where(x => !x.IsArchived).Select(x => x.Id).ToHashSet();
+        var staleKeys = _selectedMonthAmounts.Keys.Where(x => !accountIds.Contains(x)).ToList();
+        foreach (var key in staleKeys)
+        {
+            _selectedMonthAmounts.Remove(key);
+        }
+    }
+
+    private Task OnSelectedYearChanged(int value)
+    {
+        _selectedYear = value;
+        SyncAvailableMonthsForSelectedYear();
+        SyncSelectedMonthAmounts();
+        return Task.CompletedTask;
+    }
+
+    private Task OnSelectedMonthChipClicked(int value)
+    {
+        _selectedMonth = value;
+        SyncSelectedMonthAmounts();
+        return Task.CompletedTask;
+    }
+
+    private void SyncAvailableMonthsForSelectedYear()
+    {
+        _availableMonthsForSelectedYear = _accounts
+            .SelectMany(x => x.MonthBalances)
+            .Where(x => x.Year == _selectedYear)
+            .Select(x => x.Month)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        if (_availableMonthsForSelectedYear.Count > 0 && !_availableMonthsForSelectedYear.Contains(_selectedMonth))
+        {
+            _selectedMonth = _availableMonthsForSelectedYear[0];
+        }
+    }
+
+    private int? TryGetNextMonthCandidate()
+    {
+        if (_availableMonthsForSelectedYear.Count == 0)
+        {
+            return 1;
+        }
+
+        var maxMonth = _availableMonthsForSelectedYear.Max();
+        return maxMonth < 12 ? maxMonth + 1 : null;
+    }
+
+    private void AddNextMonthToSelection(int month)
+    {
+        if (!_availableMonthsForSelectedYear.Contains(month))
+        {
+            _availableMonthsForSelectedYear.Add(month);
+            _availableMonthsForSelectedYear = _availableMonthsForSelectedYear.OrderBy(x => x).ToList();
+        }
+
+        _selectedMonth = month;
+        SyncSelectedMonthAmounts();
+    }
+
+    private string GetMonthLabel(int month)
+    {
+        return _monthOptions.FirstOrDefault(x => x.Value == month).Label ?? month.ToString();
+    }
+
+    private readonly record struct MonthOption(int Value, string Label);
+}
+

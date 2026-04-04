@@ -22,6 +22,78 @@ namespace HouseholdBudgetMate.Migrations.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Account", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Order");
+
+                    b.ToTable("Accounts");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.AccountMonthBalance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ClosingBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "Year", "Month")
+                        .IsUnique();
+
+                    b.ToTable("AccountMonthBalances");
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -254,6 +326,17 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.ToTable("Tags");
                 });
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.AccountMonthBalance", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
+                        .WithMany("MonthBalances")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Expense", b =>
                 {
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.Category", "Category")
@@ -307,6 +390,11 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Account", b =>
+                {
+                    b.Navigation("MonthBalances");
                 });
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Category", b =>

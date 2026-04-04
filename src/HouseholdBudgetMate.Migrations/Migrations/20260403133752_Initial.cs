@@ -13,6 +13,25 @@ namespace HouseholdBudgetMate.Migrations.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "Accounts",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Type = table.Column<int>(type: "integer", nullable: false),
+                    IsArchived = table.Column<bool>(type: "boolean", nullable: false),
+                    ArchivedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Accounts", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Categories",
                 columns: table => new
                 {
@@ -64,6 +83,30 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_MonthPlans", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AccountMonthBalances",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AccountId = table.Column<int>(type: "integer", nullable: false),
+                    Year = table.Column<int>(type: "integer", nullable: false),
+                    Month = table.Column<int>(type: "integer", nullable: false),
+                    ClosingBalance = table.Column<decimal>(type: "numeric", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AccountMonthBalances", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AccountMonthBalances_Accounts_AccountId",
+                        column: x => x.AccountId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -163,6 +206,17 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_AccountMonthBalances_AccountId_Year_Month",
+                table: "AccountMonthBalances",
+                columns: new[] { "AccountId", "Year", "Month" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Accounts_Order",
+                table: "Accounts",
+                column: "Order");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ExpenseLineItems_ExpenseId",
                 table: "ExpenseLineItems",
                 column: "ExpenseId");
@@ -203,10 +257,16 @@ namespace HouseholdBudgetMate.Migrations.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "AccountMonthBalances");
+
+            migrationBuilder.DropTable(
                 name: "ExpenseLineItems");
 
             migrationBuilder.DropTable(
                 name: "Logs");
+
+            migrationBuilder.DropTable(
+                name: "Accounts");
 
             migrationBuilder.DropTable(
                 name: "Expenses");

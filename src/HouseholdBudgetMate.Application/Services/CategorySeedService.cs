@@ -12,10 +12,10 @@ public sealed class CategorySeedService(
 {
     private static readonly IReadOnlyList<Category> DefaultCategories =
     [
-        new() { Name = "Spożywcze", Color = "#4CAF50", SupportsLineItems = false },
-        new() { Name = "Transport", Color = "#1E88E5", SupportsLineItems = true },
+        new() { Name = "Spożywcze", Color = "#4CAF50", SupportsLineItems = true },
+        new() { Name = "Samochód", Color = "#1E88E5", SupportsLineItems = true },
         new() { Name = "Zdrowie", Color = "#E53935", SupportsLineItems = false },
-        new() { Name = "Rozrywka", Color = "#8E24AA", SupportsLineItems = false },
+        new() { Name = "Rozrywka", Color = "#8E24AA", SupportsLineItems = true },
         new() { Name = "Dom", Color = "#FB8C00", SupportsLineItems = false }
     ];
 

@@ -39,7 +39,7 @@ Aplikacja do zarządzania budżetem - Household Budget Mate
 	- Lokalny serwer
 		Na razie laptop w przyszłości serwer w domu
 	- Dostęp
-		LAN: http://192.168.x.x:7134
+		LAN: http://192.168.x.x:7135
 
 4. SECURITY
 - Na start:

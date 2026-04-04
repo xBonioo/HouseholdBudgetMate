@@ -14,6 +14,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<MonthPlan> MonthPlans { get; set; }
     public DbSet<Expense> Expenses { get; set; }
     public DbSet<ExpenseLineItem> ExpenseLineItems { get; set; }
+    public DbSet<Account> Accounts { get; set; }
+    public DbSet<AccountMonthBalance> AccountMonthBalances { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -33,16 +33,22 @@
                 Dashboard
             </MudButton>
             <MudButton Variant="Variant.Text"
+                       Class="@GetNavClass("/month")"
+                       StartIcon="@Icons.Material.Filled.CalendarMonth"
+                       OnClick="GoToCurrentMonth">
+                Plan
+            </MudButton>
+            <MudButton Variant="Variant.Text"
+                       Class="@GetNavClass("/accounts")"
+                       StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
+                       OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
+                Konta
+            </MudButton>
+            <MudButton Variant="Variant.Text"
                        Class="@GetNavClass("/categories")"
                        StartIcon="@Icons.Material.Filled.Category"
                        OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
                 Kategorie
-            </MudButton>
-            <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/month")"
-                       StartIcon="@Icons.Material.Filled.CalendarMonth"
-                       OnClick="GoToCurrentMonth">
-                Miesiac
             </MudButton>
 
             <MudMenu Variant="Variant.Text"

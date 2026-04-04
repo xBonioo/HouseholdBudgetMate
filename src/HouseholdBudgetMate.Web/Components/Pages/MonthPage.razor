@@ -48,7 +48,7 @@
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Pozostalo</MudText>
                 <MudText Class="hb-kpi-value">@_remainingTotal.ToString("0.00") PLN</MudText>
-                <MudProgressLinear Class="mt-2" Rounded="true" Value="@_usagePercent" Color="@(_usagePercent >= 100 ? Color.Error : Color.Primary)" />
+                <MudProgressLinear Class="mt-2" Rounded="true" Value="@_remainingPercent" Color="@GetRemainingBarColor()" />
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -76,10 +76,16 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudNumericField T="decimal" @bind-Value="_newExpense.PlannedAmount" Label="Planowana" Variant="Variant.Outlined" />
+                <MudNumericField T="decimal" @bind-Value="_newExpense.PlannedAmount" Label="Planowana" Variant="Variant.Outlined"
+                                 Culture="_culture"
+                                 Format="0.00"
+                                 Immediate="true" />
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudNumericField T="decimal" @bind-Value="_newExpense.ActualAmount" Label="Realna" Variant="Variant.Outlined" Disabled="@IsCategorySupportsLineItems(_newExpense.CategoryId)" />
+                <MudNumericField T="decimal" @bind-Value="_newExpense.ActualAmount" Label="Realna" Variant="Variant.Outlined" Disabled="@IsCategorySupportsLineItems(_newExpense.CategoryId)"
+                                 Culture="_culture"
+                                 Format="0.00"
+                                 Immediate="true" />
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudSwitch @bind-Value="_newExpense.ShowRemainingInUI" Color="Color.Primary" Label="Pokaż pozostało" />
@@ -171,7 +177,7 @@
                     {
                         <MudTd colspan="8" Class="pa-3">
                             <MudStack Spacing="2">
-                                <MudText Typo="Typo.subtitle2">Pozycje wydatku</MudText>
+                                <MudText Typo="Typo.subtitle2">Podpozycje wydatku</MudText>
 
                                 @if (expense.LineItems.Count == 0)
                                 {
@@ -264,7 +270,7 @@
     private decimal _plannedTotal;
     private decimal _actualTotal;
     private decimal _remainingTotal;
-    private double _usagePercent;
+    private double _remainingPercent;
     
     private readonly CultureInfo _culture = new("pl-PL");
 
@@ -346,7 +352,7 @@
             _plannedTotal = 0;
             _actualTotal = 0;
             _remainingTotal = 0;
-            _usagePercent = 0;
+            _remainingPercent = 0;
             return;
         }
 
@@ -359,9 +365,23 @@
 
         _plannedTotal = plannedExpenses.Sum(x => x.PlannedAmount ?? 0);
         _actualTotal = _monthPlan.Expenses.Sum(x => x.ActualAmount ?? 0);
-        var actualForPlanned = plannedExpenses.Sum(x => x.ActualAmount ?? 0);
         _remainingTotal = visibleRemainingExpenses.Sum(x => Math.Max(0, (x.PlannedAmount ?? 0) - (x.ActualAmount ?? 0)));
-        _usagePercent = _plannedTotal <= 0 ? 0 : Math.Min(150, (double)(actualForPlanned / _plannedTotal * 100));
+        _remainingPercent = _plannedTotal <= 0 ? 0 : Math.Clamp((double)(_remainingTotal / _plannedTotal * 100), 0, 100);
+    }
+
+    private Color GetRemainingBarColor()
+    {
+        if (_remainingTotal <= 0)
+        {
+            return Color.Error;
+        }
+
+        if (_remainingPercent <= 20)
+        {
+            return Color.Warning;
+        }
+
+        return Color.Success;
     }
 
     private string GetRowClass(ExpenseDto expense, int _)

@@ -17,7 +17,7 @@
     <MudPaper Class="categories-header hb-page-header">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
             <MudStack Spacing="0">
-                <MudText Typo="Typo.h4">Category Management</MudText>
+                <MudText Typo="Typo.h4">Menadżer kategorii</MudText>
                 <MudText Typo="Typo.body2" Class="hb-muted">Buduj strukture kategorii i tagów.</MudText>
             </MudStack>
 
@@ -46,7 +46,7 @@
                             </MudButton>
                         </MudItem>
                         <MudItem xs="12" md="1" Class="d-flex align-center">
-                            <MudSwitch @bind-Value="_newCategory.SupportsLineItems" Color="Color.Secondary" Label="Pozycje" />
+                            <MudSwitch @bind-Value="_newCategory.SupportsLineItems" Color="Color.Secondary" Label="Podpozycje" />
                         </MudItem>
                         <MudItem xs="12" md="3">
                             <MudTextField @bind-Value="_searchText" Label="Szukaj kategorii lub tagu" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"/>
@@ -74,7 +74,7 @@
                                             <MudTextField @bind-Value="_editCategory.Name" Label="Nazwa" Variant="Variant.Outlined" Margin="Margin.Dense" Class="category-name-field"/>
                                             <input type="color" class="hb-color-picker" @bind="_editCategory.Color" aria-label="Wybierz kolor kategorii" />
                                             <MudTextField @bind-Value="_editCategory.Color" Label="HEX" Variant="Variant.Outlined" Margin="Margin.Dense" Class="category-hex-field"/>
-                                            <MudSwitch @bind-Value="_editCategory.SupportsLineItems" Color="Color.Secondary" Label="Pozycje" />
+                                            <MudSwitch @bind-Value="_editCategory.SupportsLineItems" Color="Color.Secondary" Label="Podpozycje" />
                                             <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
                                         </MudStack>
 
@@ -93,7 +93,7 @@
                                             <MudText Typo="Typo.subtitle1">@category.Name</MudText>
                                             <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
                                             <MudChip T="string" Variant="Variant.Outlined" Color="@(category.SupportsLineItems ? Color.Secondary : Color.Default)">
-                                                @(category.SupportsLineItems ? "Line items: tak" : "Line items: nie")
+                                                @(category.SupportsLineItems ? "Podpozycje: tak" : "Podpozycje: nie")
                                             </MudChip>
                                         </MudStack>
 

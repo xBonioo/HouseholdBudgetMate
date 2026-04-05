@@ -5,9 +5,12 @@
 @using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Abstractions.Extensions
 @using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Application.Kernel.Timing
 @using MudBlazor
 
+@inject IDateTimeProvider DateTimeProvider
 @inject IAccountService AccountService
+@inject IExpenseService ExpenseService
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 
@@ -31,13 +34,13 @@
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Łączne saldo aktywnych kont</MudText>
-                <MudText Class="hb-kpi-value">@_accounts.Where(x => !x.IsArchived && x.Type != AccountType.Savings).Sum(x => x.CurrentBalance).ToString("0.00") PLN</MudText>
+                <MudText Class="hb-kpi-value">@GetActiveNonSavingsTotalForSelectedMonth().ToString("0.00") PLN</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Saldo + oszczędności</MudText>
-                <MudText Class="hb-kpi-value">@_accounts.Where(x => !x.IsArchived).Sum(x => x.CurrentBalance).ToString("0.00") PLN</MudText>
+                <MudText Class="hb-kpi-value">@GetActiveTotalForSelectedMonth().ToString("0.00") PLN</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -86,7 +89,7 @@
                             @GetMonthLabel(month)
                         </MudChip>
                     }
-                    @if (TryGetNextMonthCandidate() is int nextMonth)
+                    @if (TryGetNextMonthCandidate() is { } nextMonth)
                     {
                         <MudChip T="int" Variant="Variant.Outlined" Color="Color.Secondary" OnClick="() => AddNextMonthToSelection(nextMonth)">
                             + @GetMonthLabel(nextMonth)
@@ -202,15 +205,20 @@
         .Select(month => new MonthOption(month, new DateTime(2000, month, 1).ToString("MMMM", new CultureInfo("pl-PL"))))
         .ToList();
 
-    private int _selectedYear = DateTime.Now.Year;
-    private int _selectedMonth = DateTime.Now.Month;
-    private List<int> _availableYears = [DateTime.Now.Year];
+    private int _selectedYear;
+    private int _selectedMonth;
+    private List<int> _availableYears = [];
     private List<int> _availableMonthsForSelectedYear = [];
     private readonly Dictionary<int, decimal> _selectedMonthAmounts = new();
     private int? _draggedAccountId;
 
     protected override async Task OnInitializedAsync()
     {
+        var today = DateTimeProvider.GetLocalDateOnly();
+        _selectedYear = today.Year;
+        _selectedMonth = today.Month;
+        _availableYears = [today.Year];
+
         await LoadAsync();
     }
 
@@ -220,16 +228,18 @@
         try
         {
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).OrderBy(x => x.Order).ToList();
-            _availableYears = _accounts
-                .SelectMany(x => x.MonthBalances)
+
+            var availablePlanMonths = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
+            _availableYears = availablePlanMonths
                 .Select(x => x.Year)
                 .Distinct()
                 .OrderByDescending(x => x)
                 .ToList();
 
+            var currentYear = DateTimeProvider.GetLocalDateOnly().Year;
             if (!_availableYears.Contains(_selectedYear))
             {
-                _selectedYear = _availableYears.Count > 0 ? _availableYears[0] : DateTime.Now.Year;
+                _selectedYear = _availableYears.Count > 0 ? _availableYears[0] : currentYear;
             }
 
             SyncAvailableMonthsForSelectedYear();
@@ -513,6 +523,27 @@
     private string GetMonthLabel(int month)
     {
         return _monthOptions.FirstOrDefault(x => x.Value == month).Label ?? month.ToString();
+    }
+
+    private decimal GetActiveNonSavingsTotalForSelectedMonth()
+    {
+        return _accounts
+            .Where(x => !x.IsArchived && x.Type != AccountType.Savings)
+            .Sum(GetSelectedMonthBalanceAmount);
+    }
+
+    private decimal GetActiveTotalForSelectedMonth()
+    {
+        return _accounts
+            .Where(x => !x.IsArchived)
+            .Sum(GetSelectedMonthBalanceAmount);
+    }
+
+    private decimal GetSelectedMonthBalanceAmount(AccountDto account)
+    {
+        return account.MonthBalances
+            .FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth)
+            ?.ClosingBalance ?? 0m;
     }
 
     private readonly record struct MonthOption(int Value, string Label);

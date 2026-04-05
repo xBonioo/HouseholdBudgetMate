@@ -110,6 +110,31 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "RegularIncomeDefinitions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    DayOfMonth = table.Column<int>(type: "integer", nullable: false),
+                    AccountId = table.Column<int>(type: "integer", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RegularIncomeDefinitions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RegularIncomeDefinitions_Accounts_AccountId",
+                        column: x => x.AccountId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Tags",
                 columns: table => new
                 {
@@ -131,6 +156,63 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         principalTable: "Categories",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "MonthSavingsTransferItems",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    MonthPlanId = table.Column<int>(type: "integer", nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    TransferDate = table.Column<DateOnly>(type: "date", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MonthSavingsTransferItems", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_MonthSavingsTransferItems_MonthPlans_MonthPlanId",
+                        column: x => x.MonthPlanId,
+                        principalTable: "MonthPlans",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Incomes",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Year = table.Column<int>(type: "integer", nullable: false),
+                    Month = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    ExpectedDayOfMonth = table.Column<DateOnly>(type: "date", nullable: false),
+                    AccountId = table.Column<int>(type: "integer", nullable: false),
+                    IsRegular = table.Column<bool>(type: "boolean", nullable: false),
+                    RegularIncomeDefinitionId = table.Column<int>(type: "integer", nullable: true),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Incomes", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Incomes_Accounts_AccountId",
+                        column: x => x.AccountId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Incomes_RegularIncomeDefinitions_RegularIncomeDefinitionId",
+                        column: x => x.RegularIncomeDefinitionId,
+                        principalTable: "RegularIncomeDefinitions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -242,10 +324,45 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 column: "TagId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Incomes_AccountId",
+                table: "Incomes",
+                column: "AccountId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Incomes_RegularIncomeDefinitionId",
+                table: "Incomes",
+                column: "RegularIncomeDefinitionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Incomes_Year_Month",
+                table: "Incomes",
+                columns: new[] { "Year", "Month" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_MonthPlans_Year_Month",
                 table: "MonthPlans",
                 columns: new[] { "Year", "Month" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MonthSavingsTransferItems_MonthPlanId",
+                table: "MonthSavingsTransferItems",
+                column: "MonthPlanId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MonthSavingsTransferItems_TransferDate",
+                table: "MonthSavingsTransferItems",
+                column: "TransferDate");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RegularIncomeDefinitions_AccountId",
+                table: "RegularIncomeDefinitions",
+                column: "AccountId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RegularIncomeDefinitions_IsActive",
+                table: "RegularIncomeDefinitions",
+                column: "IsActive");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Tags_CategoryId",
@@ -263,19 +380,28 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 name: "ExpenseLineItems");
 
             migrationBuilder.DropTable(
+                name: "Incomes");
+
+            migrationBuilder.DropTable(
                 name: "Logs");
 
             migrationBuilder.DropTable(
-                name: "Accounts");
+                name: "MonthSavingsTransferItems");
 
             migrationBuilder.DropTable(
                 name: "Expenses");
+
+            migrationBuilder.DropTable(
+                name: "RegularIncomeDefinitions");
 
             migrationBuilder.DropTable(
                 name: "MonthPlans");
 
             migrationBuilder.DropTable(
                 name: "Tags");
+
+            migrationBuilder.DropTable(
+                name: "Accounts");
 
             migrationBuilder.DropTable(
                 name: "Categories");

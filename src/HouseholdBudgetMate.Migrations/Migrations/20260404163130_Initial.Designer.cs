@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HouseholdBudgetMate.Migrations.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260404074854_AddMonthSavingsTransfer")]
-    partial class AddMonthSavingsTransfer
+    [Migration("20260404163130_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -331,12 +331,6 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<int>("Month")
                         .HasColumnType("integer");
 
-                    b.Property<decimal?>("SavingsTransferAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateOnly?>("SavingsTransferDate")
-                        .HasColumnType("date");
-
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -349,6 +343,38 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("MonthPlans");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthSavingsTransferItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MonthPlanId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("TransferDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthPlanId");
+
+                    b.HasIndex("TransferDate");
+
+                    b.ToTable("MonthSavingsTransferItems");
                 });
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.RegularIncomeDefinition", b =>
@@ -499,6 +525,17 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Navigation("RegularIncomeDefinition");
                 });
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthSavingsTransferItem", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.MonthPlan", "MonthPlan")
+                        .WithMany("SavingsTransfers")
+                        .HasForeignKey("MonthPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MonthPlan");
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.RegularIncomeDefinition", b =>
                 {
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
@@ -539,6 +576,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthPlan", b =>
                 {
                     b.Navigation("Expenses");
+
+                    b.Navigation("SavingsTransfers");
                 });
 #pragma warning restore 612, 618
         }

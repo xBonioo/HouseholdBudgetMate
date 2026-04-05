@@ -1,10 +1,12 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Interfaces;
-using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Application.Mapping;
+using HouseholdBudgetMate.Application.Validation;
+using HouseholdBudgetMate.Application.Validation.Common;
+using HouseholdBudgetMate.Application.Validation.Expenses;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +17,20 @@ public sealed class ExpenseService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider) : IExpenseService
 {
+    private static readonly YearMonthRequestValidator YearMonthValidator = new();
+    private static readonly DateInMonthRequestValidator DateInMonthValidator = new();
+
+    private static readonly CreateMonthSavingsTransferItemRequestValidator CreateSavingsTransferItemValidator = new();
+    private static readonly CreateExpenseRequestValidator CreateExpenseValidator = new();
+    private static readonly CreateExpenseLineItemRequestValidator CreateExpenseLineItemValidator = new();
+    private static readonly UpdateMonthSavingsTransferRequestValidator UpdateSavingsTransferValidator = new();
+    private static readonly UpdateMonthSavingsTransferItemRequestValidator UpdateSavingsTransferItemValidator = new();
+    private static readonly UpdateExpenseRequestValidator UpdateExpenseValidator = new();
+    private static readonly UpdateExpenseLineItemRequestValidator UpdateExpenseLineItemValidator = new();
+    private static readonly DeleteMonthSavingsTransferItemRequestValidator DeleteSavingsTransferItemValidator = new();
+    private static readonly DeleteExpenseRequestValidator DeleteExpenseValidator = new();
+    private static readonly DeleteExpenseLineItemRequestValidator DeleteExpenseLineItemValidator = new();
+
     public async Task<IReadOnlyList<AvailableMonthDto>> GetAvailableMonthsAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -33,7 +49,7 @@ public sealed class ExpenseService(
 
     public async Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken)
     {
-        ValidateMonth(year, month);
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -81,25 +97,7 @@ public sealed class ExpenseService(
     public async Task<MonthPlanDto> UpdateMonthSavingsTransferAsync(UpdateMonthSavingsTransferRequest request,
         CancellationToken cancellationToken)
     {
-        ValidateMonth(request.Year, request.Month);
-
-        if (request.Amount < 0)
-        {
-            throw new BadRequestException("Savings transfer amount cannot be negative.");
-        }
-
-        if (request.Amount > 0)
-        {
-            if (!request.TransferDate.HasValue)
-            {
-                throw new BadRequestException("Transfer date is required when amount is greater than zero.");
-            }
-
-            if (request.TransferDate.Value.Year != request.Year || request.TransferDate.Value.Month != request.Month)
-            {
-                throw new BadRequestException("Transfer date must belong to selected month and year.");
-            }
-        }
+        UpdateSavingsTransferValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
@@ -142,8 +140,7 @@ public sealed class ExpenseService(
     public async Task<MonthSavingsTransferItemDto> CreateMonthSavingsTransferItemAsync(
         CreateMonthSavingsTransferItemRequest request, CancellationToken cancellationToken)
     {
-        ValidateMonth(request.Year, request.Month);
-        ValidateSavingsTransfer(request.Amount, request.TransferDate, request.Year, request.Month);
+        CreateSavingsTransferItemValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
@@ -164,6 +161,8 @@ public sealed class ExpenseService(
     public async Task<MonthSavingsTransferItemDto> UpdateMonthSavingsTransferItemAsync(
         UpdateMonthSavingsTransferItemRequest request, CancellationToken cancellationToken)
     {
+        UpdateSavingsTransferItemValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var item = await dbContext.MonthSavingsTransferItems
@@ -171,7 +170,11 @@ public sealed class ExpenseService(
                        .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                    ?? throw new NotFoundException("Savings transfer item not found.");
 
-        ValidateSavingsTransfer(request.Amount, request.TransferDate, item.MonthPlan.Year, item.MonthPlan.Month);
+        DateInMonthValidator.ValidateOrThrowBadRequest(new DateInMonthRequest(
+            request.TransferDate,
+            item.MonthPlan.Year,
+            item.MonthPlan.Month,
+            "Savings transfer date must belong to selected month and year."));
 
         item.Amount = request.Amount;
         item.TransferDate = request.TransferDate;
@@ -183,6 +186,8 @@ public sealed class ExpenseService(
     public async Task DeleteMonthSavingsTransferItemAsync(DeleteMonthSavingsTransferItemRequest request,
         CancellationToken cancellationToken)
     {
+        DeleteSavingsTransferItemValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var item = await dbContext.MonthSavingsTransferItems
@@ -196,13 +201,9 @@ public sealed class ExpenseService(
 
     public async Task<ExpenseDto> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken)
     {
-        ValidateMonth(request.Year, request.Month);
+        CreateExpenseValidator.ValidateOrThrowBadRequest(request);
 
-        var normalizedName = request.Name.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            throw new BadRequestException("Expense name is required.");
-        }
+        var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -247,11 +248,9 @@ public sealed class ExpenseService(
     public async Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request,
         CancellationToken cancellationToken)
     {
-        var normalizedDescription = request.Description.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedDescription))
-        {
-            throw new BadRequestException("Line item description is required.");
-        }
+        CreateExpenseLineItemValidator.ValidateOrThrowBadRequest(request);
+
+        var normalizedDescription = request.Description;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -312,11 +311,9 @@ public sealed class ExpenseService(
     public async Task<ExpenseLineItemDto> UpdateExpenseLineItemAsync(UpdateExpenseLineItemRequest request,
         CancellationToken cancellationToken)
     {
-        var normalizedDescription = request.Description.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedDescription))
-        {
-            throw new BadRequestException("Line item description is required.");
-        }
+        UpdateExpenseLineItemValidator.ValidateOrThrowBadRequest(request);
+
+        var normalizedDescription = request.Description;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -369,6 +366,8 @@ public sealed class ExpenseService(
     public async Task DeleteExpenseLineItemAsync(DeleteExpenseLineItemRequest request,
         CancellationToken cancellationToken)
     {
+        DeleteExpenseLineItemValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var lineItem = await dbContext.ExpenseLineItems
@@ -385,11 +384,9 @@ public sealed class ExpenseService(
 
     public async Task<ExpenseDto> UpdateExpenseAsync(UpdateExpenseRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = request.Name.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            throw new BadRequestException("Expense name is required.");
-        }
+        UpdateExpenseValidator.ValidateOrThrowBadRequest(request);
+
+        var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -437,6 +434,8 @@ public sealed class ExpenseService(
 
     public async Task DeleteExpenseAsync(DeleteExpenseRequest request, CancellationToken cancellationToken)
     {
+        DeleteExpenseValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var expense = await dbContext.Expenses
@@ -447,19 +446,6 @@ public sealed class ExpenseService(
         expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
 
         await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private static void ValidateMonth(int year, int month)
-    {
-        if (year is < 2000 or > 3000)
-        {
-            throw new BadRequestException("Year is out of allowed range.");
-        }
-
-        if (month is < 1 or > 12)
-        {
-            throw new BadRequestException("Month must be in range 1..12.");
-        }
     }
 
     private static async Task<MonthPlan> GetOrCreateMonthPlanAsync(
@@ -537,15 +523,5 @@ public sealed class ExpenseService(
         }
 
         return dto;
-    }
-
-    private static void ValidateSavingsTransfer(decimal amount, DateOnly transferDate, int year, int month)
-    {
-        BudgetHelper.ValidateAmount(amount);
-
-        if (transferDate.Year != year || transferDate.Month != month)
-        {
-            throw new BadRequestException("Savings transfer date must belong to selected month and year.");
-        }
     }
 }

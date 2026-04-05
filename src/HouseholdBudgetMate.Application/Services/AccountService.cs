@@ -1,13 +1,13 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Requests;
-using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Abstractions.Interfaces;
+using HouseholdBudgetMate.Application.Validation;
+using HouseholdBudgetMate.Application.Validation.Accounts;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
-using System.Globalization;
 using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Mapping;
 
@@ -17,6 +17,14 @@ public sealed class AccountService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider) : IAccountService
 {
+    private static readonly CreateAccountRequestValidator CreateAccountValidator = new();
+    private static readonly UpdateAccountRequestValidator UpdateAccountValidator = new();
+    private static readonly UpsertAccountMonthBalanceRequestValidator UpsertMonthBalanceValidator = new();
+    private static readonly UpdateAccountMonthBalanceAmountRequestValidator UpdateMonthBalanceAmountValidator = new();
+    private static readonly SetAccountArchivedRequestValidator SetAccountArchivedValidator = new();
+    private static readonly ReorderAccountsRequestValidator ReorderAccountsValidator = new();
+    private static readonly DeleteAccountRequestValidator DeleteAccountValidator = new();
+
     public async Task<IReadOnlyList<AccountDto>> GetAllAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -33,8 +41,8 @@ public sealed class AccountService(
 
     public async Task<AccountDto> CreateAccountAsync(CreateAccountRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
-        ValidateType(request.Type);
+        CreateAccountValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -45,7 +53,7 @@ public sealed class AccountService(
             Order = await dbContext.Accounts.AnyAsync(cancellationToken)
                 ? await dbContext.Accounts.MaxAsync(x => x.Order, cancellationToken) + 1
                 : 1,
-            Name = request.Name.Trim(),
+            Name = request.Name,
             Type = (int)request.Type
         };
 
@@ -70,8 +78,8 @@ public sealed class AccountService(
 
     public async Task<AccountDto> UpdateAccountAsync(UpdateAccountRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
-        ValidateType(request.Type);
+        UpdateAccountValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -82,7 +90,7 @@ public sealed class AccountService(
 
         await EnsureNameUniqueAsync(dbContext, normalizedName, request.Id, cancellationToken);
 
-        account.Name = request.Name.Trim();
+        account.Name = request.Name;
         account.Type = (int)request.Type;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -92,6 +100,8 @@ public sealed class AccountService(
 
     public async Task DeleteAccountAsync(DeleteAccountRequest request, CancellationToken cancellationToken)
     {
+        DeleteAccountValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var account = await dbContext.Accounts
@@ -107,6 +117,8 @@ public sealed class AccountService(
 
     public async Task SetAccountArchivedAsync(SetAccountArchivedRequest request, CancellationToken cancellationToken)
     {
+        SetAccountArchivedValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var account = await dbContext.Accounts
@@ -121,6 +133,8 @@ public sealed class AccountService(
 
     public async Task ReorderAccountsAsync(ReorderAccountsRequest request, CancellationToken cancellationToken)
     {
+        ReorderAccountsValidator.ValidateOrThrowBadRequest(request);
+
         if (request.AccountIds.Count == 0)
         {
             return;
@@ -149,7 +163,7 @@ public sealed class AccountService(
     public async Task<AccountMonthBalanceDto> UpsertMonthBalanceAsync(UpsertAccountMonthBalanceRequest request,
         CancellationToken cancellationToken)
     {
-        BudgetHelper.ValidateMonth(request.Year, request.Month);
+        UpsertMonthBalanceValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -196,6 +210,8 @@ public sealed class AccountService(
     public async Task<AccountMonthBalanceDto> UpdateMonthBalanceAmountAsync(
         UpdateAccountMonthBalanceAmountRequest request, CancellationToken cancellationToken)
     {
+        UpdateMonthBalanceAmountValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var balance = await dbContext.AccountMonthBalances
@@ -230,14 +246,6 @@ public sealed class AccountService(
         if (exists)
         {
             throw new ConflictException("Account name must be unique.");
-        }
-    }
-
-    private static void ValidateType(AccountType type)
-    {
-        if (!Enum.IsDefined(typeof(AccountType), type))
-        {
-            throw new BadRequestException("Account type is invalid.");
         }
     }
 }

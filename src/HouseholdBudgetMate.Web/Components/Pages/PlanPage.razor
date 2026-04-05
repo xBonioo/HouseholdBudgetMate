@@ -264,10 +264,10 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudSelect T="int?" @bind-Value="_newExpense.TagId" Label="Tag" Variant="Variant.Outlined" Clearable="true">
+               <MudSelect T="int?" @bind-Value="_newExpense.TagId" Label="Tag" Variant="Variant.Outlined" Clearable="true" ToStringFunc="FormatTagSelectValue">
                     @foreach (var tag in GetTagsForCategory(_newExpense.CategoryId))
                     {
-                        <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -325,10 +325,10 @@
                             </MudSelect>
                         </MudTd>
                         <MudTd>
-                            <MudSelect T="int?" @bind-Value="_editExpense.TagId" Variant="Variant.Outlined" Clearable="true">
+                            <MudSelect T="int?" @bind-Value="_editExpense.TagId" Variant="Variant.Outlined" Clearable="true" ToStringFunc="FormatTagSelectValue">
                                 @foreach (var tag in GetTagsForCategory(_editExpense.CategoryId))
                                 {
-                                    <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudTd>
@@ -396,10 +396,10 @@
                                                 <MudTd><MudNumericField T="decimal" @bind-Value="_editLineItem.Amount" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudTd>
                                                 <MudTd><MudDatePicker Date="@ToDateTime(_editLineItemDate)" DateChanged="OnEditLineItemDateChanged" Margin="Margin.Dense" /></MudTd>
                                                 <MudTd>
-                                                    <MudSelect T="int?" @bind-Value="_editLineItem.TagId" Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
+                                                    <MudSelect T="int?" @bind-Value="_editLineItem.TagId" Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense" ToStringFunc="FormatTagSelectValue">
                                                         @foreach (var tag in GetTagsForCategory(GetExpenseById(_editLineItemExpenseId ?? 0)?.CategoryId ?? 0))
                                                         {
-                                                            <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                                                            <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                                                         }
                                                     </MudSelect>
                                                 </MudTd>
@@ -436,10 +436,10 @@
                                         <MudDatePicker Date="@ToDateTime(GetLineItemCreateModel(expense.Id).OccurredAt)" DateChanged="(d) => OnCreateLineItemDateChanged(expense.Id, d)" Margin="Margin.Dense" />
                                     </MudItem>
                                     <MudItem xs="12" md="2">
-                                        <MudSelect T="int?" Value="GetLineItemCreateModel(expense.Id).TagId" ValueChanged="(v) => OnCreateLineItemTagChanged(expense.Id, v)" Label="Tag" Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
+                                        <MudSelect T="int?" Value="GetLineItemCreateModel(expense.Id).TagId" ValueChanged="(v) => OnCreateLineItemTagChanged(expense.Id, v)" Label="Tag" Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense" ToStringFunc="FormatTagSelectValue">
                                             @foreach (var tag in GetTagsForCategory(GetExpenseById(expense.Id)?.CategoryId ?? 0))
                                             {
-                                                <MudSelectItem Value="@((int?)tag.Id)">@tag.Name</MudSelectItem>
+                                                <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                                             }
                                         </MudSelect>
                                     </MudItem>
@@ -549,6 +549,20 @@
     private IReadOnlyList<TagDto> GetTagsForCategory(int categoryId)
     {
         return _categories.FirstOrDefault(x => x.Id == categoryId)?.Tags ?? [];
+    }
+
+    private string FormatTagSelectValue(int? tagId)
+    {
+        if (!tagId.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var tag = _categories
+            .SelectMany(x => x.Tags)
+            .FirstOrDefault(x => x.Id == tagId.Value);
+
+        return tag?.Name ?? tagId.Value.ToString();
     }
 
     private Task OnCreateCategoryChanged(int categoryId)

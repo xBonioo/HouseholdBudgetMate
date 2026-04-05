@@ -139,12 +139,18 @@
             _liveBalance = await IncomeService.GetLiveBalanceAsync(now.Year, now.Month, CancellationToken.None);
             _monthLabel = $"{now:MMMM yyyy}";
 
-            var expenses = _monthPlan.Expenses;
-            _plannedTotal = expenses.Sum(x => x.PlannedAmount ?? 0);
-            _actualTotal = expenses.Sum(x => x.ActualAmount ?? 0);
-            _remainingTotal = _plannedTotal - _actualTotal;
+            var plannedExpenses = _monthPlan.Expenses
+                .Where(x => !x.IsUnplanned)
+                .ToList();
+            var visibleRemainingExpenses = plannedExpenses
+                .Where(x => x.ShowRemainingInUI)
+                .ToList();
+
+            _plannedTotal = plannedExpenses.Sum(x => x.PlannedAmount ?? 0);
+            _actualTotal = _monthPlan.Expenses.Sum(x => x.ActualAmount ?? 0);
+            _remainingTotal = visibleRemainingExpenses.Sum(x => Math.Max(0, (x.PlannedAmount ?? 0) - (x.ActualAmount ?? 0)));
             _usagePercent = _plannedTotal <= 0 ? 0 : Math.Min(150, (double)(_actualTotal / _plannedTotal * 100));
-            _recentExpenses = expenses
+            _recentExpenses = _monthPlan.Expenses
                 .OrderByDescending(x => x.Id)
                 .Take(6)
                 .ToList();

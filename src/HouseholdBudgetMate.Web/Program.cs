@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.FileProviders;
-using HouseholdBudgetMate.Application;
 using HouseholdBudgetMate.Application.Kernel.Configurations;
 using HouseholdBudgetMate.Application.Kernel.Extensions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
@@ -10,12 +9,11 @@ using HouseholdBudgetMate.Application.Shared;
 using HouseholdBudgetMate.Web;
 using HouseholdBudgetMate.Web.Middleware;
 using HouseholdBudgetMate.Abstractions.Interfaces;
-using HouseholdBudgetMate.Application.Seeds;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Web.Components;
 using Microsoft.AspNetCore.Localization;
-using MudBlazor;
 using MudBlazor.Services;
 using QuestPDF;
 using QuestPDF.Infrastructure;
@@ -82,8 +80,7 @@ builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IIncomeService, IncomeService>();
 
-builder.Services.AddScoped<CategorySeedService>();
-builder.Services.AddScoped<MonthPlanSeedService>();
+builder.Services.AddScoped<CoreDataSeedService>();
 
 builder.AddSerilogLogging();
 
@@ -133,11 +130,11 @@ try
 
     using (var seedScope = app.Services.CreateScope())
     {
-        var seedService = seedScope.ServiceProvider.GetRequiredService<CategorySeedService>();
-        await seedService.SeedDefaultCategoriesAsync(CancellationToken.None);
-        
-        var monthPlanSeedService = seedScope.ServiceProvider.GetRequiredService<MonthPlanSeedService>();
-        await monthPlanSeedService.EnsureCurrentMonthPlanAsync(CancellationToken.None);
+        if (applicationConfig.SeedDataToDatabase)
+        {
+            var coreDataSeedService = seedScope.ServiceProvider.GetRequiredService<CoreDataSeedService>();
+            await coreDataSeedService.SeedOnStartupAsync(applicationConfig.SeedDataToDatabase, CancellationToken.None);
+        }
     }
 
     // app.UseAuthentication();

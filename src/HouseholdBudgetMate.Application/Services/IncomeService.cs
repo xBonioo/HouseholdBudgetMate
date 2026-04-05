@@ -2,10 +2,12 @@
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
 using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Abstractions.Interfaces;
-using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Application.Mapping;
+using HouseholdBudgetMate.Application.Validation;
+using HouseholdBudgetMate.Application.Validation.Common;
+using HouseholdBudgetMate.Application.Validation.Incomes;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +18,16 @@ public sealed class IncomeService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider) : IIncomeService
 {
+    private static readonly YearMonthRequestValidator YearMonthValidator = new();
+    private static readonly DateInMonthRequestValidator DateInMonthValidator = new();
+    
+    private static readonly CreateRegularIncomeDefinitionRequestValidator CreateRegularDefinitionValidator = new();
+    private static readonly CreateIncomeRequestValidator CreateIncomeValidator = new();
+    private static readonly UpdateRegularIncomeDefinitionRequestValidator UpdateRegularDefinitionValidator = new();
+    private static readonly UpdateIncomeRequestValidator UpdateIncomeValidator = new();
+    private static readonly DeleteRegularIncomeDefinitionRequestValidator DeleteRegularDefinitionValidator = new();
+    private static readonly DeleteIncomeRequestValidator DeleteIncomeValidator = new();
+
     public async Task<IReadOnlyList<RegularIncomeDefinitionDto>> GetRegularDefinitionsAsync(
         CancellationToken cancellationToken)
     {
@@ -33,9 +45,8 @@ public sealed class IncomeService(
     public async Task<RegularIncomeDefinitionDto> CreateRegularDefinitionAsync(
         CreateRegularIncomeDefinitionRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
-        BudgetHelper.ValidateAmount(request.Amount);
-        BudgetHelper.ValidateDayOfMonth(request.DayOfMonth);
+        CreateRegularDefinitionValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -71,9 +82,8 @@ public sealed class IncomeService(
     public async Task<RegularIncomeDefinitionDto> UpdateRegularDefinitionAsync(
         UpdateRegularIncomeDefinitionRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
-        BudgetHelper.ValidateAmount(request.Amount);
-        BudgetHelper.ValidateDayOfMonth(request.DayOfMonth);
+        UpdateRegularDefinitionValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -109,6 +119,8 @@ public sealed class IncomeService(
     public async Task DeleteRegularDefinitionAsync(DeleteRegularIncomeDefinitionRequest request,
         CancellationToken cancellationToken)
     {
+        DeleteRegularDefinitionValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var definition = await dbContext.RegularIncomeDefinitions
@@ -121,7 +133,7 @@ public sealed class IncomeService(
 
     public async Task SyncRegularIncomesForMonthAsync(int year, int month, CancellationToken cancellationToken)
     {
-        BudgetHelper.ValidateMonth(year, month);
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -169,7 +181,7 @@ public sealed class IncomeService(
     public async Task<IReadOnlyList<IncomeDto>> GetMonthIncomesAsync(int year, int month,
         CancellationToken cancellationToken)
     {
-        BudgetHelper.ValidateMonth(year, month);
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -186,10 +198,8 @@ public sealed class IncomeService(
 
     public async Task<IncomeDto> CreateIncomeAsync(CreateIncomeRequest request, CancellationToken cancellationToken)
     {
-        BudgetHelper.ValidateMonth(request.Year, request.Month);
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
-        BudgetHelper.ValidateAmount(request.Amount);
-        ValidateExpectedDate(request.ExpectedDayOfMonth, request.Year, request.Month);
+        CreateIncomeValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -213,25 +223,24 @@ public sealed class IncomeService(
         dbContext.Incomes.Add(income);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // return new IncomeDto
-        // {
-        //     Id = income.Id,
-        //     Year = income.Year,
-        //     Month = income.Month,
-        //     Name = income.Name,
-        //     Amount = income.Amount,
-        //     ExpectedDayOfMonth = income.ExpectedDayOfMonth,
-        //     AccountId = income.AccountId,
-        //     AccountName = account.Name,
-        //     IsRegular = income.IsRegular
-        // };
-        return income.MapToDto();
+        return new IncomeDto
+        {
+            Id = income.Id,
+            Year = income.Year,
+            Month = income.Month,
+            Name = income.Name,
+            Amount = income.Amount,
+            ExpectedDayOfMonth = income.ExpectedDayOfMonth,
+            AccountId = income.AccountId,
+            AccountName = account.Name,
+            IsRegular = income.IsRegular
+        };
     }
 
     public async Task<IncomeDto> UpdateIncomeAsync(UpdateIncomeRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
-        BudgetHelper.ValidateAmount(request.Amount);
+        UpdateIncomeValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -239,7 +248,11 @@ public sealed class IncomeService(
                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                      ?? throw new NotFoundException("Income not found.");
 
-        ValidateExpectedDate(request.ExpectedDayOfMonth, income.Year, income.Month);
+        DateInMonthValidator.ValidateOrThrowBadRequest(new DateInMonthRequest(
+            request.ExpectedDayOfMonth,
+            income.Year,
+            income.Month,
+            "Expected day must belong to selected month and year."));
 
         var account = await dbContext.Accounts
                           .AsNoTracking()
@@ -254,23 +267,24 @@ public sealed class IncomeService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // return new IncomeDto
-        // {
-        //     Id = income.Id,
-        //     Year = income.Year,
-        //     Month = income.Month,
-        //     Name = income.Name,
-        //     Amount = income.Amount,
-        //     ExpectedDayOfMonth = income.ExpectedDayOfMonth,
-        //     AccountId = income.AccountId,
-        //     AccountName = account.Name,
-        //     IsRegular = income.IsRegular
-        // };
-        return income.MapToDto();
+        return new IncomeDto
+        {
+            Id = income.Id,
+            Year = income.Year,
+            Month = income.Month,
+            Name = income.Name,
+            Amount = income.Amount,
+            ExpectedDayOfMonth = income.ExpectedDayOfMonth,
+            AccountId = income.AccountId,
+            AccountName = account.Name,
+            IsRegular = income.IsRegular
+        };
     }
 
     public async Task DeleteIncomeAsync(DeleteIncomeRequest request, CancellationToken cancellationToken)
     {
+        DeleteIncomeValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var income = await dbContext.Incomes
@@ -283,7 +297,7 @@ public sealed class IncomeService(
 
     public async Task<LiveBalanceDto> GetLiveBalanceAsync(int year, int month, CancellationToken cancellationToken)
     {
-        BudgetHelper.ValidateMonth(year, month);
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
         var today = dateTimeProvider.GetLocalDateOnly();
         var previousMonthDate = new DateTime(year, month, 1).AddMonths(-1);
         var previousYear = previousMonthDate.Year;
@@ -341,13 +355,5 @@ public sealed class IncomeService(
             SavingsTransfersTotal = savingsTransfersTotal,
             CurrentBalance = accountBaseTotal + incomesTotal - expensesTotal - savingsTransfersTotal
         };
-    }
-
-    private static void ValidateExpectedDate(DateOnly expectedDayOfMonth, int year, int month)
-    {
-        if (expectedDayOfMonth.Year != year || expectedDayOfMonth.Month != month)
-        {
-            throw new BadRequestException("Expected day must belong to selected month and year.");
-        }
     }
 }

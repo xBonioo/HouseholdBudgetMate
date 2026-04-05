@@ -1,10 +1,11 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Categories.Requests;
 using HouseholdBudgetMate.Abstractions.Interfaces;
-using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Application.Mapping;
+using HouseholdBudgetMate.Application.Validation;
+using HouseholdBudgetMate.Application.Validation.Categories;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,13 @@ public sealed class CategoryService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider) : ICategoryService
 {
+    private static readonly CreateCategoryRequestValidator CreateCategoryValidator = new();
+    private static readonly CreateTagRequestValidator CreateTagValidator = new();
+    private static readonly UpdateCategoryRequestValidator UpdateCategoryValidator = new();
+    private static readonly UpdateTagRequestValidator UpdateTagValidator = new();
+    private static readonly DeleteCategoryRequestValidator DeleteCategoryValidator = new();
+    private static readonly DeleteTagRequestValidator DeleteTagValidator = new();
+
     public async Task<IReadOnlyList<CategoryDto>> GetAllAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -44,7 +52,8 @@ public sealed class CategoryService(
     public async Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest request,
         CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
+        CreateCategoryValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -52,8 +61,8 @@ public sealed class CategoryService(
 
         var category = new Category
         {
-            Name = request.Name.Trim(),
-            Color = request.Color.Trim(),
+            Name = request.Name,
+            Color = request.Color,
             SupportsLineItems = request.SupportsLineItems
         };
 
@@ -66,7 +75,8 @@ public sealed class CategoryService(
     public async Task<CategoryDto> UpdateCategoryAsync(UpdateCategoryRequest request,
         CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
+        UpdateCategoryValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var category = await dbContext.Categories
@@ -76,8 +86,8 @@ public sealed class CategoryService(
 
         await EnsureCategoryNameUniqueAsync(dbContext, normalizedName, category.Id, cancellationToken);
 
-        category.Name = request.Name.Trim();
-        category.Color = request.Color.Trim();
+        category.Name = request.Name;
+        category.Color = request.Color;
         category.SupportsLineItems = request.SupportsLineItems;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -87,6 +97,8 @@ public sealed class CategoryService(
 
     public async Task DeleteCategoryAsync(DeleteCategoryRequest request, CancellationToken cancellationToken)
     {
+        DeleteCategoryValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var category = await dbContext.Categories
@@ -108,7 +120,8 @@ public sealed class CategoryService(
 
     public async Task<TagDto> CreateTagAsync(CreateTagRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
+        CreateTagValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -123,7 +136,7 @@ public sealed class CategoryService(
         var tag = new Tag
         {
             CategoryId = request.CategoryId,
-            Name = request.Name.Trim()
+            Name = request.Name
         };
 
         dbContext.Tags.Add(tag);
@@ -134,7 +147,8 @@ public sealed class CategoryService(
 
     public async Task<TagDto> UpdateTagAsync(UpdateTagRequest request, CancellationToken cancellationToken)
     {
-        var normalizedName = BudgetHelper.NormalizeField(nameof(request.Name), request.Name);
+        UpdateTagValidator.ValidateOrThrowBadRequest(request);
+        var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -151,7 +165,7 @@ public sealed class CategoryService(
         await EnsureTagNameUniqueAsync(dbContext, request.CategoryId, normalizedName, tag.Id, cancellationToken);
 
         tag.CategoryId = request.CategoryId;
-        tag.Name = request.Name.Trim();
+        tag.Name = request.Name;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -160,6 +174,8 @@ public sealed class CategoryService(
 
     public async Task DeleteTagAsync(DeleteTagRequest request, CancellationToken cancellationToken)
     {
+        DeleteTagValidator.ValidateOrThrowBadRequest(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var tag = await dbContext.Tags

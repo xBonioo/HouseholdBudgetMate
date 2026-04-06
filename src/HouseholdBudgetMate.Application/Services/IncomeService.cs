@@ -37,9 +37,10 @@ public sealed class IncomeService(
             .AsNoTracking()
             .Include(x => x.Account)
             .OrderBy(x => x.Name)
+            .Select(x => x.MapDefinitionToDto())
             .ToListAsync(cancellationToken);
 
-        return definitions.Select(x => x.MapDefinitionToDto()).ToList();
+        return definitions;
     }
 
     public async Task<RegularIncomeDefinitionDto> CreateRegularDefinitionAsync(
@@ -336,7 +337,7 @@ public sealed class IncomeService(
             expensesTotal = await dbContext.Expenses
                 .AsNoTracking()
                 .Where(x => x.MonthPlanId == monthPlan.Id)
-                .SumAsync(x => x.ActualAmount ?? 0, cancellationToken);
+                .SumAsync(x => x.ActualAmount, cancellationToken);
 
             var savingsTransfersItemsTotal = await dbContext.MonthSavingsTransferItems
                 .AsNoTracking()

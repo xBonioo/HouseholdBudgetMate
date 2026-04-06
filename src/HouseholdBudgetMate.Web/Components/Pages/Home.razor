@@ -1,4 +1,5 @@
 ﻿@page "/"
+@using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
@@ -16,15 +17,26 @@
 </MudOverlay>
 
 <MudPaper Class="hb-page-header">
-    <MudText Typo="Typo.h4">Dashboard budzetu</MudText>
-    <MudText Typo="Typo.body2" Class="hb-muted">Szybki podglad aktualnego miesiaca i najwazniejszych akcji.</MudText>
+    <MudText Typo="Typo.h4">Dashboard budżetu</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted">Szybki podgląd aktualnego miesiąca i najważniejszych akcji.</MudText>
 
-    <MudStack Direction="Direction.Row" Spacing="1" Class="mt-3">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CalendarMonth" OnClick="GoToCurrentMonth">
-            Otworz miesiac
+    <MudStack Row="true" Spacing="1" Class="mt-3">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CalendarMonth"
+                   OnClick="GoToCurrentMonth">
+            Otwórz miesiąc
         </MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Category" OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
-            Zarzadzaj kategoriami
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
+                   OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
+            Zarządzaj kontami
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Repeat"
+                   OnClick="@(() => NavigationManager.NavigateTo("/regular-incomes"))">
+            Zarządzaj wpływami regularnymi
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Category"
+                   OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
+            Zarządzaj kategoriami
         </MudButton>
     </MudStack>
 </MudPaper>
@@ -33,26 +45,27 @@
     <MudItem xs="12" md="4">
         <MudPaper Class="hb-kpi-card">
             <MudText Typo="Typo.caption" Class="hb-muted">Suma planowana</MudText>
-            <MudText Class="hb-kpi-value">@_plannedTotal.ToString("0.00") PLN</MudText>
+            <MudText Class="hb-kpi-value">@_kpi.PlannedTotal.ToString("0.00", _culture) PLN</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" md="4">
         <MudPaper Class="hb-kpi-card">
             <MudText Typo="Typo.caption" Class="hb-muted">Suma wydana</MudText>
-            <MudText Class="hb-kpi-value">@_actualTotal.ToString("0.00") PLN</MudText>
+            <MudText Class="hb-kpi-value">@_kpi.SpentTotal.ToString("0.00", _culture) PLN</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" md="4">
         <MudPaper Class="hb-kpi-card">
-            <MudText Typo="Typo.caption" Class="hb-muted">Pozostalo</MudText>
-            <MudText Class="hb-kpi-value">@_remainingTotal.ToString("0.00") PLN</MudText>
-            <MudProgressLinear Class="mt-2" Rounded="true" Value="@_usagePercent" Color="@(_usagePercent >= 100 ? Color.Error : Color.Primary)" />
+            <MudText Typo="Typo.caption" Class="hb-muted">Pozostało</MudText>
+            <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00", _culture) PLN</MudText>
+            <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
+                               Color="@(_kpi.RemainingTotal <= 0 ? Color.Error : Color.Primary)"/>
         </MudPaper>
     </MudItem>
 </MudGrid>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h6">Live balance</MudText>
         <MudChip T="string" Color="Color.Primary">@_liveBalance.CurrentBalance.ToString("0.00") PLN</MudChip>
     </MudStack>
@@ -67,7 +80,7 @@
             <MudText Typo="Typo.h6">@_liveBalance.IncomesTotal.ToString("0.00") PLN</MudText>
         </MudItem>
         <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Realne wydatki miesiąca</MudText>
+            <MudText Typo="Typo.caption" Class="hb-muted">Wydatki miesiąca</MudText>
             <MudText Typo="Typo.h6">@_liveBalance.ExpensesTotal.ToString("0.00") PLN</MudText>
         </MudItem>
         <MudItem xs="12" md="3">
@@ -78,14 +91,16 @@
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h6">Ostatnie wydatki</MudText>
         <MudChip T="string" Color="Color.Primary">@_monthLabel</MudChip>
     </MudStack>
 
     @if (_recentExpenses.Count == 0)
     {
-        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak wydatków. Dodaj pierwszy wpis, aby zobaczyć postęp miesiąca.</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak wydatków. Dodaj pierwszy wpis, aby zobaczyć postęp
+            miesiąca.
+        </MudText>
     }
     else
     {
@@ -93,14 +108,17 @@
             @foreach (var expense in _recentExpenses)
             {
                 <MudListItem T="ExpenseDto">
-                    <MudStack Direction="Direction.Row" Justify="Justify.SpaceBetween" Style="width:100%;">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width:100%;">
                         <MudStack Spacing="0">
                             <MudText Typo="Typo.body1">@expense.Name</MudText>
-                            <MudText Typo="Typo.caption" Class="hb-muted">@expense.CategoryName @(string.IsNullOrWhiteSpace(expense.TagName) ? string.Empty : $"/ {expense.TagName}")</MudText>
+                            <MudText Typo="Typo.caption"
+                                     Class="hb-muted">@expense.CategoryName @(string.IsNullOrWhiteSpace(expense.TagName) ? string.Empty : $"/ {expense.TagName}")</MudText>
                         </MudStack>
                         <MudStack Spacing="0" AlignItems="AlignItems.End">
-                            <MudText Typo="Typo.body1">@((expense.ActualAmount ?? 0).ToString("0.00")) PLN</MudText>
-                            <MudText Typo="Typo.caption" Class="hb-muted">plan: @((expense.PlannedAmount ?? 0).ToString("0.00")) PLN</MudText>
+                            <MudText Typo="Typo.body1">@(expense.ActualAmount.ToString("0.00")) PLN</MudText>
+                            <MudText Typo="Typo.caption" Class="hb-muted">
+                                plan: @(expense.PlannedAmount.ToString("0.00")) PLN
+                            </MudText>
                         </MudStack>
                     </MudStack>
                 </MudListItem>
@@ -111,11 +129,9 @@
 
 @code {
     private bool _isLoading;
+    private readonly CultureInfo _culture = new("pl-PL");
     private MonthPlanDto? _monthPlan;
-    private decimal _plannedTotal;
-    private decimal _actualTotal;
-    private decimal _remainingTotal;
-    private double _usagePercent;
+    private MonthPlanKpiDto _kpi = new();
     private string _monthLabel = string.Empty;
     private List<ExpenseDto> _recentExpenses = [];
     private LiveBalanceDto _liveBalance = new();
@@ -125,12 +141,9 @@
         await LoadDataAsync();
     }
 
-    private async Task LoadDataAsync(bool showOverlay = true)
+    private async Task LoadDataAsync()
     {
-        if (showOverlay)
-        {
-            _isLoading = true;
-        }
+        _isLoading = true;
 
         try
         {
@@ -139,17 +152,14 @@
             _liveBalance = await IncomeService.GetLiveBalanceAsync(now.Year, now.Month, CancellationToken.None);
             _monthLabel = $"{now:MMMM yyyy}";
 
-            var plannedExpenses = _monthPlan.Expenses
-                .Where(x => !x.IsUnplanned)
-                .ToList();
-            var visibleRemainingExpenses = plannedExpenses
-                .Where(x => x.ShowRemainingInUI)
-                .ToList();
+            if (_monthPlan is null)
+            {
+                _kpi = new MonthPlanKpiDto();
+                _recentExpenses = [];
+                return;
+            }
 
-            _plannedTotal = plannedExpenses.Sum(x => x.PlannedAmount ?? 0);
-            _actualTotal = _monthPlan.Expenses.Sum(x => x.ActualAmount ?? 0);
-            _remainingTotal = visibleRemainingExpenses.Sum(x => Math.Max(0, (x.PlannedAmount ?? 0) - (x.ActualAmount ?? 0)));
-            _usagePercent = _plannedTotal <= 0 ? 0 : Math.Min(150, (double)(_actualTotal / _plannedTotal * 100));
+            _kpi = _monthPlan.Kpi;
             _recentExpenses = _monthPlan.Expenses
                 .OrderByDescending(x => x.Id)
                 .Take(6)
@@ -170,5 +180,5 @@
         var now = DateTimeProvider.GetLocalDateTime();
         NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
-
+    
 }

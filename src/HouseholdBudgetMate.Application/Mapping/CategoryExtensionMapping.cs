@@ -5,7 +5,7 @@ namespace HouseholdBudgetMate.Application.Mapping;
 
 public static class CategoryExtensionMapping
 {
-    public static CategoryDto MapCategory(this Category category)
+    public static CategoryDto MapToDto(this Category category)
     {
         return new CategoryDto
         {

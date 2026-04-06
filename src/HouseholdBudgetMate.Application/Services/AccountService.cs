@@ -34,9 +34,10 @@ public sealed class AccountService(
             .Include(x => x.MonthBalances)
             .OrderBy(x => x.Order)
             .ThenBy(x => x.Name)
+            .Select(x => x.MapToDto())
             .ToListAsync(cancellationToken);
 
-        return accounts.Select(x => x.MapToDto()).ToList();
+        return accounts;
     }
 
     public async Task<AccountDto> CreateAccountAsync(CreateAccountRequest request, CancellationToken cancellationToken)

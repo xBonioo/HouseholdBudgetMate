@@ -27,26 +27,14 @@ public sealed class CategoryService(
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        return await dbContext.Categories
+        var categories = await dbContext.Categories
+            .Include(x => x.Tags)
             .AsNoTracking()
             .OrderBy(x => x.Name)
-            .Select(x => new CategoryDto
-            {
-                Id = x.Id,
-                Name = x.Name,
-                Color = x.Color,
-                SupportsLineItems = x.SupportsLineItems,
-                Tags = x.Tags
-                    .OrderBy(t => t.Name)
-                    .Select(t => new TagDto
-                    {
-                        Id = t.Id,
-                        CategoryId = t.CategoryId,
-                        Name = t.Name
-                    })
-                    .ToList()
-            })
+            .Select(x => x.MapToDto())
             .ToListAsync(cancellationToken);
+
+        return categories;
     }
 
     public async Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest request,
@@ -69,7 +57,7 @@ public sealed class CategoryService(
         dbContext.Categories.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return category.MapCategory();
+        return category.MapToDto();
     }
 
     public async Task<CategoryDto> UpdateCategoryAsync(UpdateCategoryRequest request,
@@ -92,7 +80,7 @@ public sealed class CategoryService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return category.MapCategory();
+        return category.MapToDto();
     }
 
     public async Task DeleteCategoryAsync(DeleteCategoryRequest request, CancellationToken cancellationToken)

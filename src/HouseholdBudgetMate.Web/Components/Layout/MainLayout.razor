@@ -1,7 +1,5 @@
-﻿@using HouseholdBudgetMate.Application.Kernel.Configurations
-@using HouseholdBudgetMate.Web.Components.Themes
+﻿@using HouseholdBudgetMate.Web.Components.Themes
 @using HouseholdBudgetMate.Application.Kernel.Timing
-@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
 @using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using MudBlazor
@@ -9,7 +7,6 @@
 @inherits LayoutComponentBase
 
 @inject NavigationManager NavigationManager
-@inject ApplicationConfiguration ApplicationConfiguration
 @inject IDateTimeProvider DateTimeProvider
 @inject IExpenseService ExpenseService
 
@@ -24,97 +21,98 @@
 <MudSnackbarProvider/>
 
 <div class="layout-root">
-<MudLayout>
-    <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
-        <MudHidden Breakpoint="Breakpoint.SmAndDown">
-            
-            <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/")"
-                       StartIcon="@Icons.Material.Filled.Dashboard"
-                       OnClick="@(() => NavigationManager.NavigateTo("/"))">
-                Dashboard
-            </MudButton>
+    <MudLayout>
+        <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
 
-            <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/plan")"
-                       StartIcon="@Icons.Material.Filled.CalendarMonth"
-                       OnClick="GoToCurrentMonth">
-                Plan
-            </MudButton>
+                <MudButton Variant="Variant.Text"
+                           Class="@GetNavClass("/")"
+                           StartIcon="@Icons.Material.Filled.Dashboard"
+                           OnClick="@(() => NavigationManager.NavigateTo("/"))">
+                    Dashboard
+                </MudButton>
 
-            <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/accounts")"
-                       StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
-                       OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
-                Konta
-            </MudButton>
+                <MudButton Variant="Variant.Text"
+                           Class="@GetNavClass("/plan")"
+                           StartIcon="@Icons.Material.Filled.CalendarMonth"
+                           OnClick="GoToCurrentMonth">
+                    Plan
+                </MudButton>
 
-            <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/regular-incomes")"
-                       StartIcon="@Icons.Material.Filled.Repeat"
-                       OnClick="@(() => NavigationManager.NavigateTo("/regular-incomes"))">
-                Wpływy regularne
-            </MudButton>
+                <MudButton Variant="Variant.Text"
+                           Class="@GetNavClass("/accounts")"
+                           StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
+                           OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
+                    Konta
+                </MudButton>
 
-            <MudButton Variant="Variant.Text"
-                       Class="@GetNavClass("/categories")"
-                       StartIcon="@Icons.Material.Filled.Category"
-                       OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
-                Kategorie
-            </MudButton>
+                <MudButton Variant="Variant.Text"
+                           Class="@GetNavClass("/regular-incomes")"
+                           StartIcon="@Icons.Material.Filled.Repeat"
+                           OnClick="@(() => NavigationManager.NavigateTo("/regular-incomes"))">
+                    Wpływy regularne
+                </MudButton>
 
-            <MudMenu Variant="Variant.Text"
-                     Color="Color.Inherit"
-                     Label="Archiwum"
-                     Class="appbar-button"
-                     StartIcon="@Icons.Material.Filled.DateRange">
-                @if (_monthGroups.Count == 0)
-                {
-                    <MudMenuItem Disabled="true">Brak danych</MudMenuItem>
-                }
-                else
-                {
-                    @for (var i = 0; i < _monthGroups.Count; i++)
+                <MudButton Variant="Variant.Text"
+                           Class="@GetNavClass("/categories")"
+                           StartIcon="@Icons.Material.Filled.Category"
+                           OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
+                    Kategorie
+                </MudButton>
+
+            <div class="appbar-logo-center">
+                <img src="images/logo.png" alt="logo" class="brand-logo"/>
+            </div>
+
+            <MudSpacer/>
+
+                <MudMenu Variant="Variant.Text"
+                         Color="Color.Inherit"
+                         Label="Archiwum"
+                         Class="appbar-button"
+                         StartIcon="@Icons.Material.Filled.DateRange">
+                    @if (_monthGroups.Count == 0)
                     {
-                        var yearGroup = _monthGroups[i];
-                        <MudMenuItem Disabled="true">@yearGroup.Year</MudMenuItem>
-                        @foreach (var monthItem in yearGroup.Months.OrderBy(x => x.Month))
+                        <MudMenuItem Disabled="true">Brak danych</MudMenuItem>
+                    }
+                    else
+                    {
+                        @for (var i = 0; i < _monthGroups.Count; i++)
                         {
-                            <MudMenuItem OnClick="@(() => NavigationManager.NavigateTo($"/plan/{monthItem.Year}/{monthItem.Month}"))">
-                                @monthItem.Label
-                            </MudMenuItem>
-                        }
+                            var yearGroup = _monthGroups[i];
+                            <MudMenuItem Disabled="true">@yearGroup.Year</MudMenuItem>
+                            @foreach (var monthItem in yearGroup.Months.OrderByDescending(x => x.Month))
+                            {
+                                <MudMenuItem
+                                    OnClick="@(() => NavigationManager.NavigateTo($"/plan/{monthItem.Year}/{monthItem.Month}"))">
+                                    @monthItem.Label
+                                </MudMenuItem>
+                            }
 
-                        @if (i < _monthGroups.Count - 1)
-                        {
-                            <MudDivider/>
+                            @if (i < _monthGroups.Count - 1)
+                            {
+                                <MudDivider/>
+                            }
                         }
                     }
-                }
-            </MudMenu>
-        </MudHidden>
+                </MudMenu>
+            </MudHidden>
 
-        <div class="appbar-logo-center">
-            <img src="images/logo.png" alt="logo" class="brand-logo"/>
-        </div>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Class="quick-add-button"
+                       OnClick="GoToCurrentMonth">
+                Dodaj wydatek
+            </MudButton>
+        </MudAppBar>
 
-        <MudSpacer/>
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Secondary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   Class="quick-add-button"
-                   OnClick="GoToCurrentMonth">
-            Dodaj wydatek
-        </MudButton>
-    </MudAppBar>
-
-    <MudMainContent Class="app-main-content">
-        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
-            @Body
-        </MudContainer>
-    </MudMainContent>
-</MudLayout>
+        <MudMainContent Class="app-main-content">
+            <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    </MudLayout>
 </div>
 
 <div id="blazor-error-ui" data-nosnippet
@@ -150,7 +148,12 @@
     {
         var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         var normalized = string.IsNullOrWhiteSpace(currentPath) ? "/" : $"/{currentPath}";
-        return normalized.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase)
+
+        var isActive = pathPrefix == "/"
+            ? normalized == "/"
+            : normalized.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase);
+
+        return isActive
             ? "appbar-button appbar-button-active"
             : "appbar-button";
     }
@@ -196,4 +199,5 @@
         var now = DateTimeProvider.GetLocalDateTime();
         NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
+
 }

@@ -22,6 +22,9 @@ public sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.Property(x => x.ActualAmount)
             .IsRequired();
 
+        builder.Property(x => x.Order)
+            .IsRequired();
+
         builder.Property(x => x.ShowRemainingInUI)
             .IsRequired();
         
@@ -49,6 +52,8 @@ public sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .WithMany()
             .HasForeignKey(x => x.TagId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => new { x.MonthPlanId, x.Order });
     }
 }
 

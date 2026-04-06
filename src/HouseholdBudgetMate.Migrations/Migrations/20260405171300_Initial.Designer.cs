@@ -3,6 +3,7 @@ using System;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HouseholdBudgetMate.Migrations.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260405171300_Initial")]
+    partial class Initial
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -163,9 +166,6 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<int>("Order")
-                        .HasColumnType("integer");
-
                     b.Property<decimal>("PlannedAmount")
                         .HasColumnType("numeric");
 
@@ -182,9 +182,9 @@ namespace HouseholdBudgetMate.Migrations.Migrations
 
                     b.HasIndex("CategoryId");
 
-                    b.HasIndex("TagId");
+                    b.HasIndex("MonthPlanId");
 
-                    b.HasIndex("MonthPlanId", "Order");
+                    b.HasIndex("TagId");
 
                     b.ToTable("Expenses");
                 });

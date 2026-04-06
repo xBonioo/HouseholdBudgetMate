@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HouseholdBudgetMate.Migrations.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260404163130_Initial")]
-    partial class Initial
+    [Migration("20260406071903_ExpenseOrder")]
+    partial class ExpenseOrder
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -166,6 +166,9 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("PlannedAmount")
                         .HasColumnType("numeric");
 
@@ -182,9 +185,9 @@ namespace HouseholdBudgetMate.Migrations.Migrations
 
                     b.HasIndex("CategoryId");
 
-                    b.HasIndex("MonthPlanId");
-
                     b.HasIndex("TagId");
+
+                    b.HasIndex("MonthPlanId", "Order");
 
                     b.ToTable("Expenses");
                 });

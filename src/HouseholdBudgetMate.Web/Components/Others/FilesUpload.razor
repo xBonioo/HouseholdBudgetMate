@@ -71,12 +71,12 @@
                                                    Size="Size.Small"
                                                    Href="@GetFileUrl(file.Name)"
                                                    Target="_blank"
-                                                   Title="Podgląd"/>
+                                                   aria-label="Podgląd"/>
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                                    Color="Color.Error"
                                                    Size="Size.Small"
                                                    OnClick="@(() => FileDeletionConfirmation(file.Name))"
-                                                   Title="Usuń"/>
+                                                   aria-label="Usuń"/>
                                 </MudStack>
                             </MudStack>
                         </MudListItem>
@@ -93,6 +93,11 @@
         }
 
         <MudDivider Class="my-3"/>
+
+        @if (_uploading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3"/>
+        }
         
         <MudFileUpload T="IReadOnlyList<IBrowserFile>"
                        Accept="@string.Join(",", Constants.AllowedExtensions)"
@@ -242,7 +247,7 @@
         var dialog = await DialogService.ShowAsync<DeleteFileDialog>("Potwierdź usunięcie", parameters, options);
         var result = await dialog.Result;
 
-        if (!result.Canceled)
+        if (result is not null && !result.Canceled)
         {
             await DeleteFile(nazwaPliku);
         }
@@ -253,7 +258,7 @@
         try
         {
             //FileService.DeleteFile(EntityId, nazwaPliku, ContextType);
-            Snackbar.Add("Plik został usunięty", Severity.Success);
+            Snackbar.Add($"Plik '{nazwaPliku}' został usunięty", Severity.Success);
 
             if (AutoRefresh)
             {

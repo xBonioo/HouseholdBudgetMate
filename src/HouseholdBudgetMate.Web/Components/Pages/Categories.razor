@@ -9,154 +9,231 @@
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 
-<div class="categories-page-root">
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
 
-<MudStack Spacing="3" Class="categories-page pa-4">
-    <MudPaper Class="categories-header hb-page-header">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-            <MudStack Spacing="0">
-                <MudText Typo="Typo.h4">Menadżer kategorii</MudText>
-                <MudText Typo="Typo.body2" Class="hb-muted">Buduj strukture kategorii i tagów.</MudText>
+<div class="categories-page-root">
+    <MudStack Spacing="3" Class="categories-page pa-4">
+        <MudPaper Class="categories-header hb-page-header">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4">Menadżer kategorii</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">Buduj strukturę kategorii i tagów.</MudText>
+                </MudStack>
+
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                    <MudChip T="string"
+                             Color="Color.Primary">Kategorie: @_categories.Count</MudChip>
+                    <MudChip T="string"
+                             Color="Color.Secondary">Tagi: @_categories.Sum(x => x.Tags.Count)</MudChip>
+                </MudStack>
             </MudStack>
+        </MudPaper>
 
-            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                <MudChip T="string" Color="Color.Primary">Kategorie: @_categories.Count</MudChip>
-                <MudChip T="string" Color="Color.Secondary">Tagi: @_categories.Sum(x => x.Tags.Count)</MudChip>
-            </MudStack>
-        </MudStack>
-    </MudPaper>
+        <MudPaper Class="pa-4 hb-panel">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudTextField
+                        @bind-Value="_newCategory.Name"
+                        Label="Nazwa kategorii"
+                        Variant="Variant.Outlined"
+                        Required="true"/>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="color-editor-inline">
+                        <input type="color" class="hb-color-picker" @bind="_newCategory.Color"
+                               aria-label="Wybierz kolor kategorii"/>
+                        <MudTextField
+                            @bind-Value="_newCategory.Color"
+                            Label="Kolor HEX"
+                            Variant="Variant.Outlined"
+                            Required="true"
+                            Margin="Margin.Dense"/>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center">
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="CreateCategoryAsync">
+                        Dodaj
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12" md="1" Class="d-flex align-center">
+                    <MudSwitch
+                        @bind-Value="_newCategory.SupportsLineItems"
+                        Color="Color.Secondary"
+                        Label="Pozycje"/>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField
+                        @bind-Value="_searchText"
+                        Label="Szukaj kategorii lub tagu"
+                        Variant="Variant.Outlined"
+                        Adornment="Adornment.Start"
+                        AdornmentIcon="@Icons.Material.Filled.Search"/>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
 
-    <MudPaper Class="pa-4 hb-panel">
-                    <MudGrid>
-                        <MudItem xs="12" md="4">
-                            <MudTextField @bind-Value="_newCategory.Name" Label="Nazwa kategorii" Variant="Variant.Outlined" Required="true"/>
-                        </MudItem>
-                        <MudItem xs="12" md="3" >
-                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="color-editor-inline">
-                                <input type="color" class="hb-color-picker" @bind="_newCategory.Color" aria-label="Wybierz kolor kategorii" />
-                                <MudTextField @bind-Value="_newCategory.Color" Label="Kolor HEX" Variant="Variant.Outlined" Required="true" Margin="Margin.Dense"/>
-                            </MudStack>
-                        </MudItem>
-                        <MudItem xs="12" md="2" Class="d-flex align-center">
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateCategoryAsync">
-                                Dodaj
-                            </MudButton>
-                        </MudItem>
-                        <MudItem xs="12" md="1" Class="d-flex align-center">
-                            <MudSwitch @bind-Value="_newCategory.SupportsLineItems" Color="Color.Secondary" Label="Podpozycje" />
-                        </MudItem>
-                        <MudItem xs="12" md="3">
-                            <MudTextField @bind-Value="_searchText" Label="Szukaj kategorii lub tagu" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"/>
-                        </MudItem>
-                    </MudGrid>
-                </MudPaper>
-
-                @if (FilteredCategories.Count == 0)
+        @if (FilteredCategories.Count == 0)
+        {
+            <MudPaper Class="pa-6 hb-panel mt-3">
+                <MudText Typo="Typo.subtitle1">Brak wyników</MudText>
+                <MudText Typo="Typo.body2" Class="hb-muted">Zmień filtr lub dodaj pierwsza kategorie.</MudText>
+            </MudPaper>
+        }
+        else
+        {
+            <MudStack Spacing="2" Class="mt-3">
+                @foreach (var category in FilteredCategories)
                 {
-                    <MudPaper Class="pa-6 hb-panel mt-3">
-                        <MudText Typo="Typo.subtitle1">Brak wynikow</MudText>
-                        <MudText Typo="Typo.body2" Class="hb-muted">Zmien filtr lub dodaj pierwsza kategorie.</MudText>
-                    </MudPaper>
-                }
-                else
-                {
-                    <MudStack Spacing="2" Class="mt-3">
-                        @foreach (var category in FilteredCategories)
+                    <MudPaper Class="pa-4 hb-panel category-card">
+                        @if (_editCategory is not null && _editCategory.Id == category.Id)
                         {
-                            <MudPaper Class="pa-4 hb-panel category-card">
-                                @if (_editCategory is not null && _editCategory.Id == category.Id)
-                                {
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="category-row">
-                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="category-row-main" Wrap="Wrap.NoWrap">
-                                            <MudTextField @bind-Value="_editCategory.Name" Label="Nazwa" Variant="Variant.Outlined" Margin="Margin.Dense" Class="category-name-field"/>
-                                            <input type="color" class="hb-color-picker" @bind="_editCategory.Color" aria-label="Wybierz kolor kategorii" />
-                                            <MudTextField @bind-Value="_editCategory.Color" Label="HEX" Variant="Variant.Outlined" Margin="Margin.Dense" Class="category-hex-field"/>
-                                            <MudSwitch @bind-Value="_editCategory.SupportsLineItems" Color="Color.Secondary" Label="Podpozycje" />
-                                            <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
-                                        </MudStack>
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center"
+                                      Wrap="Wrap.NoWrap" Class="category-row">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center"
+                                          Class="category-row-main" Wrap="Wrap.NoWrap">
+                                    <MudTextField @bind-Value="_editCategory.Name" Label="Nazwa"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="category-name-field"/>
+                                    <input type="color" class="hb-color-picker" @bind="_editCategory.Color"
+                                           aria-label="Wybierz kolor kategorii"/>
+                                    <MudTextField @bind-Value="_editCategory.Color" Label="HEX"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="category-hex-field"/>
+                                    <MudSwitch @bind-Value="_editCategory.SupportsLineItems" Color="Color.Secondary"
+                                               Label="Pozycje"/>
+                                    <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
+                                </MudStack>
 
-                                        <MudStack Row="true" Spacing="1" Class="category-row-actions">
-                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveCategoryEditAsync">Zapisz</MudButton>
-                                            <MudButton Variant="Variant.Text" OnClick="CancelCategoryEdit">Anuluj</MudButton>
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteCategoryAsync(category)" />
-                                        </MudStack>
-                                    </MudStack>
+                                <MudStack Row="true" Spacing="1" Class="category-row-actions">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                               OnClick="SaveCategoryEditAsync">Zapisz
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Text" OnClick="CancelCategoryEdit">Anuluj</MudButton>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                   OnClick="() => DeleteCategoryAsync(category)"/>
+                                </MudStack>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center"
+                                      Wrap="Wrap.NoWrap" Class="category-row">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center"
+                                          Class="category-row-main" Wrap="Wrap.NoWrap">
+                                    <span class="category-color-dot"
+                                          style="@($"background-color:{category.Color}")"></span>
+                                    <MudText Typo="Typo.subtitle1">@category.Name</MudText>
+                                    <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
+                                    <MudChip T="string" Variant="Variant.Outlined"
+                                             Color="@(category.SupportsLineItems ? Color.Secondary : Color.Default)">
+                                        @(category.SupportsLineItems ? "Pozycje: tak" : "Pozycje: nie")
+                                    </MudChip>
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="1" Class="category-row-actions">
+                                    <MudButton Variant="Variant.Text" Color="Color.Secondary"
+                                               StartIcon="@Icons.Material.Filled.LocalOffer"
+                                               OnClick="() => ToggleCategoryTags(category.Id)">
+                                        @(IsCategoryExpanded(category.Id) ? "Zwin tagi" : "Tagi")
+                                    </MudButton>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
+                                                   OnClick="() => BeginCategoryEdit(category)"/>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                   OnClick="() => DeleteCategoryAsync(category)"/>
+                                </MudStack>
+                            </MudStack>
+                        }
+
+                        @if (IsCategoryExpanded(category.Id))
+                        {
+                            <MudDivider Class="my-3"/>
+
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Tagi kategorii</MudText>
+
+                                @if (category.Tags.Count == 0)
+                                {
+                                    <MudText Typo="Typo.caption" Class="hb-muted">Brak tagów.</MudText>
                                 }
                                 else
                                 {
-                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="category-row">
-                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="category-row-main" Wrap="Wrap.NoWrap">
-                                            <span class="category-color-dot" style="@($"background-color:{category.Color}")"></span>
-                                            <MudText Typo="Typo.subtitle1">@category.Name</MudText>
-                                            <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
-                                            <MudChip T="string" Variant="Variant.Outlined" Color="@(category.SupportsLineItems ? Color.Secondary : Color.Default)">
-                                                @(category.SupportsLineItems ? "Podpozycje: tak" : "Podpozycje: nie")
-                                            </MudChip>
-                                        </MudStack>
-
-                                        <MudStack Row="true" Spacing="1" Class="category-row-actions">
-                                            <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.LocalOffer" OnClick="() => ToggleCategoryTags(category.Id)">
-                                                @(IsCategoryExpanded(category.Id) ? "Zwin tagi" : "Tagi")
-                                            </MudButton>
-                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginCategoryEdit(category)" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteCategoryAsync(category)" />
-                                        </MudStack>
-                                    </MudStack>
-                                }
-
-                                @if (IsCategoryExpanded(category.Id))
-                                {
-                                    <MudDivider Class="my-3" />
-
-                                    <MudStack Spacing="2">
-                                        <MudText Typo="Typo.subtitle2">Tagi kategorii</MudText>
-
-                                        @if (category.Tags.Count == 0)
-                                        {
-                                            <MudText Typo="Typo.caption" Class="hb-muted">Brak tagow.</MudText>
-                                        }
-                                        else
-                                        {
-                                            @foreach (var tag in category.Tags.OrderBy(x => x.Name))
-                                            {
-                                                <MudPaper Class="pa-2 hb-panel tag-inline-row">
-                                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
-                                                        @if (_editTag is not null && _editTag.Id == tag.Id)
-                                                        {
-                                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-inline-main">
-                                                                <MudTextField @bind-Value="_editTag.Name" Label="Edytuj tag" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                                                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTagEditAsync">Zapisz</MudButton>
-                                                                <MudButton Variant="Variant.Text" OnClick="CancelTagEdit">Anuluj</MudButton>
-                                                            </MudStack>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText Typo="Typo.subtitle2">@tag.Name</MudText>
-                                                        }
-
-                                                        <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
-                                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginTagEdit(tag)" />
-                                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteTagAsync(tag.Id)" />
-                                                        </MudStack>
+                                    @foreach (var tag in category.Tags.OrderBy(x => x.Name))
+                                    {
+                                        <MudPaper Class="pa-2 hb-panel tag-inline-row">
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween"
+                                                      AlignItems="AlignItems.Center"
+                                                      Wrap="Wrap.NoWrap">
+                                                @if (_editTag is not null && _editTag.Id == tag.Id)
+                                                {
+                                                    <MudStack Row="true"
+                                                              Spacing="2"
+                                                              AlignItems="AlignItems.Center"
+                                                              Wrap="Wrap.NoWrap"
+                                                              Class="tag-inline-main">
+                                                        <MudTextField
+                                                            @bind-Value="_editTag.Name"
+                                                            Label="Edytuj tag"
+                                                            Variant="Variant.Outlined"
+                                                            Margin="Margin.Dense"/>
+                                                        <MudButton
+                                                            Variant="Variant.Filled"
+                                                            Color="Color.Primary"
+                                                            OnClick="SaveTagEditAsync">Zapisz
+                                                        </MudButton>
+                                                        <MudButton
+                                                            Variant="Variant.Text"
+                                                            OnClick="CancelTagEdit">
+                                                            Anuluj
+                                                        </MudButton>
                                                     </MudStack>
-                                                </MudPaper>
-                                            }
-                                        }
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.subtitle2">@tag.Name</MudText>
+                                                }
 
-                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-create-row">
-                                            <MudTextField @bind-Value="GetTagCreateModel(category.Id).Name" Label="Nowy tag" Variant="Variant.Outlined" Margin="Margin.Dense" Class="tag-create-name" />
-                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => CreateTagAsync(category.Id)">Dodaj tag</MudButton>
-                                        </MudStack>
-                                    </MudStack>
+                                                <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                   Color="Color.Primary"
+                                                                   OnClick="() => BeginTagEdit(tag)"/>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                   Color="Color.Error"
+                                                                   OnClick="() => DeleteTagAsync(tag.Id)"/>
+                                                </MudStack>
+                                            </MudStack>
+                                        </MudPaper>
+                                    }
                                 }
-                            </MudPaper>
+
+                                <MudStack Row="true" Spacing="2"
+                                          AlignItems="AlignItems.Center"
+                                          Wrap="Wrap.NoWrap"
+                                          Class="tag-create-row">
+                                    <MudTextField
+                                        @bind-Value="GetTagCreateModel(category.Id).Name"
+                                        Label="Nowy tag"
+                                        Variant="Variant.Outlined"
+                                        Margin="Margin.Dense"
+                                        Class="tag-create-name"/>
+                                    <MudButton
+                                        Variant="Variant.Outlined"
+                                        Color="Color.Primary"
+                                        OnClick="() => CreateTagAsync(category.Id)">Dodaj tag
+                                    </MudButton>
+                                </MudStack>
+                            </MudStack>
                         }
-                    </MudStack>
+                    </MudPaper>
                 }
-</MudStack>
+            </MudStack>
+        }
+    </MudStack>
 </div>
 
 @code {
@@ -172,7 +249,7 @@
     private UpdateCategoryRequest? _editCategory;
     private UpdateTagRequest? _editTag;
 
-    private readonly Dictionary<int, TagCreateModel> _tagCreateModels = new();
+    private readonly Dictionary<int, TagCreateRequest> _tagCreateModels = new();
     private readonly HashSet<int> _expandedCategoryIds = [];
 
     private static readonly Regex HexColorRegex = new("^#(?:[0-9a-fA-F]{6})$", RegexOptions.Compiled);
@@ -203,11 +280,16 @@
     private async Task LoadAsync()
     {
         _isLoading = true;
+
         try
         {
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
 
             _expandedCategoryIds.RemoveWhere(categoryId => _categories.All(x => x.Id != categoryId));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
         }
         finally
         {
@@ -262,13 +344,13 @@
 
         if (string.IsNullOrWhiteSpace(_editCategory.Name))
         {
-            Snackbar.Add("Nazwa kategorii nie moze byc pusta.", Severity.Warning);
+            Snackbar.Add("Nazwa kategorii nie może być pusta.", Severity.Warning);
             return;
         }
 
         if (!IsValidHexColor(_editCategory.Color))
         {
-            Snackbar.Add("Kolor musi byc w formacie HEX, np. #4CAF50.", Severity.Warning);
+            Snackbar.Add("Kolor musi być w formacie HEX, np. #4CAF50.", Severity.Warning);
             return;
         }
 
@@ -312,14 +394,14 @@
         }
     }
 
-    private TagCreateModel GetTagCreateModel(int categoryId)
+    private TagCreateRequest GetTagCreateModel(int categoryId)
     {
         if (_tagCreateModels.TryGetValue(categoryId, out var model))
         {
             return model;
         }
 
-        model = new TagCreateModel();
+        model = new TagCreateRequest();
         _tagCreateModels[categoryId] = model;
         return model;
     }
@@ -342,7 +424,7 @@
                 Name = model.Name
             }, CancellationToken.None);
 
-            _tagCreateModels[categoryId] = new TagCreateModel();
+            _tagCreateModels[categoryId] = new TagCreateRequest();
             await LoadAsync();
             Snackbar.Add("Dodano tag.", Severity.Success);
         }
@@ -426,8 +508,4 @@
         return _expandedCategoryIds.Contains(categoryId);
     }
 
-    private sealed class TagCreateModel
-    {
-        public string Name { get; set; } = string.Empty;
-    }
 }

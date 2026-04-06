@@ -11,6 +11,7 @@ public static class ExpenseExtensionMapping
         {
             Id = expense.Id,
             MonthPlanId = expense.MonthPlanId,
+            Order = expense.Order,
             Name = expense.Name,
             CategoryId = expense.CategoryId,
             CategoryName = expense.Category.Name,
@@ -36,6 +37,15 @@ public static class ExpenseExtensionMapping
             MonthPlanId = item.MonthPlanId,
             Amount = item.Amount,
             TransferDate = item.TransferDate
+        };
+    }
+
+    public static AvailableMonthDto MapAvailableMonthToDto(this MonthPlan item)
+    {
+        return new AvailableMonthDto
+        {
+            Year = item.Year,
+            Month = item.Month
         };
     }
 

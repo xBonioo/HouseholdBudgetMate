@@ -10,26 +10,51 @@
 @inject IAccountService AccountService
 @inject ISnackbar Snackbar
 
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
 <MudStack Spacing="3" Class="pa-4">
     <MudPaper Class="hb-page-header">
         <MudText Typo="Typo.h4">Wpływy regularne</MudText>
-        <MudText Typo="Typo.body2" Class="hb-muted">Zdefiniuj stale lub cykliczne wpływy (np. wyplata, premia), ktore beda automatycznie dodawane do miesiecy.</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">
+            Zdefiniuj stale lub cykliczne wpływy (np. wypłata, dodatki socjalne), które beda automatycznie dodawane do
+            miesięcy.
+        </MudText>
     </MudPaper>
 
     <MudPaper Class="pa-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Nowa definicja</MudText>
         <MudGrid>
             <MudItem xs="12" md="4">
-                <MudTextField @bind-Value="_newDefinition.Name" Label="Nazwa" Variant="Variant.Outlined" />
+                <MudTextField
+                    @bind-Value="_newDefinition.Name"
+                    MaxLength="64"
+                    Label="Nazwa"
+                    Variant="Variant.Outlined"/>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudNumericField T="decimal" @bind-Value="_newDefinition.Amount" Label="Kwota" Variant="Variant.Outlined" Culture="_culture" Format="0.00" Immediate="true" />
+                <MudNumericField T="decimal"
+                                 @bind-Value="_newDefinition.Amount"
+                                 Label="Kwota"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Culture="_culture"
+                                 Immediate="true"/>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudNumericField T="int" @bind-Value="_newDefinition.DayOfMonth" Label="Dzien miesiaca" Variant="Variant.Outlined" Min="1" Max="31" />
+                <MudNumericField T="int"
+                                 @bind-Value="_newDefinition.DayOfMonth"
+                                 Label="Dzień miesiąca"
+                                 Variant="Variant.Outlined"
+                                 Min="1"
+                                 Max="31"/>
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudSelect T="int" @bind-Value="_newDefinition.AccountId" Label="Konto" Variant="Variant.Outlined">
+                <MudSelect T="int"
+                           @bind-Value="_newDefinition.AccountId"
+                           Label="Konto"
+                           Variant="Variant.Outlined">
                     @foreach (var account in _accounts)
                     {
                         <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
@@ -37,7 +62,11 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateDefinitionAsync">Dodaj</MudButton>
+                <MudButton
+                    Variant="Variant.Filled"
+                    Color="Color.Primary"
+                    OnClick="CreateDefinitionAsync">Dodaj
+                </MudButton>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -55,7 +84,7 @@
                 <HeaderContent>
                     <MudTh>Nazwa</MudTh>
                     <MudTh>Kwota</MudTh>
-                    <MudTh>Dzien</MudTh>
+                    <MudTh>Dzień</MudTh>
                     <MudTh>Konto</MudTh>
                     <MudTh>Aktywna</MudTh>
                     <MudTh>Akcje</MudTh>
@@ -63,35 +92,77 @@
                 <RowTemplate Context="item">
                     @if (_editDefinition?.Id == item.Id)
                     {
-                        <MudTd><MudTextField @bind-Value="_editDefinition.Name" Variant="Variant.Outlined" /></MudTd>
-                        <MudTd><MudNumericField T="decimal" @bind-Value="_editDefinition.Amount" Variant="Variant.Outlined" Culture="_culture" Format="0.00" /></MudTd>
-                        <MudTd><MudNumericField T="int" @bind-Value="_editDefinition.DayOfMonth" Variant="Variant.Outlined" Min="1" Max="31" /></MudTd>
                         <MudTd>
-                            <MudSelect T="int" @bind-Value="_editDefinition.AccountId" Variant="Variant.Outlined">
+                            <MudTextField
+                                @bind-Value="_editDefinition.Name"
+                                Variant="Variant.Outlined"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudNumericField T="decimal"
+                                             @bind-Value="_editDefinition.Amount"
+                                             Variant="Variant.Outlined"
+                                             Min="0"
+                                             Culture="_culture"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudNumericField T="int"
+                                             @bind-Value="_editDefinition.DayOfMonth"
+                                             Variant="Variant.Outlined"
+                                             Min="1"
+                                             Max="31"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudSelect T="int"
+                                       @bind-Value="_editDefinition.AccountId"
+                                       Variant="Variant.Outlined">
                                 @foreach (var account in _accounts)
                                 {
                                     <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudTd>
-                        <MudTd><MudSwitch @bind-Value="_editDefinition.IsActive" Color="Color.Primary" /></MudTd>
                         <MudTd>
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
-                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelEdit">Anuluj</MudButton>
+                            <MudSwitch
+                                @bind-Value="_editDefinition.IsActive"
+                                Color="Color.Primary"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton
+                                Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                OnClick="SaveEditAsync">Zapisz
+                            </MudButton>
+                            <MudButton
+                                Variant="Variant.Text"
+                                Size="Size.Small"
+                                OnClick="CancelEdit">Anuluj
+                            </MudButton>
                         </MudTd>
                     }
                     else
                     {
                         <MudTd>@item.Name</MudTd>
-                        <MudTd>@item.Amount.ToString("0.00", _culture) PLN</MudTd>
+                        <MudTd>@item.Amount.ToString("0.00", _culture) zł</MudTd>
                         <MudTd>@item.DayOfMonth</MudTd>
                         <MudTd>@item.AccountName</MudTd>
                         <MudTd>
-                            <MudChip T="string" Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip>
+                            <MudChip T="string"
+                                     Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip>
                         </MudTd>
                         <MudTd>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartEdit(item)">Edytuj</MudButton>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteDefinitionAsync(item.Id)">Usun</MudButton>
+                            <MudButton
+                                Variant="Variant.Outlined"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                OnClick="() => StartEdit(item)">Edytuj
+                            </MudButton>
+                            <MudButton
+                                Variant="Variant.Outlined"
+                                Color="Color.Error"
+                                Size="Size.Small"
+                                OnClick="() => DeleteDefinitionAsync(item.Id)">Usun
+                            </MudButton>
                         </MudTd>
                     }
                 </RowTemplate>
@@ -101,6 +172,7 @@
 </MudStack>
 
 @code {
+    private bool _isLoading;
     private readonly CultureInfo _culture = new("pl-PL");
     private List<RegularIncomeDefinitionDto> _definitions = [];
     private List<AccountDto> _accounts = [];
@@ -119,6 +191,8 @@
 
     private async Task LoadAsync()
     {
+        _isLoading = true;
+
         try
         {
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
@@ -132,6 +206,10 @@
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
         }
     }
 
@@ -205,5 +283,6 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
+
 }
 

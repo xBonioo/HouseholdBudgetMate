@@ -21,6 +21,8 @@ public interface IExpenseService
 
     Task<ExpenseDto> UpdateExpenseAsync(UpdateExpenseRequest request, CancellationToken cancellationToken);
 
+    Task ReorderExpensesAsync(ReorderExpensesRequest request, CancellationToken cancellationToken);
+
     Task<ExpenseLineItemDto> UpdateExpenseLineItemAsync(UpdateExpenseLineItemRequest request,
         CancellationToken cancellationToken);
 

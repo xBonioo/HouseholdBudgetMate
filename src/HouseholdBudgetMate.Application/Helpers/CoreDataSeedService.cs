@@ -14,47 +14,87 @@ public sealed class CoreDataSeedService(
 {
     private static readonly IReadOnlyList<CategorySeedDefinition> DefaultCategories =
     [
-        new("Spożywcze", "#4CAF50", true),
+        new("Zakupy", "#4CAF50", true),
         new("Samochód", "#1E88E5", true),
-        new("Zdrowie", "#E53935", false),
+        new("Zdrowie", "#E53935", true),
         new("Rozrywka", "#8E24AA", true),
-        new("Dom", "#FB8C00", false)
+        new("Dom", "#FB8C00", false),
+        new("Inne", "#0473ff", false),
+        new("Pies", "#000080", true),
+        new("Rozwój", "#ff0000", false),
+        new("Hobby", "#DD99F0", false),
     ];
 
     private static readonly IReadOnlyList<TagSeedDefinition> DefaultTags =
     [
-        new("Spożywcze", "Supermarket"),
-        new("Spożywcze", "Warzywniak"),
-        new("Spożywcze", "Pieczywo"),
+        new("Zakupy", "Spożywcze"),
+        new("Zakupy", "Lidl"),
+        new("Zakupy", "Auchan"),
+        new("Zakupy", "Biedronka"),
+        new("Zakupy", "Giełda"),
+        new("Zakupy", "Żabka"),
+        new("Zakupy", "Grabówka"),
+        new("Zakupy", "Allegro"),
+
+        new("Zakupy", "Kosmetyki"),
+        new("Zakupy", "Ciuchy"),
+        new("Zakupy", "Internetowe"),
+        new("Zakupy", "Aliexpress"),
+        new("Zakupy", "Art. gospodarstwa"),
+
+        new("Rozwój", "Studia"),
+        new("Rozwój", "Kurs"),
+
+        new("Inne", "Subskrypcje"),
+        new("Inne", "Doładowanie"),
+        new("Inne", "Prezent"),
+
         new("Samochód", "Paliwo"),
+        new("Samochód", "Orlen"),
+        new("Samochód", "Plus"),
+        new("Samochód", "Auchan"),
+        
         new("Samochód", "Serwis"),
         new("Samochód", "Ubezpieczenie"),
-        new("Zdrowie", "Leki"),
+        new("Samochód", "Mechanik"),
+        new("Samochód", "Myjnia"),
+
+        new("Zdrowie", "Suple"),
         new("Zdrowie", "Lekarz"),
-        new("Rozrywka", "Kino"),
-        new("Rozrywka", "Restauracja"),
-        new("Dom", "Czynsz"),
-        new("Dom", "Media")
+        new("Zdrowie", "Inne"),
+        
+        new("Rozrywka", "Miasto"),
+        new("Rozrywka", "Jedzenie na mieście"),
+        new("Rozrywka", "Hobby"),
+
+        new("Dom", "Kredyt"),
+        new("Dom", "Budowa"),
+        new("Dom", "Rachunki")
     ];
 
     private static readonly IReadOnlyList<AccountSeedDefinition> DefaultAccounts =
     [
-        new("Konto osobiste", AccountType.Bank, 1),
-        new("Portfel", AccountType.Cash, 2),
-        new("Oszczednosci", AccountType.Savings, 3)
+        new("ING", AccountType.Bank, 1),
+        new("Pekao", AccountType.Bank, 2),
+        new("VELO", AccountType.Bank, 3),
+        new("Santander", AccountType.Bank, 4),
+        new("ZEN", AccountType.Bank, 5),
+        new("Portfel", AccountType.Cash, 6),
+        new("Oszczędności", AccountType.Savings, 7)
     ];
 
     private static readonly IReadOnlyList<AccountBalanceSeedDefinition> DefaultAccountBalances =
     [
-        new("Konto osobiste", 3500m),
+        new("ING", 3500m),
         new("Portfel", 450m),
-        new("Oszczednosci", 12000m)
+        new("Oszczędności", 12000m)
     ];
 
     private static readonly IReadOnlyList<RegularIncomeSeedDefinition> DefaultRegularIncomes =
     [
-        new("Wynagrodzenie", 7000m, 10, "Konto osobiste"),
-        new("Dodatkowe zlecenia", 900m, 20, "Konto osobiste")
+        new("Wynagrodzenie", 7000m, 7, "ING"),
+        new("PFRON - Twoje nowe mozliwości", 800m, 15, "ING"),
+        new("Zasiłek pielegnacyjny", 215.84m, 15, "ING")
     ];
 
     public async Task SeedOnStartupAsync(bool seedDataToDatabase, CancellationToken cancellationToken)
@@ -70,6 +110,8 @@ public sealed class CoreDataSeedService(
     public async Task SeedDefaultsAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (dbContext.Accounts.Any()) return;
 
         await SeedDefaultCategoriesAsync(dbContext, cancellationToken);
         await SeedDefaultTagsAsync(dbContext, cancellationToken);
@@ -114,13 +156,14 @@ public sealed class CoreDataSeedService(
         var existingNamesSet = existingNames
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var categories = DefaultCategories.Select(x => new Category
-        {
-            Name = x.Name,
-            Color = x.Color,
-            SupportsLineItems = x.SupportsLineItems,
-            IsDeleted = false
-        })
+        var categories = DefaultCategories
+            .Select(x => new Category
+            {
+                Name = x.Name,
+                Color = x.Color,
+                SupportsLineItems = x.SupportsLineItems,
+                IsDeleted = false
+            })
             .Where(x => !existingNamesSet.Contains(x.Name))
             .ToList();
 
@@ -183,12 +226,12 @@ public sealed class CoreDataSeedService(
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var accounts = DefaultAccounts.Select(x => new Account
-        {
-            Name = x.Name,
-            Type = (int)x.Type,
-            Order = x.Order,
-            IsArchived = false
-        })
+            {
+                Name = x.Name,
+                Type = (int)x.Type,
+                Order = x.Order,
+                IsArchived = false
+            })
             .Where(x => !existingAccountNamesSet.Contains(x.Name))
             .ToList();
 
@@ -203,23 +246,18 @@ public sealed class CoreDataSeedService(
         logger.LogInformation("Default accounts seeded.");
     }
 
-    private async Task SeedDefaultAccountMonthBalancesAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    private async Task SeedDefaultAccountMonthBalancesAsync(ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
     {
         var now = dateTimeProvider.GetLocalDateTime();
+        var previousMonth = now.AddMonths(-1);
 
         var accountsByName = await dbContext.Accounts
             .ToListAsync(cancellationToken);
         var accountsByNameDictionary = accountsByName
             .ToDictionary(x => x.Name, x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-        var existingAccountIdsForCurrentMonth = await dbContext.AccountMonthBalances
-            .Where(x => x.Year == now.Year && x.Month == now.Month)
-            .Select(x => x.AccountId)
-            .ToListAsync(cancellationToken);
-
-        var existingAccountIdsSet = existingAccountIdsForCurrentMonth.ToHashSet();
-
-        var balances = DefaultAccountBalances
+        var candidates = DefaultAccountBalances
             .Where(x => accountsByNameDictionary.ContainsKey(x.AccountName))
             .Select(x => new AccountMonthBalance
             {
@@ -228,12 +266,61 @@ public sealed class CoreDataSeedService(
                 Month = now.Month,
                 ClosingBalance = x.Balance
             })
-            .Where(x => !existingAccountIdsSet.Contains(x.AccountId))
+            .ToList();
+
+        if (accountsByNameDictionary.TryGetValue("ING", out var ingAccountId))
+        {
+            candidates.Add(new AccountMonthBalance
+            {
+                AccountId = ingAccountId,
+                Year = previousMonth.Year,
+                Month = previousMonth.Month,
+                ClosingBalance = 4000m
+            });
+        }
+
+        if (candidates.Count == 0)
+        {
+            logger.LogWarning("Skipping account balance seed because accounts are missing.");
+            return;
+        }
+
+        var targetAccountIds = candidates
+            .Select(x => x.AccountId)
+            .Distinct()
+            .ToList();
+
+        var targetPeriods = candidates
+            .Select(x => new { x.Year, x.Month })
+            .Distinct()
+            .ToList();
+
+        var targetYears = targetPeriods
+            .Select(x => x.Year)
+            .Distinct()
+            .ToList();
+
+        var existingKeys = await dbContext.AccountMonthBalances
+            .Where(x => targetAccountIds.Contains(x.AccountId))
+            .Where(x => targetYears.Contains(x.Year))
+            .Select(x => new { x.AccountId, x.Year, x.Month })
+            .ToListAsync(cancellationToken);
+
+        var targetPeriodsSet = targetPeriods
+            .Select(x => (x.Year, x.Month))
+            .ToHashSet();
+
+        var existingKeysSet = existingKeys
+            .Where(x => targetPeriodsSet.Contains((x.Year, x.Month)))
+            .Select(x => (x.AccountId, x.Year, x.Month))
+            .ToHashSet();
+
+        var balances = candidates
+            .Where(x => !existingKeysSet.Contains((x.AccountId, x.Year, x.Month)))
             .ToList();
 
         if (balances.Count == 0)
         {
-            logger.LogWarning("Skipping account balance seed because accounts are missing.");
             return;
         }
 
@@ -243,7 +330,8 @@ public sealed class CoreDataSeedService(
         logger.LogInformation("Default account balances seeded.");
     }
 
-    private async Task SeedDefaultRegularIncomesAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    private async Task SeedDefaultRegularIncomesAsync(ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
     {
         var accountsByName = await dbContext.Accounts
             .ToListAsync(cancellationToken);
@@ -281,7 +369,8 @@ public sealed class CoreDataSeedService(
         logger.LogInformation("Default regular incomes seeded.");
     }
 
-    private async Task RepairInconsistentTagReferencesAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    private async Task RepairInconsistentTagReferencesAsync(ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
     {
         var tagCategoryById = await dbContext.Tags
             .IgnoreQueryFilters()
@@ -303,7 +392,8 @@ public sealed class CoreDataSeedService(
             .ToListAsync(cancellationToken);
 
         var invalidLineItemIds = lineItemTagRefs
-            .Where(x => !tagCategoryById.TryGetValue(x.TagId, out var tagCategoryId) || tagCategoryId != x.ExpenseCategoryId)
+            .Where(x => !tagCategoryById.TryGetValue(x.TagId, out var tagCategoryId) ||
+                        tagCategoryId != x.ExpenseCategoryId)
             .Select(x => x.Id)
             .ToList();
 
@@ -331,12 +421,22 @@ public sealed class CoreDataSeedService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Fixed inconsistent tag references. Expenses: {ExpensesCount}, LineItems: {LineItemsCount}", expensesToFix.Count, lineItemsToFix.Count);
+        logger.LogInformation(
+            "Fixed inconsistent tag references. Expenses: {ExpensesCount}, LineItems: {LineItemsCount}",
+            expensesToFix.Count, lineItemsToFix.Count);
     }
 
     private readonly record struct CategorySeedDefinition(string Name, string Color, bool SupportsLineItems);
+
     private readonly record struct TagSeedDefinition(string CategoryName, string TagName);
+
     private readonly record struct AccountSeedDefinition(string Name, AccountType Type, int Order);
+
     private readonly record struct AccountBalanceSeedDefinition(string AccountName, decimal Balance);
-    private readonly record struct RegularIncomeSeedDefinition(string Name, decimal Amount, int DayOfMonth, string AccountName);
+
+    private readonly record struct RegularIncomeSeedDefinition(
+        string Name,
+        decimal Amount,
+        int DayOfMonth,
+        string AccountName);
 }

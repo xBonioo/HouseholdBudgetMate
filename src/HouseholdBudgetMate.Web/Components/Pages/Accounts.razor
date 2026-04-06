@@ -18,12 +18,20 @@
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
 
-<MudStack Spacing="3" Class="pa-4">
+<div class="accounts-drag pa-4">
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Filled">
+            Nie udało się załadować kont: @_loadError
+        </MudAlert>
+    }
+
     <MudPaper Class="hb-page-header">
         <MudText Typo="Typo.h4">Stan kont na koniec miesiąca</MudText>
-        <MudText Typo="Typo.body2" Class="hb-muted">Kolejność kont ustawisz drag and drop. Salda edytujesz szybko dla wybranego miesiaca.</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">
+            Kolejność kont ustawisz strzałkami. Salda edytujesz szybko dla wybranego miesiąca.
+        </MudText>
     </MudPaper>
-
     <MudGrid>
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
@@ -34,22 +42,23 @@
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Łączne saldo aktywnych kont</MudText>
-                <MudText Class="hb-kpi-value">@GetActiveNonSavingsTotalForSelectedMonth().ToString("0.00") PLN</MudText>
+                <MudText
+                    Class="hb-kpi-value">@GetActiveNonSavingsTotalForSelectedMonth().ToString("0.00", _culture) PLN
+                </MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Saldo + oszczędności</MudText>
-                <MudText Class="hb-kpi-value">@GetActiveTotalForSelectedMonth().ToString("0.00") PLN</MudText>
+                <MudText Class="hb-kpi-value">@GetActiveTotalForSelectedMonth().ToString("0.00", _culture) PLN</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
-
     <MudPaper Class="pa-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Nowe konto</MudText>
         <MudGrid>
             <MudItem xs="12" md="4">
-                <MudTextField @bind-Value="_createModel.Name" Label="Nazwa" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_createModel.Name" Label="Nazwa" Variant="Variant.Outlined"/>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudSelect T="AccountType" @bind-Value="_createModel.Type" Label="Typ" Variant="Variant.Outlined">
@@ -60,19 +69,25 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudNumericField T="decimal" @bind-Value="_createModel.ClosingBalance" Label="Saldo" Variant="Variant.Outlined" />
+                <MudNumericField T="decimal"
+                                 @bind-Value="_createModel.ClosingBalance"
+                                 Label="Saldo"
+                                 Variant="Variant.Outlined"
+                                 Culture="_culture"
+                                 Immediate="true"/>
             </MudItem>
             <MudItem xs="12" md="2" Class="d-flex align-center">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAccountAsync">Dodaj konto</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAccountAsync">Dodaj konto
+                </MudButton>
             </MudItem>
         </MudGrid>
     </MudPaper>
-
     <MudPaper Class="pa-4 hb-panel">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
             <MudText Typo="Typo.h6">Salda miesięczne</MudText>
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudSelect T="int" Value="_selectedYear" ValueChanged="OnSelectedYearChanged" Label="Rok" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelect T="int" Value="_selectedYear" ValueChanged="OnSelectedYearChanged" Label="Rok"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
                     @foreach (var year in _availableYears)
                     {
                         <MudSelectItem Value="@year">@year</MudSelectItem>
@@ -91,20 +106,24 @@
                     }
                     @if (TryGetNextMonthCandidate() is { } nextMonth)
                     {
-                        <MudChip T="int" Variant="Variant.Outlined" Color="Color.Secondary" OnClick="() => AddNextMonthToSelection(nextMonth)">
+                        <MudChip T="int" Variant="Variant.Outlined" Color="Color.Secondary"
+                                 OnClick="() => AddNextMonthToSelection(nextMonth)">
                             + @GetMonthLabel(nextMonth)
                         </MudChip>
                     }
                 </MudStack>
             </MudStack>
         </MudStack>
-
-        <MudTable Items="_accounts.Where(x => !x.IsArchived).OrderBy(x => x.Order)" Dense="true" Hover="true" Class="mt-2">
+        <MudTable Items="_accounts.Where(x => !x.IsArchived).OrderBy(x => x.Order)" Dense="true" Hover="true"
+                  Class="mt-2">
             <HeaderContent>
                 <MudTh>Konto</MudTh>
                 <MudTh>Typ</MudTh>
-                <MudTh>Saldo dla wybranego miesiaca</MudTh>
+                <MudTh>Saldo dla wybranego miesiąca</MudTh>
             </HeaderContent>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="pa-3 hb-muted">Brak aktywnych kont.</MudText>
+            </NoRecordsContent>
             <RowTemplate Context="account">
                 <MudTd>@account.Name</MudTd>
                 <MudTd>@account.Type.GetDisplayName()</MudTd>
@@ -113,85 +132,101 @@
                                      Value="GetSelectedMonthAmount(account.Id)"
                                      ValueChanged="(value) => SetSelectedMonthAmount(account.Id, value)"
                                      Culture="_culture"
-                                     Format="0.00"
                                      Immediate="true"
                                      Variant="Variant.Outlined"
-                                     Margin="Margin.Dense" />
+                                     Margin="Margin.Dense"/>
                 </MudTd>
             </RowTemplate>
         </MudTable>
         <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAllSelectedMonthBalancesAsync">Zapisz wszystkie</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAllSelectedMonthBalancesAsync">Zapisz
+                wszystkie
+            </MudButton>
         </MudStack>
     </MudPaper>
-
     <MudPaper Class="pa-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Konta</MudText>
-        <MudTable Items="_accounts.OrderBy(x => x.Order)" Dense="true" Hover="true">
+        <MudTable Items="_accounts.OrderBy(x => x.Order).ToList()" Dense="true" Hover="true">
             <HeaderContent>
-                <MudTh>Kolejnosc</MudTh>
+                <MudTh>Kolejność</MudTh>
                 <MudTh>Nazwa</MudTh>
                 <MudTh>Typ</MudTh>
-                <MudTh>Najnowszy wynik</MudTh>
+                <MudTh>Saldo</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>Akcje</MudTh>
             </HeaderContent>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="pa-3 hb-muted">Brak kont do wyświetlenia.</MudText>
+            </NoRecordsContent>
             <RowTemplate Context="account">
+                <MudTd>
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.caption">@account.Order</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                       Size="Size.Small"
+                                       Disabled="@IsFirstAccount(account.Id)"
+                                       OnClick="() => MoveAccountAsync(account.Id, -1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                       Size="Size.Small"
+                                       Disabled="@IsLastAccount(account.Id)"
+                                       OnClick="() => MoveAccountAsync(account.Id, 1)"/>
+                    </MudStack>
+                </MudTd>
+
                 @if (_editModel?.Id == account.Id)
                 {
                     <MudTd>
-                        <div draggable="true" @ondragstart="() => OnAccountDragStart(account.Id)" @ondragover:preventDefault @ondrop="() => OnAccountDropAsync(account.Id)" class="d-flex align-center">
-                            <MudIcon Icon="@Icons.Material.Filled.DragIndicator" />
-                        </div>
+                        <MudTextField @bind-Value="_editModel.Name" Margin="Margin.Dense" Variant="Variant.Outlined"/>
                     </MudTd>
-                    <MudTd><MudTextField @bind-Value="_editModel.Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudTd>
                     <MudTd>
-                        <MudSelect T="AccountType" @bind-Value="_editModel.Type" Variant="Variant.Outlined" Margin="Margin.Dense">
-                            @foreach (var accountType in _accountTypes)
+                        <MudSelect T="AccountType" @bind-Value="_editModel.Type" Margin="Margin.Dense"
+                                   Variant="Variant.Outlined">
+                            @foreach (var type in _accountTypes)
                             {
-                                <MudSelectItem Value="@accountType">@accountType.GetDisplayName()</MudSelectItem>
+                                <MudSelectItem Value="@type">@type.GetDisplayName()</MudSelectItem>
                             }
                         </MudSelect>
                     </MudTd>
                     <MudTd>@account.CurrentBalance.ToString("0.00") PLN</MudTd>
                     <MudTd>
-                        <MudChip T="string" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
+                        <MudChip T="bool" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
                             @(account.IsArchived ? "Archiwalne" : "Aktywne")
                         </MudChip>
                     </MudTd>
                     <MudTd>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
-                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelEdit">Anuluj</MudButton>
+                        <MudButton Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
+                        <MudButton Size="Size.Small" OnClick="CancelEdit">Anuluj</MudButton>
                     </MudTd>
                 }
                 else
                 {
-                    <MudTd>
-                        <div draggable="true" @ondragstart="() => OnAccountDragStart(account.Id)" @ondragover:preventDefault @ondrop="() => OnAccountDropAsync(account.Id)" class="d-flex align-center">
-                            <MudIcon Icon="@Icons.Material.Filled.DragIndicator" />
-                            <MudText Typo="Typo.caption" Class="ml-1">@account.Order</MudText>
-                        </div>
-                    </MudTd>
                     <MudTd>@account.Name</MudTd>
                     <MudTd>@account.Type.GetDisplayName()</MudTd>
-                    <MudTd>@account.CurrentBalance.ToString("0.00") PLN</MudTd>
+                    <MudTd>@account.CurrentBalance.ToString("0.00") zł</MudTd>
                     <MudTd>
-                        <MudChip T="string" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
+                        <MudChip T="bool" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
                             @(account.IsArchived ? "Archiwalne" : "Aktywne")
                         </MudChip>
                     </MudTd>
                     <MudTd>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => BeginEdit(account)">Edytuj</MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="@(account.IsArchived ? Color.Success : Color.Warning)" Size="Size.Small" OnClick="() => ToggleArchiveAsync(account)">
-                            @(account.IsArchived ? "Przywróc" : "Archiwizuj")
+                        <MudButton Size="Size.Small" OnClick="() => BeginEdit(account)">Edytuj</MudButton>
+                        <MudButton Size="Size.Small" OnClick="() => ToggleArchiveAsync(account)">
+                            @(account.IsArchived ? "Przywróć" : "Archiwizuj")
                         </MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteAccountAsync(account)">Usuń</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => DeleteAccountAsync(account)">
+                            Usuń
+                        </MudButton>
                     </MudTd>
                 }
             </RowTemplate>
         </MudTable>
+
+        @if (_accounts.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2 hb-muted">Brak kont do wyświetlenia.</MudText>
+        }
     </MudPaper>
-</MudStack>
+</div>
 
 @code {
     private bool _isLoading;
@@ -201,6 +236,7 @@
     private CreateAccountRequest _createModel = new() { Type = AccountType.Bank };
     private UpdateAccountRequest? _editModel;
     private readonly AccountType[] _accountTypes = Enum.GetValues<AccountType>();
+
     private readonly IReadOnlyList<MonthOption> _monthOptions = Enumerable.Range(1, 12)
         .Select(month => new MonthOption(month, new DateTime(2000, month, 1).ToString("MMMM", new CultureInfo("pl-PL"))))
         .ToList();
@@ -210,7 +246,7 @@
     private List<int> _availableYears = [];
     private List<int> _availableMonthsForSelectedYear = [];
     private readonly Dictionary<int, decimal> _selectedMonthAmounts = new();
-    private int? _draggedAccountId;
+    private string? _loadError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -225,6 +261,8 @@
     private async Task LoadAsync()
     {
         _isLoading = true;
+        _loadError = null;
+
         try
         {
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).OrderBy(x => x.Order).ToList();
@@ -232,6 +270,7 @@
             var availablePlanMonths = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
             _availableYears = availablePlanMonths
                 .Select(x => x.Year)
+                .Concat(_accounts.SelectMany(x => x.MonthBalances).Select(x => x.Year))
                 .Distinct()
                 .OrderByDescending(x => x)
                 .ToList();
@@ -243,11 +282,11 @@
             }
 
             SyncAvailableMonthsForSelectedYear();
-
             SyncSelectedMonthAmounts();
         }
         catch (Exception ex)
         {
+            _loadError = ex.Message;
             Snackbar.Add(ex.Message, Severity.Error);
         }
         finally
@@ -345,30 +384,21 @@
         }
     }
 
-    private void OnAccountDragStart(int accountId)
+    private async Task MoveAccountAsync(int accountId, int direction)
     {
-        _draggedAccountId = accountId;
-    }
-
-
-    private async Task OnAccountDropAsync(int targetAccountId)
-    {
-        if (!_draggedAccountId.HasValue || _draggedAccountId.Value == targetAccountId)
-        {
-            return;
-        }
-
         var ordered = _accounts.OrderBy(x => x.Order).ToList();
-        var dragged = ordered.FirstOrDefault(x => x.Id == _draggedAccountId.Value);
-        var target = ordered.FirstOrDefault(x => x.Id == targetAccountId);
-        if (dragged is null || target is null)
+        var index = ordered.FindIndex(x => x.Id == accountId);
+
+        if (index == -1)
         {
             return;
         }
 
-        ordered.Remove(dragged);
-        var targetIndex = ordered.IndexOf(target);
-        ordered.Insert(targetIndex, dragged);
+        var newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= ordered.Count)
+            return;
+
+        (ordered[index], ordered[newIndex]) = (ordered[newIndex], ordered[index]);
 
         try
         {
@@ -383,10 +413,18 @@
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
-        finally
-        {
-            _draggedAccountId = null;
-        }
+    }
+
+    private bool IsFirstAccount(int accountId)
+    {
+        var ordered = _accounts.OrderBy(x => x.Order).ToList();
+        return ordered.Count == 0 || ordered[0].Id == accountId;
+    }
+
+    private bool IsLastAccount(int accountId)
+    {
+        var ordered = _accounts.OrderBy(x => x.Order).ToList();
+        return ordered.Count == 0 || ordered[^1].Id == accountId;
     }
 
     private AccountMonthBalanceDto? TryGetSelectedMonthBalance(int accountId)
@@ -529,23 +567,16 @@
     {
         return _accounts
             .Where(x => !x.IsArchived && x.Type != AccountType.Savings)
-            .Sum(GetSelectedMonthBalanceAmount);
+            .Sum(x => GetSelectedMonthAmount(x.Id));
     }
 
     private decimal GetActiveTotalForSelectedMonth()
     {
         return _accounts
             .Where(x => !x.IsArchived)
-            .Sum(GetSelectedMonthBalanceAmount);
-    }
-
-    private decimal GetSelectedMonthBalanceAmount(AccountDto account)
-    {
-        return account.MonthBalances
-            .FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth)
-            ?.ClosingBalance ?? 0m;
+            .Sum(x => GetSelectedMonthAmount(x.Id));
     }
 
     private readonly record struct MonthOption(int Value, string Label);
-}
 
+}

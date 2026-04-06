@@ -93,7 +93,9 @@ public sealed class CreateExpenseRequestValidator : AbstractValidator<CreateExpe
             .NotEmpty()
             .WithMessage("Expense name is required.")
             .Must(x => !string.IsNullOrWhiteSpace(x))
-            .WithMessage("Expense name is required.");
+            .WithMessage("Expense name is required.")
+            .MaximumLength(200)
+            .WithMessage("Expense name cannot exceed 200 characters.");
 
         RuleFor(x => x.CategoryId).GreaterThan(0);
 
@@ -123,7 +125,9 @@ public sealed class UpdateExpenseRequestValidator : AbstractValidator<UpdateExpe
             .NotEmpty()
             .WithMessage("Expense name is required.")
             .Must(x => !string.IsNullOrWhiteSpace(x))
-            .WithMessage("Expense name is required.");
+            .WithMessage("Expense name is required.")
+            .MaximumLength(200)
+            .WithMessage("Expense name cannot exceed 200 characters.");
 
         RuleFor(x => x.CategoryId).GreaterThan(0);
 
@@ -148,6 +152,18 @@ public sealed class DeleteExpenseRequestValidator : AbstractValidator<DeleteExpe
     public DeleteExpenseRequestValidator()
     {
         RuleFor(x => x.Id).GreaterThan(0);
+    }
+}
+
+public sealed class ReorderExpensesRequestValidator : AbstractValidator<ReorderExpensesRequest>
+{
+    public ReorderExpensesRequestValidator()
+    {
+        RuleForEach(x => x.ExpenseIds).GreaterThan(0);
+
+        RuleFor(x => x.ExpenseIds)
+            .Must(ids => ids.Distinct().Count() == ids.Count)
+            .WithMessage("Expense ids must be unique.");
     }
 }
 

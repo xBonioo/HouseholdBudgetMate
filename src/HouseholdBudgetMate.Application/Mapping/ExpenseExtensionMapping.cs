@@ -15,11 +15,12 @@ public static class ExpenseExtensionMapping
             Name = expense.Name,
             CategoryId = expense.CategoryId,
             CategoryName = expense.Category.Name,
+            RegularExpenseDefinitionId = expense.RegularExpenseDefinitionId,
             TagId = expense.TagId,
             TagName = expense.Tag?.Name,
             PlannedAmount = expense.PlannedAmount,
             ActualAmount = expense.LineItems.Count > 0 ? expense.LineItems.Sum(li => li.Amount) : expense.ActualAmount,
-            SupportsLineItems = expense.Category.SupportsLineItems,
+            SupportsLineItems = expense.Tag?.SupportsLineItemsOverride ?? expense.Category.SupportsLineItems,
             ShowRemainingInUI = expense.ShowRemainingInUI,
             LineItems = expense.LineItems
                 .OrderByDescending(li => li.OccurredAt)
@@ -45,7 +46,25 @@ public static class ExpenseExtensionMapping
         return new AvailableMonthDto
         {
             Year = item.Year,
-            Month = item.Month
+            Month = item.Month,
+            IsClosed = item.IsClosed
+        };
+    }
+
+    public static RegularExpenseDefinitionDto MapRegularExpenseDefinitionToDto(this RegularExpenseDefinition definition)
+    {
+        return new RegularExpenseDefinitionDto
+        {
+            Id = definition.Id,
+            Order = definition.Order,
+            Name = definition.Name,
+            CategoryId = definition.CategoryId,
+            CategoryName = definition.Category.Name,
+            TagId = definition.TagId,
+            TagName = definition.Tag?.Name,
+            Amount = definition.Amount,
+            IsActive = definition.IsActive,
+            ShowRemainingInUI = definition.ShowRemainingInUI
         };
     }
 

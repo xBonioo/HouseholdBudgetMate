@@ -13,6 +13,8 @@ public sealed class Income : ATimestampable, IEntityId
     public int AccountId { get; set; }
     public bool IsRegular { get; set; }
     public int? RegularIncomeDefinitionId { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAtUtc { get; set; }
 
     public Account Account { get; set; } = null!;
     public RegularIncomeDefinition? RegularIncomeDefinition { get; set; }

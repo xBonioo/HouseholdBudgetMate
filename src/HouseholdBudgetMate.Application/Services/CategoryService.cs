@@ -51,6 +51,7 @@ public sealed class CategoryService(
         {
             Name = request.Name,
             Color = request.Color,
+            EnvelopeLimit = request.EnvelopeLimit,
             SupportsLineItems = request.SupportsLineItems
         };
 
@@ -76,6 +77,7 @@ public sealed class CategoryService(
 
         category.Name = request.Name;
         category.Color = request.Color;
+        category.EnvelopeLimit = request.EnvelopeLimit;
         category.SupportsLineItems = request.SupportsLineItems;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -124,7 +126,8 @@ public sealed class CategoryService(
         var tag = new Tag
         {
             CategoryId = request.CategoryId,
-            Name = request.Name
+            Name = request.Name,
+            SupportsLineItemsOverride = request.SupportsLineItemsOverride
         };
 
         dbContext.Tags.Add(tag);
@@ -154,6 +157,7 @@ public sealed class CategoryService(
 
         tag.CategoryId = request.CategoryId;
         tag.Name = request.Name;
+        tag.SupportsLineItemsOverride = request.SupportsLineItemsOverride;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

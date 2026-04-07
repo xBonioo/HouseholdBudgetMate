@@ -1,4 +1,8 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
+using HouseholdBudgetMate.Abstractions.Contracts.Facility.Events;
+using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
+using HouseholdBudgetMate.Abstractions.Enums;
+using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Tests.Shared;
@@ -10,11 +14,63 @@ public sealed class ExpenseServiceTests
 {
     private readonly string _dbName = Guid.NewGuid().ToString();
 
-    private ExpenseService CreateService()
+    private ExpenseService CreateService(RecordingAppEventPublisher? eventPublisher = null)
     {
         var factory = TestDbContextFactory.CreateFactory(_dbName);
         var provider = new StaticDateTimeProvider(DateTime.UtcNow);
-        return new ExpenseService(factory, provider);
+        return new ExpenseService(factory, provider, eventPublisher ?? new RecordingAppEventPublisher(), new NoOpIncomeService());
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_Should_Emit_BudgetExceededEvent_When_Category_Limit_Is_Crossed()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Spozywcze",
+                Color = "#43A047",
+                EnvelopeLimit = 500m
+            };
+
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var publisher = new RecordingAppEventPublisher();
+        var service = CreateService(publisher);
+
+        await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Zakupy 1",
+            CategoryId = categoryId,
+            PlannedAmount = 300m,
+            ActualAmount = 300m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Zakupy 2",
+            CategoryId = categoryId,
+            PlannedAmount = 210m,
+            ActualAmount = 210m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        var budgetEvents = publisher.Events.OfType<BudgetExceededEvent>().ToList();
+
+        Assert.Single(budgetEvents);
+        Assert.Equal(categoryId, budgetEvents[0].CategoryId);
+        Assert.Equal(510m, budgetEvents[0].SpentAmount);
+        Assert.Equal(500m, budgetEvents[0].EnvelopeLimit);
     }
 
     [Fact]
@@ -239,5 +295,246 @@ public sealed class ExpenseServiceTests
         var month = await service.GetMonthAsync(2026, 6, CancellationToken.None);
         Assert.Equal(second.Id, month.Expenses[0].Id);
         Assert.Equal(first.Id, month.Expenses[1].Id);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_Should_Throw_When_Month_Is_Closed()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Transport", Color = "#1E88E5" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        await service.CloseMonthAsync(2026, 7, CancellationToken.None);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 7,
+            Name = "Paliwo",
+            CategoryId = categoryId,
+            PlannedAmount = 150m,
+            ActualAmount = 0,
+            ShowRemainingInUI = true
+        }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CloseMonthAsync_Should_Generate_Regular_Expenses_In_Next_Month_And_Be_Idempotent()
+    {
+        int categoryId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        await service.CloseMonthAsync(2026, 1, CancellationToken.None);
+        await service.OpenMonthAsync(2026, 2, CancellationToken.None);
+
+        var february = await service.GetMonthAsync(2026, 2, CancellationToken.None);
+        var recurringExpenses = february.Expenses.Where(x => x.Name == "Netflix").ToList();
+
+        Assert.Single(recurringExpenses);
+        Assert.Equal(60m, recurringExpenses[0].PlannedAmount);
+    }
+
+    [Fact]
+    public async Task GetMonthAsync_Should_AutoSync_Recurring_Data_For_Open_Month()
+    {
+        int categoryId;
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            context.Categories.Add(category);
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+            accountId = account.Id;
+        }
+
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var now = DateTime.UtcNow;
+        var provider = new StaticDateTimeProvider(now);
+        var incomeService = new IncomeService(factory, provider);
+        var expenseService = new ExpenseService(factory, provider, new RecordingAppEventPublisher(), incomeService);
+
+        await expenseService.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        await incomeService.CreateRegularDefinitionAsync(new CreateRegularIncomeDefinitionRequest
+        {
+            Name = "Wyplata",
+            Amount = 5000m,
+            DayOfMonth = 10,
+            AccountId = accountId
+        }, CancellationToken.None);
+
+        var month = await expenseService.GetMonthAsync(2026, 3, CancellationToken.None);
+        var incomes = await incomeService.GetMonthIncomesAsync(2026, 3, CancellationToken.None);
+
+        Assert.Contains(month.Expenses, x => x.Name == "Netflix" && x.PlannedAmount == 60m);
+        Assert.Contains(incomes, x => x.Name == "Wyplata" && x.IsRegular);
+    }
+
+    [Fact]
+    public async Task DeleteRegularExpenseDefinitionAsync_Should_SoftDelete_By_Setting_IsActive_False()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Rachunki", Color = "#455A64" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        var created = await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Internet",
+            CategoryId = categoryId,
+            Amount = 80m
+        }, CancellationToken.None);
+
+        await service.DeleteRegularExpenseDefinitionAsync(new DeleteRegularExpenseDefinitionRequest { Id = created.Id }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var definition = await verifyContext.RegularExpenseDefinitions.FirstAsync(x => x.Id == created.Id);
+        Assert.False(definition.IsActive);
+    }
+
+    [Fact]
+    public async Task ReorderRegularExpenseDefinitionsAsync_Should_Drive_Order_Of_AutoGenerated_Expenses()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Rachunki", Color = "#455A64" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        var first = await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Internet",
+            CategoryId = categoryId,
+            Amount = 80m
+        }, CancellationToken.None);
+
+        var second = await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        await service.ReorderRegularExpenseDefinitionsAsync(new ReorderRegularExpenseDefinitionsRequest
+        {
+            DefinitionIds = [second.Id, first.Id]
+        }, CancellationToken.None);
+
+        await service.OpenMonthAsync(2026, 9, CancellationToken.None);
+        var month = await service.GetMonthAsync(2026, 9, CancellationToken.None);
+
+        Assert.Equal("Netflix", month.Expenses[0].Name);
+        Assert.Equal("Internet", month.Expenses[1].Name);
+    }
+
+    [Fact]
+    public async Task DeleteRecurringExpense_FromMonth_Should_Not_Recreate_And_Should_Not_Throw_On_Reload()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        var initialMonth = await service.GetMonthAsync(2026, 10, CancellationToken.None);
+        var recurringExpense = Assert.Single(initialMonth.Expenses, x => x.Name == "Netflix");
+
+        await service.DeleteExpenseAsync(new DeleteExpenseRequest { Id = recurringExpense.Id }, CancellationToken.None);
+
+        var reloadedMonth = await service.GetMonthAsync(2026, 10, CancellationToken.None);
+        Assert.DoesNotContain(reloadedMonth.Expenses, x => x.Name == "Netflix");
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var storedExpenses = await verifyContext.Expenses
+            .IgnoreQueryFilters()
+            .Where(x => x.MonthPlanId == reloadedMonth.Id)
+            .ToListAsync();
+
+        Assert.Single(storedExpenses);
+        Assert.True(storedExpenses[0].IsDeleted);
+    }
+
+    [Fact]
+    public async Task DeleteRecurringExpense_FromMonth_Should_Still_Generate_In_Next_Month()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        var october = await service.GetMonthAsync(2026, 10, CancellationToken.None);
+        var recurringExpense = Assert.Single(october.Expenses, x => x.Name == "Netflix");
+        await service.DeleteExpenseAsync(new DeleteExpenseRequest { Id = recurringExpense.Id }, CancellationToken.None);
+
+        await service.OpenMonthAsync(2026, 11, CancellationToken.None);
+        var november = await service.GetMonthAsync(2026, 11, CancellationToken.None);
+
+        Assert.Contains(november.Expenses, x => x.Name == "Netflix" && x.PlannedAmount == 60m);
     }
 }

@@ -69,12 +69,9 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudNumericField T="decimal"
-                                 @bind-Value="_createModel.ClosingBalance"
-                                 Label="Saldo"
-                                 Variant="Variant.Outlined"
-                                 Culture="_culture"
-                                 Immediate="true"/>
+                <MudTextField T="string" @bind-Value="_createClosingBalanceInput"
+                              Label="Saldo"
+                              Variant="Variant.Outlined"/>
             </MudItem>
             <MudItem xs="12" md="2" Class="d-flex align-center">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAccountAsync">Dodaj konto
@@ -128,13 +125,10 @@
                 <MudTd>@account.Name</MudTd>
                 <MudTd>@account.Type.GetDisplayName()</MudTd>
                 <MudTd>
-                    <MudNumericField T="decimal"
-                                     Value="GetSelectedMonthAmount(account.Id)"
-                                     ValueChanged="(value) => SetSelectedMonthAmount(account.Id, value)"
-                                     Culture="_culture"
-                                     Immediate="true"
-                                     Variant="Variant.Outlined"
-                                     Margin="Margin.Dense"/>
+                    <MudTextField T="string" Value="GetSelectedMonthAmountInput(account.Id)"
+                                  ValueChanged="(value) => SetSelectedMonthAmountInputAsync(account.Id, value)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"/>
                 </MudTd>
             </RowTemplate>
         </MudTable>
@@ -234,6 +228,7 @@
     private readonly CultureInfo _culture = new("pl-PL");
 
     private CreateAccountRequest _createModel = new() { Type = AccountType.Bank };
+    private string _createClosingBalanceInput = string.Empty;
     private UpdateAccountRequest? _editModel;
     private readonly AccountType[] _accountTypes = Enum.GetValues<AccountType>();
 
@@ -246,6 +241,7 @@
     private List<int> _availableYears = [];
     private List<int> _availableMonthsForSelectedYear = [];
     private readonly Dictionary<int, decimal> _selectedMonthAmounts = new();
+    private readonly Dictionary<int, string> _selectedMonthAmountInputs = new();
     private string? _loadError;
 
     protected override async Task OnInitializedAsync()
@@ -297,10 +293,19 @@
 
     private async Task CreateAccountAsync()
     {
+        if (!TryParseLocalizedDecimal(_createClosingBalanceInput, out var closingBalance))
+        {
+            Snackbar.Add("Niepoprawny format salda. Uzyj np. 1234,56 lub 1234.56.", Severity.Warning);
+            return;
+        }
+
+        _createModel.ClosingBalance = closingBalance;
+
         try
         {
             await AccountService.CreateAccountAsync(_createModel, CancellationToken.None);
             _createModel = new CreateAccountRequest { Type = AccountType.Bank };
+            _createClosingBalanceInput = string.Empty;
             await LoadAsync();
             Snackbar.Add("Dodano konto.", Severity.Success);
         }
@@ -445,9 +450,34 @@
         return fallback;
     }
 
-    private void SetSelectedMonthAmount(int accountId, decimal amount)
+    private string GetSelectedMonthAmountInput(int accountId)
     {
-        _selectedMonthAmounts[accountId] = amount;
+        if (_selectedMonthAmountInputs.TryGetValue(accountId, out var textValue))
+        {
+            return textValue;
+        }
+
+        var amount = GetSelectedMonthAmount(accountId);
+        var formatted = amount.ToString("0.00", _culture);
+        _selectedMonthAmountInputs[accountId] = formatted;
+        return formatted;
+    }
+
+    private void SetSelectedMonthAmountInput(int accountId, string? input)
+    {
+        var normalizedInput = input ?? string.Empty;
+        _selectedMonthAmountInputs[accountId] = normalizedInput;
+
+        if (TryParseLocalizedDecimal(normalizedInput, out var parsedAmount))
+        {
+            _selectedMonthAmounts[accountId] = parsedAmount;
+        }
+    }
+
+    private Task SetSelectedMonthAmountInputAsync(int accountId, string? input)
+    {
+        SetSelectedMonthAmountInput(accountId, input);
+        return Task.CompletedTask;
     }
 
     private async Task SaveAllSelectedMonthBalancesAsync()
@@ -456,7 +486,13 @@
         {
             foreach (var account in _accounts.Where(x => !x.IsArchived))
             {
-                var amount = GetSelectedMonthAmount(account.Id);
+                var input = GetSelectedMonthAmountInput(account.Id);
+                if (!TryParseLocalizedDecimal(input, out var amount))
+                {
+                    Snackbar.Add($"Niepoprawna kwota dla konta '{account.Name}'.", Severity.Warning);
+                    return;
+                }
+
                 var existing = TryGetSelectedMonthBalance(account.Id);
 
                 if (existing is null)
@@ -493,7 +529,9 @@
         foreach (var account in _accounts.Where(x => !x.IsArchived))
         {
             var existing = account.MonthBalances.FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth);
-            _selectedMonthAmounts[account.Id] = existing?.ClosingBalance ?? 0;
+            var amount = existing?.ClosingBalance ?? 0;
+            _selectedMonthAmounts[account.Id] = amount;
+            _selectedMonthAmountInputs[account.Id] = amount.ToString("0.00", _culture);
         }
 
         var accountIds = _accounts.Where(x => !x.IsArchived).Select(x => x.Id).ToHashSet();
@@ -501,7 +539,27 @@
         foreach (var key in staleKeys)
         {
             _selectedMonthAmounts.Remove(key);
+            _selectedMonthAmountInputs.Remove(key);
         }
+    }
+
+    private bool TryParseLocalizedDecimal(string? rawValue, out decimal value)
+    {
+        value = 0;
+
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return true;
+        }
+
+        var normalized = rawValue.Trim().Replace(',', '.');
+        if (!decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
+        {
+            return false;
+        }
+
+        value = parsed;
+        return true;
     }
 
     private Task OnSelectedYearChanged(int value)

@@ -15,6 +15,11 @@ public sealed class CreateCategoryRequestValidator : AbstractValidator<CreateCat
         RuleFor(x => x.Color)
             .NotEmpty().WithMessage("Color is required.")
             .Must(x => !string.IsNullOrWhiteSpace(x)).WithMessage("Color is required.");
+
+        RuleFor(x => x.EnvelopeLimit)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.EnvelopeLimit.HasValue)
+            .WithMessage("Envelope limit cannot be negative.");
     }
 
     protected override bool PreValidate(ValidationContext<CreateCategoryRequest> context, ValidationResult result)
@@ -42,6 +47,11 @@ public sealed class UpdateCategoryRequestValidator : AbstractValidator<UpdateCat
         RuleFor(x => x.Color)
             .NotEmpty().WithMessage("Color is required.")
             .Must(x => !string.IsNullOrWhiteSpace(x)).WithMessage("Color is required.");
+
+        RuleFor(x => x.EnvelopeLimit)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.EnvelopeLimit.HasValue)
+            .WithMessage("Envelope limit cannot be negative.");
     }
 
     protected override bool PreValidate(ValidationContext<UpdateCategoryRequest> context, ValidationResult result)

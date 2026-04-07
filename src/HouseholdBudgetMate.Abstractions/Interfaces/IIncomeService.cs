@@ -24,5 +24,8 @@ public interface IIncomeService
     Task DeleteRegularDefinitionAsync(DeleteRegularIncomeDefinitionRequest request,
         CancellationToken cancellationToken);
 
+    Task DeleteRegularDefinitionPermanentlyAsync(DeleteRegularIncomeDefinitionRequest request,
+        CancellationToken cancellationToken);
+
     Task SyncRegularIncomesForMonthAsync(int year, int month, CancellationToken cancellationToken);
 }

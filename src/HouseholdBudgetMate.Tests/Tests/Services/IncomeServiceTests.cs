@@ -1,8 +1,10 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
 using HouseholdBudgetMate.Abstractions.Enums;
+using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Tests.Shared;
+using Microsoft.EntityFrameworkCore;
 namespace HouseholdBudgetMate.Tests.Tests.Services;
 
 public sealed class IncomeServiceTests
@@ -296,6 +298,131 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(300m, liveBalance.SavingsTransfersTotal);
         Assert.Equal(2100m, liveBalance.CurrentBalance);
+    }
+
+    [Fact]
+    public async Task CreateIncomeAsync_Should_Throw_When_Month_Is_Closed()
+    {
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Rachunek", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 8, IsClosed = true });
+            await context.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateIncomeAsync(new CreateIncomeRequest
+        {
+            Year = 2026,
+            Month = 8,
+            Name = "Wplyw",
+            Amount = 1000m,
+            ExpectedDayOfMonth = new DateOnly(2026, 8, 10),
+            AccountId = accountId,
+            IsRegular = false
+        }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeleteRegularDefinitionAsync_Should_SoftDelete_By_Setting_IsActive_False()
+    {
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Rachunek", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        var service = CreateService();
+        var created = await service.CreateRegularDefinitionAsync(new CreateRegularIncomeDefinitionRequest
+        {
+            Name = "Wyplata",
+            Amount = 5000m,
+            DayOfMonth = 10,
+            AccountId = accountId
+        }, CancellationToken.None);
+
+        await service.DeleteRegularDefinitionAsync(new DeleteRegularIncomeDefinitionRequest { Id = created.Id }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var definition = await verifyContext.RegularIncomeDefinitions.FirstAsync(x => x.Id == created.Id);
+        Assert.False(definition.IsActive);
+    }
+
+    [Fact]
+    public async Task DeleteRegularIncomeOccurrence_Should_Remove_Only_Current_Month_And_Keep_Future_Generation()
+    {
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Rachunek", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        var service = CreateService();
+        await service.CreateRegularDefinitionAsync(new CreateRegularIncomeDefinitionRequest
+        {
+            Name = "Wyplata",
+            Amount = 5000m,
+            DayOfMonth = 10,
+            AccountId = accountId
+        }, CancellationToken.None);
+
+        await service.SyncRegularIncomesForMonthAsync(2026, 4, CancellationToken.None);
+        var april = await service.GetMonthIncomesAsync(2026, 4, CancellationToken.None);
+        var regularIncome = Assert.Single(april, x => x.IsRegular);
+
+        await service.DeleteIncomeAsync(new DeleteIncomeRequest { Id = regularIncome.Id }, CancellationToken.None);
+        await service.SyncRegularIncomesForMonthAsync(2026, 4, CancellationToken.None);
+
+        var aprilAfterDelete = await service.GetMonthIncomesAsync(2026, 4, CancellationToken.None);
+        Assert.DoesNotContain(aprilAfterDelete, x => x.IsRegular && x.Name == "Wyplata");
+
+        await service.SyncRegularIncomesForMonthAsync(2026, 5, CancellationToken.None);
+        var may = await service.GetMonthIncomesAsync(2026, 5, CancellationToken.None);
+        Assert.Contains(may, x => x.IsRegular && x.Name == "Wyplata");
+    }
+
+    [Fact]
+    public async Task DeleteRegularDefinitionPermanentlyAsync_Should_Remove_Definition_From_Database()
+    {
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Rachunek", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        var service = CreateService();
+        var created = await service.CreateRegularDefinitionAsync(new CreateRegularIncomeDefinitionRequest
+        {
+            Name = "Wyplata",
+            Amount = 5000m,
+            DayOfMonth = 10,
+            AccountId = accountId
+        }, CancellationToken.None);
+
+        await service.DeleteRegularDefinitionPermanentlyAsync(
+            new DeleteRegularIncomeDefinitionRequest { Id = created.Id },
+            CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var exists = await verifyContext.RegularIncomeDefinitions.AnyAsync(x => x.Id == created.Id);
+        Assert.False(exists);
     }
 }
 

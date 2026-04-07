@@ -15,6 +15,8 @@ public sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
         builder.Property(x => x.Name)
             .HasMaxLength(100)
             .IsRequired();
+
+        builder.Property(x => x.SupportsLineItemsOverride);
         
         builder.HasQueryFilter(x => !x.IsDeleted);
         builder.Property(x => x.IsDeleted)

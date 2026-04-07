@@ -7,11 +7,14 @@ public interface IExpenseService
 {
     Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken);
     Task<IReadOnlyList<AvailableMonthDto>> GetAvailableMonthsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<RegularExpenseDefinitionDto>> GetRegularExpenseDefinitionsAsync(CancellationToken cancellationToken);
 
     Task<MonthSavingsTransferItemDto> CreateMonthSavingsTransferItemAsync(CreateMonthSavingsTransferItemRequest request,
         CancellationToken cancellationToken);
 
     Task<ExpenseDto> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken);
+    Task<RegularExpenseDefinitionDto> CreateRegularExpenseDefinitionAsync(CreateRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken);
 
     Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request,
         CancellationToken cancellationToken);
@@ -20,15 +23,24 @@ public interface IExpenseService
         CancellationToken cancellationToken);
 
     Task<ExpenseDto> UpdateExpenseAsync(UpdateExpenseRequest request, CancellationToken cancellationToken);
+    Task<RegularExpenseDefinitionDto> UpdateRegularExpenseDefinitionAsync(UpdateRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken);
 
     Task ReorderExpensesAsync(ReorderExpensesRequest request, CancellationToken cancellationToken);
+    Task ReorderRegularExpenseDefinitionsAsync(ReorderRegularExpenseDefinitionsRequest request,
+        CancellationToken cancellationToken);
 
     Task<ExpenseLineItemDto> UpdateExpenseLineItemAsync(UpdateExpenseLineItemRequest request,
         CancellationToken cancellationToken);
 
     Task DeleteExpenseAsync(DeleteExpenseRequest request, CancellationToken cancellationToken);
+    Task DeleteRegularExpenseDefinitionAsync(DeleteRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken);
     Task DeleteExpenseLineItemAsync(DeleteExpenseLineItemRequest request, CancellationToken cancellationToken);
 
     Task DeleteMonthSavingsTransferItemAsync(DeleteMonthSavingsTransferItemRequest request,
         CancellationToken cancellationToken);
+
+    Task CloseMonthAsync(int year, int month, CancellationToken cancellationToken);
+    Task OpenMonthAsync(int year, int month, CancellationToken cancellationToken);
 }

@@ -31,7 +31,7 @@ public static class IncomeExtensionMapping
             DayOfMonth = definition.DayOfMonth,
             AccountId = definition.AccountId,
             AccountName = definition.Account.Name,
-            IsActive = definition.IsActive
+            IsActive = definition.IsActive,
         };
     }
 }

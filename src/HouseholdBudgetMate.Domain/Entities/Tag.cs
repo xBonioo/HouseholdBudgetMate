@@ -7,6 +7,7 @@ public sealed class Tag : ATimestampable, IEntityId
     public int Id { get; set; }
     public string Name { get; set; } = null!;
     public int CategoryId { get; set; }
+    public bool? SupportsLineItemsOverride { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 

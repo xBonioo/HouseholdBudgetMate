@@ -1,0 +1,678 @@
+﻿@page "/recurring"
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests
+@using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using MudBlazor
+
+@inject IIncomeService IncomeService
+@inject IExpenseService ExpenseService
+@inject IAccountService AccountService
+@inject ICategoryService CategoryService
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+
+<script type="module" src="@Assets["Components/Pages/RecurringPage.razor.js"]"></script>
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudStack Spacing="3" Class="pa-4">
+    <MudPaper Class="hb-page-header">
+        <MudText Typo="Typo.h4">Cykliczne operacje</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">
+            Zarządzaj cyklicznymi wpływami i wydatkami, które będą automatycznie dodawane przy otwarciu miesiąca.
+        </MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wpływy</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField 
+                    @bind-Value="_newIncomeDefinition.Name" 
+                    MaxLength="64" 
+                    Label="Nazwa"
+                    Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_newIncomeDefinition.Amount"
+                                 Label="Kwota" 
+                                 Variant="Variant.Outlined" 
+                                 Min="0" 
+                                 Culture="_culture" 
+                                 Immediate="true"/>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudNumericField T="int" 
+                                 @bind-Value="_newIncomeDefinition.DayOfMonth" 
+                                 Label="Dzień miesiąca" 
+                                 Variant="Variant.Outlined" 
+                                 Min="1" 
+                                 Max="31"/>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="int" 
+                           @bind-Value="_newIncomeDefinition.AccountId" 
+                           Label="Konto"
+                           Variant="Variant.Outlined">
+                    @foreach (var account in _accounts)
+                    {
+                        <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
+                <MudButton 
+                    Variant="Variant.Filled" 
+                    Color="Color.Primary" 
+                    ButtonType="ButtonType.Button"
+                    OnClick="CreateIncomeDefinitionAsync">Dodaj</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_incomeDefinitions.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak cyklicznych wpływów.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_incomeDefinitions" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Nazwa</MudTh>
+                    <MudTh>Kwota</MudTh>
+                    <MudTh>Dzień</MudTh>
+                    <MudTh>Konto</MudTh>
+                    <MudTh>Aktywna</MudTh>
+                    <MudTh>Akcje</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    @if (_editIncomeDefinition?.Id == item.Id)
+                    {
+                        <MudTd><MudTextField 
+                                   @bind-Value="_editIncomeDefinition.Name" Variant="Variant.Outlined"/></MudTd>
+                        <MudTd><MudNumericField T="decimal" 
+                                                @bind-Value="_editIncomeDefinition.Amount"
+                                                Variant="Variant.Outlined"
+                                                Min="0" 
+                                                Culture="_culture"/></MudTd>
+                        <MudTd><MudNumericField T="int"
+                                                @bind-Value="_editIncomeDefinition.DayOfMonth" 
+                                                Variant="Variant.Outlined" 
+                                                Min="1" 
+                                                Max="31"/></MudTd>
+                        <MudTd>
+                            <MudSelect T="int" 
+                                       @bind-Value="_editIncomeDefinition.AccountId"
+                                       Variant="Variant.Outlined">
+                                @foreach (var account in _accounts)
+                                {
+                                    <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd><MudSwitch @bind-Value="_editIncomeDefinition.IsActive" Color="Color.Primary"/></MudTd>
+                        <MudTd>
+                            <MudButton 
+                                Variant="Variant.Filled" 
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                ButtonType="ButtonType.Button"
+                                OnClick="SaveIncomeEditAsync">Zapisz</MudButton>
+                            <MudButton
+                                Variant="Variant.Text" 
+                                Size="Size.Small" 
+                                ButtonType="ButtonType.Button"
+                                OnClick="CancelIncomeEdit">Anuluj</MudButton>
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd>@item.Name</MudTd>
+                        <MudTd>@item.Amount.ToString("0.00", _culture) zł</MudTd>
+                        <MudTd>@item.DayOfMonth</MudTd>
+                        <MudTd>@item.AccountName</MudTd>
+                        <MudTd><MudChip T="string" Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip></MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" ButtonType="ButtonType.Button" OnClick="() => StartIncomeEdit(item)">Edytuj</MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="@(item.IsActive ? Color.Warning : Color.Success)"
+                                       Size="Size.Small"
+                                       ButtonType="ButtonType.Button"
+                                       OnClick="() => ToggleIncomeDefinitionActiveAsync(item)">
+                                @(item.IsActive ? "Dezaktywuj" : "Aktywuj")
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       ButtonType="ButtonType.Button"
+                                       OnClick="() => DeleteIncomeDefinitionPermanentlyAsync(item.Id)">
+                                Usuń na stałe
+                            </MudButton>
+                        </MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wydatki</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField
+                    @bind-Value="_newExpenseDefinition.Name" 
+                    MaxLength="160" 
+                    Label="Nazwa" 
+                    Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="int"
+                           Value="_newExpenseDefinition.CategoryId"
+                           ValueChanged="OnCreateExpenseCategoryChanged"
+                           Label="Kategoria" 
+                           Variant="Variant.Outlined">
+                    @foreach (var category in _categories)
+                    {
+                        <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="int?"
+                           @bind-Value="_newExpenseDefinition.TagId"
+                           Label="Tag"
+                           Variant="Variant.Outlined" 
+                           Clearable="true">
+                    @foreach (var tag in GetSelectableTags(_newExpenseDefinition.CategoryId, _newExpenseDefinition.TagId))
+                    {
+                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_newExpenseDefinition.Amount" 
+                                 Label="Kwota" 
+                                 Variant="Variant.Outlined"
+                                 Min="0" 
+                                 Culture="_culture"
+                                 Immediate="true"/>
+            </MudItem>
+            <MudItem xs="12" md="1" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_newExpenseDefinition.ShowRemainingInUI"
+                           Color="Color.Primary"
+                           Label="Pozostałe"/>
+            </MudItem>
+            <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
+                <MudButton 
+                    Variant="Variant.Filled" 
+                    Color="Color.Primary" 
+                    OnClick="CreateExpenseDefinitionAsync">Dodaj</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_expenseDefinitions.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak cyklicznych wydatków.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_expenseDefinitions" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Kolejność</MudTh>
+                    <MudTh>Nazwa</MudTh>
+                    <MudTh>Kategoria</MudTh>
+                    <MudTh>Tag</MudTh>
+                    <MudTh>Kwota</MudTh>
+                    <MudTh>Pozostałe</MudTh>
+                    <MudTh>Aktywna</MudTh>
+                    <MudTh>Akcje</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    @if (_editExpenseDefinition?.Id == item.Id)
+                    {
+                        <MudTd>
+                            <div id="@GetExpenseDefinitionEditAnchorId(item.Id)" class="expense-edit-anchor"></div>
+                            @item.Order
+                        </MudTd>
+                        <MudTd><MudTextField @bind-Value="_editExpenseDefinition.Name" Variant="Variant.Outlined"/></MudTd>
+                        <MudTd>
+                            <MudSelect T="int" 
+                                       Value="_editExpenseDefinition.CategoryId"
+                                       ValueChanged="OnEditExpenseCategoryChanged" 
+                                       Variant="Variant.Outlined">
+                                @foreach (var category in _categories)
+                                {
+                                    <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd>
+                            <MudSelect T="int?" 
+                                       @bind-Value="_editExpenseDefinition.TagId" 
+                                       Variant="Variant.Outlined" 
+                                       Clearable="true">
+                                @foreach (var tag in GetSelectableTags(_editExpenseDefinition.CategoryId, _editExpenseDefinition.TagId))
+                                {
+                                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd><MudNumericField T="decimal"
+                                                @bind-Value="_editExpenseDefinition.Amount"
+                                                Variant="Variant.Outlined" 
+                                                Min="0"
+                                                Culture="_culture"/></MudTd>
+                        <MudTd>
+                            <MudSwitch 
+                                @bind-Value="_editExpenseDefinition.ShowRemainingInUI" 
+                                Color="Color.Primary"/>
+                        </MudTd>
+                        <MudTd><MudSwitch @bind-Value="_editExpenseDefinition.IsActive" Color="Color.Primary"/></MudTd>
+                        <MudTd>
+                            <MudButton 
+                                Variant="Variant.Filled"
+                                Color="Color.Primary" 
+                                Size="Size.Small" 
+                                ButtonType="ButtonType.Button"
+                                OnClick="SaveExpenseEditAsync">Zapisz</MudButton>
+                            <MudButton 
+                                Variant="Variant.Text"
+                                Size="Size.Small" 
+                                ButtonType="ButtonType.Button"
+                                OnClick="CancelExpenseEdit">Anuluj</MudButton>
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.caption">@item.Order</MudText>
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                               Size="Size.Small"
+                                               Disabled="@IsFirstExpenseDefinition(item.Id)"
+                                               OnClick="() => MoveExpenseDefinitionAsync(item.Id, -1)"/>
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                               Size="Size.Small"
+                                               Disabled="@IsLastExpenseDefinition(item.Id)"
+                                               OnClick="() => MoveExpenseDefinitionAsync(item.Id, 1)"/>
+                            </MudStack>
+                        </MudTd>
+                        <MudTd>@item.Name</MudTd>
+                        <MudTd>@item.CategoryName</MudTd>
+                        <MudTd>@(item.TagName ?? "-")</MudTd>
+                        <MudTd>@item.Amount.ToString("0.00", _culture) zł</MudTd>
+                        <MudTd><MudChip T="string" Color="@(item.ShowRemainingInUI ? Color.Success : Color.Default)">@(item.ShowRemainingInUI ? "Tak" : "Nie")</MudChip></MudTd>
+                        <MudTd><MudChip T="string" Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip></MudTd>
+                        <MudTd>
+                            <MudButton 
+                                Variant="Variant.Outlined" 
+                                Color="Color.Primary" 
+                                Size="Size.Small" 
+                                ButtonType="ButtonType.Button"
+                                OnClick="() => StartExpenseEdit(item)">Edytuj</MudButton>
+                            <MudButton
+                                Variant="Variant.Outlined"
+                                Color="@(item.IsActive ? Color.Warning : Color.Success)"
+                                Size="Size.Small"
+                                ButtonType="ButtonType.Button"
+                                OnClick="() => ToggleExpenseDefinitionActiveAsync(item)">
+                                @(item.IsActive ? "Dezaktywuj" : "Aktywuj")
+                            </MudButton>
+                        </MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+</MudStack>
+
+@code {
+    private bool _isLoading;
+    private readonly CultureInfo _culture = new("pl-PL");
+    private List<AccountDto> _accounts = [];
+    private List<CategoryDto> _categories = [];
+    private List<RegularIncomeDefinitionDto> _incomeDefinitions = [];
+    private List<RegularExpenseDefinitionDto> _expenseDefinitions = [];
+
+    private readonly CreateRegularIncomeDefinitionRequest _newIncomeDefinition = new()
+    {
+        DayOfMonth = 1
+    };
+    private readonly CreateRegularExpenseDefinitionRequest _newExpenseDefinition = new()
+    {
+        ShowRemainingInUI = true
+    };
+
+    private UpdateRegularIncomeDefinitionRequest? _editIncomeDefinition;
+    private UpdateRegularExpenseDefinitionRequest? _editExpenseDefinition;
+    private int? _expenseDefinitionIdPendingScrollIntoView;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_expenseDefinitionIdPendingScrollIntoView.HasValue)
+        {
+            return;
+        }
+
+        var definitionId = _expenseDefinitionIdPendingScrollIntoView.Value;
+        _expenseDefinitionIdPendingScrollIntoView = null;
+        await JsRuntime.InvokeVoidAsync("scrollRecurringExpenseRowIntoView", GetExpenseDefinitionEditAnchorId(definitionId));
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        
+        try
+        {
+            _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
+            _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+            _incomeDefinitions = (await IncomeService.GetRegularDefinitionsAsync(CancellationToken.None)).ToList();
+            _expenseDefinitions = (await ExpenseService.GetRegularExpenseDefinitionsAsync(CancellationToken.None)).ToList();
+
+            if (_newIncomeDefinition.AccountId == 0 && _accounts.Count > 0)
+            {
+                _newIncomeDefinition.AccountId = _accounts[0].Id;
+            }
+
+            if (_newExpenseDefinition.CategoryId == 0 && _categories.Count > 0)
+            {
+                _newExpenseDefinition.CategoryId = _categories[0].Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private IReadOnlyList<TagDto> GetSelectableTags(int categoryId, int? selectedTagId)
+    {
+        var tags = _categories.FirstOrDefault(x => x.Id == categoryId)?.Tags.OrderBy(x => x.Name).ToList();
+        if (tags is null)
+        {
+            return [];
+        }
+
+        if (!selectedTagId.HasValue || tags.Any(x => x.Id == selectedTagId.Value))
+        {
+            return tags;
+        }
+
+        var selectedTag = _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == selectedTagId.Value);
+        if (selectedTag is not null)
+        {
+            tags.Insert(0, selectedTag);
+        }
+
+        return tags;
+    }
+
+    private Task OnCreateExpenseCategoryChanged(int categoryId)
+    {
+        _newExpenseDefinition.CategoryId = categoryId;
+        _newExpenseDefinition.TagId = null;
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditExpenseCategoryChanged(int categoryId)
+    {
+        if (_editExpenseDefinition is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _editExpenseDefinition.CategoryId = categoryId;
+        _editExpenseDefinition.TagId = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task CreateIncomeDefinitionAsync()
+    {
+        try
+        {
+            await IncomeService.CreateRegularDefinitionAsync(_newIncomeDefinition, CancellationToken.None);
+            _newIncomeDefinition.Name = string.Empty;
+            _newIncomeDefinition.Amount = 0;
+            _newIncomeDefinition.DayOfMonth = 1;
+            await LoadAsync();
+            Snackbar.Add("Dodano cykliczny wpływ.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartIncomeEdit(RegularIncomeDefinitionDto definition)
+    {
+        _editIncomeDefinition = new UpdateRegularIncomeDefinitionRequest
+        {
+            Id = definition.Id,
+            Name = definition.Name,
+            Amount = definition.Amount,
+            DayOfMonth = definition.DayOfMonth,
+            AccountId = definition.AccountId,
+            IsActive = definition.IsActive
+        };
+    }
+
+    private void CancelIncomeEdit() => _editIncomeDefinition = null;
+
+    private async Task SaveIncomeEditAsync()
+    {
+        if (_editIncomeDefinition is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await IncomeService.UpdateRegularDefinitionAsync(_editIncomeDefinition, CancellationToken.None);
+            _editIncomeDefinition = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano cykliczny wpływ.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ToggleIncomeDefinitionActiveAsync(RegularIncomeDefinitionDto definition)
+    {
+        try
+        {
+            await IncomeService.UpdateRegularDefinitionAsync(new UpdateRegularIncomeDefinitionRequest
+            {
+                Id = definition.Id,
+                Name = definition.Name,
+                Amount = definition.Amount,
+                DayOfMonth = definition.DayOfMonth,
+                AccountId = definition.AccountId,
+                IsActive = !definition.IsActive
+            }, CancellationToken.None);
+
+            await LoadAsync();
+            Snackbar.Add(definition.IsActive ? "Zdezaktywowano cykliczny wpływ." : "Aktywowano cykliczny wpływ.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteIncomeDefinitionPermanentlyAsync(int definitionId)
+    {
+        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", "Usunąć cykliczny wpływ na stałe?");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            await IncomeService.DeleteRegularDefinitionPermanentlyAsync(
+                new DeleteRegularIncomeDefinitionRequest { Id = definitionId },
+                CancellationToken.None);
+
+            if (_editIncomeDefinition?.Id == definitionId)
+            {
+                _editIncomeDefinition = null;
+            }
+
+            await LoadAsync();
+            Snackbar.Add("Usunięto cykliczny wpływ na stałe.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task CreateExpenseDefinitionAsync()
+    {
+        try
+        {
+            await ExpenseService.CreateRegularExpenseDefinitionAsync(_newExpenseDefinition, CancellationToken.None);
+            _newExpenseDefinition.Name = string.Empty;
+            _newExpenseDefinition.Amount = 0;
+            _newExpenseDefinition.TagId = null;
+            await LoadAsync();
+            Snackbar.Add("Dodano cykliczny wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartExpenseEdit(RegularExpenseDefinitionDto definition)
+    {
+        _editExpenseDefinition = new UpdateRegularExpenseDefinitionRequest
+        {
+            Id = definition.Id,
+            Name = definition.Name,
+            CategoryId = definition.CategoryId,
+            TagId = definition.TagId,
+            Amount = definition.Amount,
+            IsActive = definition.IsActive,
+            ShowRemainingInUI = definition.ShowRemainingInUI
+        };
+
+        _expenseDefinitionIdPendingScrollIntoView = definition.Id;
+    }
+
+    private static string GetExpenseDefinitionEditAnchorId(int definitionId) => $"recurring-expense-edit-anchor-{definitionId}";
+
+    private void CancelExpenseEdit() => _editExpenseDefinition = null;
+
+    private IReadOnlyList<RegularExpenseDefinitionDto> OrderedExpenseDefinitions => _expenseDefinitions
+        .OrderBy(x => x.Order)
+        .ThenBy(x => x.Id)
+        .ToList();
+
+    private bool IsFirstExpenseDefinition(int definitionId)
+    {
+        return OrderedExpenseDefinitions.Count == 0 || OrderedExpenseDefinitions[0].Id == definitionId;
+    }
+
+    private bool IsLastExpenseDefinition(int definitionId)
+    {
+        return OrderedExpenseDefinitions.Count == 0 || OrderedExpenseDefinitions[^1].Id == definitionId;
+    }
+
+    private async Task MoveExpenseDefinitionAsync(int definitionId, int direction)
+    {
+        var ordered = OrderedExpenseDefinitions.ToList();
+        var index = ordered.FindIndex(x => x.Id == definitionId);
+
+        if (index == -1)
+        {
+            return;
+        }
+
+        var newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= ordered.Count)
+        {
+            return;
+        }
+
+        (ordered[index], ordered[newIndex]) = (ordered[newIndex], ordered[index]);
+
+        try
+        {
+            await ExpenseService.ReorderRegularExpenseDefinitionsAsync(new ReorderRegularExpenseDefinitionsRequest
+            {
+                DefinitionIds = ordered.Select(x => x.Id).ToList()
+            }, CancellationToken.None);
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SaveExpenseEditAsync()
+    {
+        if (_editExpenseDefinition is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await ExpenseService.UpdateRegularExpenseDefinitionAsync(_editExpenseDefinition, CancellationToken.None);
+            _editExpenseDefinition = null;
+            await LoadAsync();
+            Snackbar.Add("Zapisano cykliczny wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ToggleExpenseDefinitionActiveAsync(RegularExpenseDefinitionDto definition)
+    {
+        try
+        {
+            await ExpenseService.UpdateRegularExpenseDefinitionAsync(new UpdateRegularExpenseDefinitionRequest
+            {
+                Id = definition.Id,
+                Name = definition.Name,
+                CategoryId = definition.CategoryId,
+                TagId = definition.TagId,
+                Amount = definition.Amount,
+                IsActive = !definition.IsActive,
+                ShowRemainingInUI = definition.ShowRemainingInUI
+            }, CancellationToken.None);
+
+            await LoadAsync();
+            Snackbar.Add(definition.IsActive ? "Zdezaktywowano cykliczny wydatek." : "Aktywowano cykliczny wydatek.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

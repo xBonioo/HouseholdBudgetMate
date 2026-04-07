@@ -8,6 +8,7 @@ public sealed class ExpenseDto
     public string Name { get; set; } = null!;
     public int CategoryId { get; set; }
     public string CategoryName { get; set; } = null!;
+    public int? RegularExpenseDefinitionId { get; set; }
     public int? TagId { get; set; }
     public string? TagName { get; set; }
     public decimal PlannedAmount { get; set; }

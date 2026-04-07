@@ -2,6 +2,7 @@
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
 using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Abstractions.Interfaces;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Application.Mapping;
@@ -128,6 +129,27 @@ public sealed class IncomeService(
                              .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                          ?? throw new NotFoundException("Regular income definition not found.");
 
+        if (!definition.IsActive)
+        {
+            return;
+        }
+
+        definition.IsActive = false;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteRegularDefinitionPermanentlyAsync(
+        DeleteRegularIncomeDefinitionRequest request,
+        CancellationToken cancellationToken)
+    {
+        DeleteRegularDefinitionValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var definition = await dbContext.RegularIncomeDefinitions
+                             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                         ?? throw new NotFoundException("Regular income definition not found.");
+
         dbContext.RegularIncomeDefinitions.Remove(definition);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -137,6 +159,14 @@ public sealed class IncomeService(
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var monthPlan = await dbContext.MonthPlans
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
+        if (monthPlan?.IsClosed == true)
+        {
+            return;
+        }
 
         var definitions = await dbContext.RegularIncomeDefinitions
             .AsNoTracking()
@@ -149,6 +179,7 @@ public sealed class IncomeService(
         }
 
         var existingDefinitionIds = await dbContext.Incomes
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(x => x.Year == year && x.Month == month && x.IsRegular && x.RegularIncomeDefinitionId.HasValue)
             .Select(x => x.RegularIncomeDefinitionId!.Value)
@@ -203,6 +234,7 @@ public sealed class IncomeService(
         var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureMonthIsOpenAsync(dbContext, request.Year, request.Month, cancellationToken);
 
         var account = await dbContext.Accounts
                           .AsNoTracking()
@@ -218,7 +250,8 @@ public sealed class IncomeService(
             ExpectedDayOfMonth = request.ExpectedDayOfMonth,
             AccountId = request.AccountId,
             IsRegular = request.IsRegular,
-            RegularIncomeDefinitionId = null
+            RegularIncomeDefinitionId = null,
+            IsDeleted = false
         };
 
         dbContext.Incomes.Add(income);
@@ -248,6 +281,8 @@ public sealed class IncomeService(
         var income = await dbContext.Incomes
                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                      ?? throw new NotFoundException("Income not found.");
+
+        await EnsureMonthIsOpenAsync(dbContext, income.Year, income.Month, cancellationToken);
 
         DateInMonthValidator.ValidateOrThrowBadRequest(new DateInMonthRequest(
             request.ExpectedDayOfMonth,
@@ -292,7 +327,10 @@ public sealed class IncomeService(
                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                      ?? throw new NotFoundException("Income not found.");
 
-        dbContext.Incomes.Remove(income);
+        await EnsureMonthIsOpenAsync(dbContext, income.Year, income.Month, cancellationToken);
+
+        income.IsDeleted = true;
+        income.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -356,5 +394,18 @@ public sealed class IncomeService(
             SavingsTransfersTotal = savingsTransfersTotal,
             CurrentBalance = accountBaseTotal + incomesTotal - expensesTotal - savingsTransfersTotal
         };
+    }
+
+    private static async Task EnsureMonthIsOpenAsync(
+        ApplicationDbContext dbContext,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var monthPlan = await dbContext.MonthPlans
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
+
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
     }
 }

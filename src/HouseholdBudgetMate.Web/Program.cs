@@ -22,6 +22,7 @@ Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
     throw new InvalidOperationException("DefaultConnection string is not configured.");
@@ -80,6 +81,7 @@ builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IIncomeService, IncomeService>();
 
+builder.Services.AddScoped<IAppEventPublisher, LoggingAppEventPublisher>();
 builder.Services.AddScoped<CoreDataSeedService>();
 
 builder.AddSerilogLogging();

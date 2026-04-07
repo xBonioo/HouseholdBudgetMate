@@ -20,6 +20,10 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
             .HasMaxLength(32)
             .IsRequired();
 
+        builder.Property(x => x.EnvelopeLimit)
+            .HasPrecision(18, 2)
+            .IsRequired(false);
+
         builder.Property(x => x.SupportsLineItems)
             .IsRequired();
 

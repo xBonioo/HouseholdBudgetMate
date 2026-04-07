@@ -47,10 +47,10 @@
                 </MudButton>
 
                 <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/regular-incomes")"
+                           Class="@GetNavClass("/recurring")"
                            StartIcon="@Icons.Material.Filled.Repeat"
-                           OnClick="@(() => NavigationManager.NavigateTo("/regular-incomes"))">
-                    Wpływy regularne
+                           OnClick="@(() => NavigationManager.NavigateTo("/recurring"))">
+                    Cykliczne
                 </MudButton>
 
                 <MudButton Variant="Variant.Text"
@@ -174,7 +174,7 @@
                     {
                         Year = x.Year,
                         Month = x.Month,
-                        Label = $"{new DateTime(x.Year, x.Month, 1).ToString("MMMM", _culture)}"
+                        Label = $"{new DateTime(x.Year, x.Month, 1).ToString("MMMM", _culture)}{(x.IsClosed ? " (zamk.)" : string.Empty)}"
                     })
                     .ToList()
             })

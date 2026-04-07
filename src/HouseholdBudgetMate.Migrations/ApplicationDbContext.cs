@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AccountMonthBalance> AccountMonthBalances { get; set; }
     public DbSet<Income> Incomes { get; set; }
     public DbSet<RegularIncomeDefinition> RegularIncomeDefinitions { get; set; }
+    public DbSet<RegularExpenseDefinition> RegularExpenseDefinitions { get; set; }
     public DbSet<MonthSavingsTransferItem> MonthSavingsTransferItems { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)

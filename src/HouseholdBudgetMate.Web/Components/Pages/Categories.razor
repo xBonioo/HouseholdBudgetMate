@@ -1,4 +1,5 @@
 ﻿@page "/categories"
+@using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Categories.Requests
 @using MudBlazor
@@ -33,12 +34,18 @@
 
         <MudPaper Class="pa-4 hb-panel">
             <MudGrid>
-                <MudItem xs="12" md="4">
+                <MudItem xs="12" md="3">
                     <MudTextField
                         @bind-Value="_newCategory.Name"
                         Label="Nazwa kategorii"
                         Variant="Variant.Outlined"
                         Required="true"/>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudTextField @bind-Value="_newCategoryEnvelopeLimitInput"
+                                  Label="Limit"
+                                  Variant="Variant.Outlined"
+                                  Immediate="true"/>
                 </MudItem>
                 <MudItem xs="12" md="3">
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="color-editor-inline">
@@ -105,8 +112,16 @@
                                     <MudTextField @bind-Value="_editCategory.Color" Label="HEX"
                                                   Variant="Variant.Outlined" Margin="Margin.Dense"
                                                   Class="category-hex-field"/>
-                                    <MudSwitch @bind-Value="_editCategory.SupportsLineItems" Color="Color.Secondary"
+                                    <MudSwitch 
+                                        @bind-Value="_editCategory.SupportsLineItems" 
+                                        Color="Color.Secondary"
                                                Label="Pozycje"/>
+                                    <MudTextField @bind-Value="_editCategoryEnvelopeLimitInput"
+                                                  Label="Limit"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Immediate="true"
+                                                  Class="category-limit-field"/>
                                     <MudChip T="string" Variant="Variant.Outlined">Tagi: @category.Tags.Count</MudChip>
                                 </MudStack>
 
@@ -134,6 +149,12 @@
                                              Color="@(category.SupportsLineItems ? Color.Secondary : Color.Default)">
                                         @(category.SupportsLineItems ? "Pozycje: tak" : "Pozycje: nie")
                                     </MudChip>
+                                    @if (category.EnvelopeLimit.HasValue)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">
+                                            Limit: @category.EnvelopeLimit.Value.ToString("0.00") zł
+                                        </MudChip>
+                                    }
                                 </MudStack>
 
                                 <MudStack Row="true" Spacing="1" Class="category-row-actions">
@@ -181,6 +202,15 @@
                                                             Label="Edytuj tag"
                                                             Variant="Variant.Outlined"
                                                             Margin="Margin.Dense"/>
+                                                        <MudSelect T="bool?"
+                                                                   @bind-Value="_editTag.SupportsLineItemsOverride"
+                                                                   Label="Pozycje"
+                                                                   Variant="Variant.Outlined"
+                                                                   Margin="Margin.Dense">
+                                                            <MudSelectItem T="bool?" Value="@((bool?)null)">Dziedzicz</MudSelectItem>
+                                                            <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
+                                                            <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
+                                                        </MudSelect>
                                                         <MudButton
                                                             Variant="Variant.Filled"
                                                             Color="Color.Primary"
@@ -195,7 +225,12 @@
                                                 }
                                                 else
                                                 {
-                                                    <MudText Typo="Typo.subtitle2">@tag.Name</MudText>
+                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                        <MudText Typo="Typo.subtitle2">@tag.Name</MudText>
+                                                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">
+                                                            @GetTagLineItemsLabel(tag.SupportsLineItemsOverride)
+                                                        </MudChip>
+                                                    </MudStack>
                                                 }
 
                                                 <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
@@ -221,6 +256,15 @@
                                         Variant="Variant.Outlined"
                                         Margin="Margin.Dense"
                                         Class="tag-create-name"/>
+                                    <MudSelect T="bool?"
+                                               @bind-Value="GetTagCreateModel(category.Id).SupportsLineItemsOverride"
+                                               Label="Pozycje"
+                                               Variant="Variant.Outlined"
+                                               Margin="Margin.Dense">
+                                        <MudSelectItem T="bool?" Value="@((bool?)null)">Dziedzicz</MudSelectItem>
+                                        <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
+                                        <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
+                                    </MudSelect>
                                     <MudButton
                                         Variant="Variant.Outlined"
                                         Color="Color.Primary"
@@ -251,6 +295,9 @@
 
     private readonly Dictionary<int, TagCreateRequest> _tagCreateModels = new();
     private readonly HashSet<int> _expandedCategoryIds = [];
+    private static readonly CultureInfo Culture = new("pl-PL");
+    private string _newCategoryEnvelopeLimitInput = string.Empty;
+    private string _editCategoryEnvelopeLimitInput = string.Empty;
 
     private static readonly Regex HexColorRegex = new("^#(?:[0-9a-fA-F]{6})$", RegexOptions.Compiled);
 
@@ -311,10 +358,19 @@
             return;
         }
 
+        if (!TryParseEnvelopeLimit(_newCategoryEnvelopeLimitInput, out var envelopeLimit))
+        {
+            Snackbar.Add("Niepoprawny limit. Uzyj liczby, np. 12,50 lub 12.50.", Severity.Warning);
+            return;
+        }
+
+        _newCategory.EnvelopeLimit = envelopeLimit;
+
         try
         {
             await CategoryService.CreateCategoryAsync(_newCategory, CancellationToken.None);
             _newCategory = new CreateCategoryRequest { Color = "#4CAF50" };
+            _newCategoryEnvelopeLimitInput = string.Empty;
             await LoadAsync();
             Snackbar.Add("Dodano kategorie.", Severity.Success);
         }
@@ -331,8 +387,13 @@
             Id = category.Id,
             Name = category.Name,
             Color = category.Color,
+            EnvelopeLimit = category.EnvelopeLimit,
             SupportsLineItems = category.SupportsLineItems
         };
+
+        _editCategoryEnvelopeLimitInput = category.EnvelopeLimit.HasValue
+            ? category.EnvelopeLimit.Value.ToString("0.##", Culture)
+            : string.Empty;
     }
 
     private async Task SaveCategoryEditAsync()
@@ -354,6 +415,14 @@
             return;
         }
 
+        if (!TryParseEnvelopeLimit(_editCategoryEnvelopeLimitInput, out var envelopeLimit))
+        {
+            Snackbar.Add("Niepoprawny limit. Uzyj liczby, np. 12,50 lub 12.50.", Severity.Warning);
+            return;
+        }
+
+        _editCategory.EnvelopeLimit = envelopeLimit;
+
         try
         {
             await CategoryService.UpdateCategoryAsync(_editCategory, CancellationToken.None);
@@ -370,6 +439,7 @@
     private void CancelCategoryEdit()
     {
         _editCategory = null;
+        _editCategoryEnvelopeLimitInput = string.Empty;
     }
 
     private async Task DeleteCategoryAsync(CategoryDto category)
@@ -421,7 +491,8 @@
             await CategoryService.CreateTagAsync(new CreateTagRequest
             {
                 CategoryId = categoryId,
-                Name = model.Name
+                Name = model.Name,
+                SupportsLineItemsOverride = model.SupportsLineItemsOverride
             }, CancellationToken.None);
 
             _tagCreateModels[categoryId] = new TagCreateRequest();
@@ -440,7 +511,18 @@
         {
             Id = tag.Id,
             CategoryId = tag.CategoryId,
-            Name = tag.Name
+            Name = tag.Name,
+            SupportsLineItemsOverride = tag.SupportsLineItemsOverride
+        };
+    }
+
+    private static string GetTagLineItemsLabel(bool? overrideValue)
+    {
+        return overrideValue switch
+        {
+            true => "Pozycje: tak",
+            false => "Pozycje: nie",
+            _ => "Pozycje: dziedzicz"
         };
     }
 
@@ -492,6 +574,30 @@
     private bool IsValidHexColor(string? color)
     {
         return !string.IsNullOrWhiteSpace(color) && HexColorRegex.IsMatch(color);
+    }
+
+    private static bool TryParseEnvelopeLimit(string? rawValue, out decimal? value)
+    {
+        value = null;
+
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return true;
+        }
+
+        var normalized = rawValue.Trim().Replace(',', '.');
+        if (!decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedValue))
+        {
+            return false;
+        }
+
+        if (parsedValue < 0)
+        {
+            return false;
+        }
+
+        value = parsedValue;
+        return true;
     }
 
     private void ToggleCategoryTags(int categoryId)

@@ -1,6 +1,8 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
+using HouseholdBudgetMate.Abstractions.Contracts.Facility.Events;
 using HouseholdBudgetMate.Abstractions.Interfaces;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Application.Mapping;
@@ -15,7 +17,9 @@ namespace HouseholdBudgetMate.Application.Services;
 
 public sealed class ExpenseService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    IDateTimeProvider dateTimeProvider) : IExpenseService
+    IDateTimeProvider dateTimeProvider,
+    IAppEventPublisher appEventPublisher,
+    IIncomeService incomeService) : IExpenseService
 {
     private static readonly YearMonthRequestValidator YearMonthValidator = new();
     private static readonly DateInMonthRequestValidator DateInMonthValidator = new();
@@ -23,7 +27,6 @@ public sealed class ExpenseService(
     private static readonly CreateMonthSavingsTransferItemRequestValidator CreateSavingsTransferItemValidator = new();
     private static readonly CreateExpenseRequestValidator CreateExpenseValidator = new();
     private static readonly CreateExpenseLineItemRequestValidator CreateExpenseLineItemValidator = new();
-    private static readonly UpdateMonthSavingsTransferRequestValidator UpdateSavingsTransferValidator = new();
     private static readonly UpdateMonthSavingsTransferItemRequestValidator UpdateSavingsTransferItemValidator = new();
     private static readonly UpdateExpenseRequestValidator UpdateExpenseValidator = new();
     private static readonly ReorderExpensesRequestValidator ReorderExpensesValidator = new();
@@ -31,6 +34,10 @@ public sealed class ExpenseService(
     private static readonly DeleteMonthSavingsTransferItemRequestValidator DeleteSavingsTransferItemValidator = new();
     private static readonly DeleteExpenseRequestValidator DeleteExpenseValidator = new();
     private static readonly DeleteExpenseLineItemRequestValidator DeleteExpenseLineItemValidator = new();
+    private static readonly CreateRegularExpenseDefinitionRequestValidator CreateRegularExpenseDefinitionValidator = new();
+    private static readonly UpdateRegularExpenseDefinitionRequestValidator UpdateRegularExpenseDefinitionValidator = new();
+    private static readonly DeleteRegularExpenseDefinitionRequestValidator DeleteRegularExpenseDefinitionValidator = new();
+    private static readonly ReorderRegularExpenseDefinitionsRequestValidator ReorderRegularExpenseDefinitionsValidator = new();
 
     public async Task<IReadOnlyList<AvailableMonthDto>> GetAvailableMonthsAsync(CancellationToken cancellationToken)
     {
@@ -46,6 +53,157 @@ public sealed class ExpenseService(
         return monthPlans;
     }
 
+    public async Task<IReadOnlyList<RegularExpenseDefinitionDto>> GetRegularExpenseDefinitionsAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var definitions = await dbContext.RegularExpenseDefinitions
+            .AsNoTracking()
+            .Include(x => x.Category)
+            .Include(x => x.Tag)
+            .OrderBy(x => x.Order)
+            .ThenBy(x => x.Name)
+            .Select(x => x.MapRegularExpenseDefinitionToDto())
+            .ToListAsync(cancellationToken);
+
+        return definitions;
+    }
+
+    public async Task<RegularExpenseDefinitionDto> CreateRegularExpenseDefinitionAsync(
+        CreateRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken)
+    {
+        CreateRegularExpenseDefinitionValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCategoryAndTagValidAsync(dbContext, request.CategoryId, request.TagId, cancellationToken);
+
+        var definition = new RegularExpenseDefinition
+        {
+            Order = await dbContext.RegularExpenseDefinitions
+                .Select(x => (int?)x.Order)
+                .MaxAsync(cancellationToken) + 1 ?? 1,
+            Name = request.Name,
+            CategoryId = request.CategoryId,
+            TagId = request.TagId,
+            Amount = request.Amount,
+            IsActive = true,
+            ShowRemainingInUI = request.ShowRemainingInUI
+        };
+
+        dbContext.RegularExpenseDefinitions.Add(definition);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return await BuildRegularExpenseDefinitionDtoAsync(dbContext, definition.Id, cancellationToken);
+    }
+
+    public async Task<RegularExpenseDefinitionDto> UpdateRegularExpenseDefinitionAsync(
+        UpdateRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken)
+    {
+        UpdateRegularExpenseDefinitionValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var definition = await dbContext.RegularExpenseDefinitions
+                             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                         ?? throw new NotFoundException("Regular expense definition not found.");
+
+        await EnsureCategoryAndTagValidAsync(dbContext, request.CategoryId, request.TagId, cancellationToken);
+
+        definition.Name = request.Name;
+        definition.CategoryId = request.CategoryId;
+        definition.TagId = request.TagId;
+        definition.Amount = request.Amount;
+        definition.IsActive = request.IsActive;
+        definition.ShowRemainingInUI = request.ShowRemainingInUI;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return await BuildRegularExpenseDefinitionDtoAsync(dbContext, definition.Id, cancellationToken);
+    }
+
+    public async Task DeleteRegularExpenseDefinitionAsync(
+        DeleteRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken)
+    {
+        DeleteRegularExpenseDefinitionValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var definition = await dbContext.RegularExpenseDefinitions
+                             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                         ?? throw new NotFoundException("Regular expense definition not found.");
+
+        if (!definition.IsActive)
+        {
+            return;
+        }
+
+        definition.IsActive = false;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ReorderRegularExpenseDefinitionsAsync(
+        ReorderRegularExpenseDefinitionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        ReorderRegularExpenseDefinitionsValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var definitions = await dbContext.RegularExpenseDefinitions
+            .Where(x => request.DefinitionIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        if (definitions.Count != request.DefinitionIds.Count)
+        {
+            throw new BadRequestException("Some regular expense definitions were not found.");
+        }
+
+        for (var i = 0; i < request.DefinitionIds.Count; i++)
+        {
+            var definition = definitions.First(x => x.Id == request.DefinitionIds[i]);
+            definition.Order = i + 1;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task CloseMonthAsync(int year, int month, CancellationToken cancellationToken)
+    {
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+        if (monthPlan.IsClosed)
+        {
+            return;
+        }
+
+        monthPlan.IsClosed = true;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var nextMonth = new DateTime(year, month, 1).AddMonths(1);
+        await OpenMonthAsync(nextMonth.Year, nextMonth.Month, cancellationToken);
+    }
+
+    public async Task OpenMonthAsync(int year, int month, CancellationToken cancellationToken)
+    {
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+        monthPlan.IsClosed = false;
+
+        await SyncRegularExpensesForMonthAsync(dbContext, monthPlan, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await incomeService.SyncRegularIncomesForMonthAsync(year, month, cancellationToken);
+    }
+
     public async Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken)
     {
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
@@ -53,6 +211,13 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+
+        if (!monthPlan.IsClosed)
+        {
+            await SyncRegularExpensesForMonthAsync(dbContext, monthPlan, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await incomeService.SyncRegularIncomesForMonthAsync(year, month, cancellationToken);
+        }
 
         var expenseEntities = await dbContext.Expenses
             .AsNoTracking()
@@ -87,6 +252,7 @@ public sealed class ExpenseService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
 
         var item = new MonthSavingsTransferItem
         {
@@ -113,6 +279,8 @@ public sealed class ExpenseService(
                        .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                    ?? throw new NotFoundException("Savings transfer item not found.");
 
+        BudgetHelper.EnsureMonthIsOpen(item.MonthPlan);
+
         DateInMonthValidator.ValidateOrThrowBadRequest(new DateInMonthRequest(
             request.TransferDate,
             item.MonthPlan.Year,
@@ -134,8 +302,11 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var item = await dbContext.MonthSavingsTransferItems
+                       .Include(x => x.MonthPlan)
                        .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                    ?? throw new NotFoundException("Savings transfer item not found.");
+
+        BudgetHelper.EnsureMonthIsOpen(item.MonthPlan);
 
         dbContext.MonthSavingsTransferItems.Remove(item);
 
@@ -151,6 +322,12 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
+        var envelopeUsageBefore = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            monthPlan.Id,
+            request.CategoryId,
+            cancellationToken);
 
         var category = await dbContext.Categories
                            .AsNoTracking()
@@ -189,6 +366,19 @@ public sealed class ExpenseService(
         dbContext.Expenses.Add(expense);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var envelopeUsageAfter = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            monthPlan.Id,
+            request.CategoryId,
+            cancellationToken);
+
+        await EmitBudgetExceededEventIfNeededAsync(
+            envelopeUsageBefore,
+            envelopeUsageAfter,
+            monthPlan.Year,
+            monthPlan.Month,
+            cancellationToken);
+
         return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, tag?.Name);
     }
 
@@ -218,6 +408,11 @@ public sealed class ExpenseService(
             throw new BadRequestException("Expenses must belong to one month plan.");
         }
 
+        var monthPlan = await dbContext.MonthPlans
+            .FirstOrDefaultAsync(x => x.Id == monthPlanIds[0], cancellationToken)
+            ?? throw new NotFoundException("Month plan not found.");
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
+
         for (var i = 0; i < request.ExpenseIds.Count; i++)
         {
             var expense = expenses.First(x => x.Id == request.ExpenseIds[i]);
@@ -238,11 +433,22 @@ public sealed class ExpenseService(
 
         var expense = await dbContext.Expenses
                           .Include(x => x.Category)
+                          .Include(x => x.Tag)
+                          .Include(x => x.MonthPlan)
                           .Include(x => x.LineItems)
                           .FirstOrDefaultAsync(x => x.Id == request.ExpenseId, cancellationToken)
                       ?? throw new NotFoundException("Expense not found.");
 
-        if (!expense.Category.SupportsLineItems)
+        BudgetHelper.EnsureMonthIsOpen(expense.MonthPlan);
+
+        var envelopeUsageBefore = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            expense.MonthPlanId,
+            expense.CategoryId,
+            cancellationToken);
+
+        var supportsLineItems = expense.Tag?.SupportsLineItemsOverride ?? expense.Category.SupportsLineItems;
+        if (!supportsLineItems)
         {
             throw new BadRequestException("Selected category does not support line items.");
         }
@@ -278,6 +484,19 @@ public sealed class ExpenseService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var envelopeUsageAfter = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            expense.MonthPlanId,
+            expense.CategoryId,
+            cancellationToken);
+
+        await EmitBudgetExceededEventIfNeededAsync(
+            envelopeUsageBefore,
+            envelopeUsageAfter,
+            expense.MonthPlan.Year,
+            expense.MonthPlan.Month,
+            cancellationToken);
+
         return new ExpenseLineItemDto
         {
             Id = lineItem.Id,
@@ -302,10 +521,23 @@ public sealed class ExpenseService(
         var lineItem = await dbContext.ExpenseLineItems
                            .Include(x => x.Expense)
                            .ThenInclude(x => x.Category)
+                           .Include(x => x.Expense)
+                           .ThenInclude(x => x.Tag)
+                           .Include(x => x.Expense)
+                           .ThenInclude(x => x.MonthPlan)
                            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                        ?? throw new NotFoundException("Line item not found.");
 
-        if (!lineItem.Expense.Category.SupportsLineItems)
+        BudgetHelper.EnsureMonthIsOpen(lineItem.Expense.MonthPlan);
+
+        var envelopeUsageBefore = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            lineItem.Expense.MonthPlanId,
+            lineItem.Expense.CategoryId,
+            cancellationToken);
+
+        var supportsLineItems = lineItem.Expense.Tag?.SupportsLineItemsOverride ?? lineItem.Expense.Category.SupportsLineItems;
+        if (!supportsLineItems)
         {
             throw new BadRequestException("Selected category does not support line items.");
         }
@@ -333,6 +565,19 @@ public sealed class ExpenseService(
         await RecalculateActualAmountAsync(dbContext, lineItem.ExpenseId, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var envelopeUsageAfter = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            lineItem.Expense.MonthPlanId,
+            lineItem.Expense.CategoryId,
+            cancellationToken);
+
+        await EmitBudgetExceededEventIfNeededAsync(
+            envelopeUsageBefore,
+            envelopeUsageAfter,
+            lineItem.Expense.MonthPlan.Year,
+            lineItem.Expense.MonthPlan.Month,
+            cancellationToken);
+
         return new ExpenseLineItemDto
         {
             Id = lineItem.Id,
@@ -353,8 +598,12 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var lineItem = await dbContext.ExpenseLineItems
+                           .Include(x => x.Expense)
+                           .ThenInclude(x => x.MonthPlan)
                            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                        ?? throw new NotFoundException("Line item not found.");
+
+        BudgetHelper.EnsureMonthIsOpen(lineItem.Expense.MonthPlan);
 
         var expenseId = lineItem.ExpenseId;
         dbContext.ExpenseLineItems.Remove(lineItem);
@@ -373,8 +622,17 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var expense = await dbContext.Expenses
+                          .Include(x => x.MonthPlan)
                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                       ?? throw new NotFoundException("Expense not found.");
+
+        BudgetHelper.EnsureMonthIsOpen(expense.MonthPlan);
+
+        var envelopeUsageBefore = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            expense.MonthPlanId,
+            request.CategoryId,
+            cancellationToken);
 
         var category = await dbContext.Categories
                            .AsNoTracking()
@@ -411,6 +669,19 @@ public sealed class ExpenseService(
         await RecalculateActualAmountAsync(dbContext, expense.Id, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var envelopeUsageAfter = await GetEnvelopeUsageSnapshotAsync(
+            dbContext,
+            expense.MonthPlanId,
+            request.CategoryId,
+            cancellationToken);
+
+        await EmitBudgetExceededEventIfNeededAsync(
+            envelopeUsageBefore,
+            envelopeUsageAfter,
+            expense.MonthPlan.Year,
+            expense.MonthPlan.Month,
+            cancellationToken);
+
         return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, tag?.Name);
     }
 
@@ -421,8 +692,11 @@ public sealed class ExpenseService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var expense = await dbContext.Expenses
+                          .Include(x => x.MonthPlan)
                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                       ?? throw new NotFoundException("Expense not found.");
+
+        BudgetHelper.EnsureMonthIsOpen(expense.MonthPlan);
 
         expense.IsDeleted = true;
         expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
@@ -558,4 +832,159 @@ public sealed class ExpenseService(
 
         return dto;
     }
+
+    private static async Task<RegularExpenseDefinitionDto> BuildRegularExpenseDefinitionDtoAsync(
+        ApplicationDbContext dbContext,
+        int definitionId,
+        CancellationToken cancellationToken)
+    {
+        var definition = await dbContext.RegularExpenseDefinitions
+            .AsNoTracking()
+            .Include(x => x.Category)
+            .Include(x => x.Tag)
+            .FirstOrDefaultAsync(x => x.Id == definitionId, cancellationToken)
+            ?? throw new NotFoundException("Regular expense definition not found.");
+
+        return definition.MapRegularExpenseDefinitionToDto();
+    }
+
+    private static async Task EnsureCategoryAndTagValidAsync(
+        ApplicationDbContext dbContext,
+        int categoryId,
+        int? tagId,
+        CancellationToken cancellationToken)
+    {
+        var categoryExists = await dbContext.Categories
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == categoryId, cancellationToken);
+
+        if (!categoryExists)
+        {
+            throw new NotFoundException("Category not found.");
+        }
+
+        if (!tagId.HasValue)
+        {
+            return;
+        }
+
+        var tag = await dbContext.Tags
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == tagId.Value, cancellationToken)
+            ?? throw new NotFoundException("Tag not found.");
+
+        if (tag.CategoryId != categoryId)
+        {
+            throw new BadRequestException("Selected tag does not belong to selected category.");
+        }
+    }
+
+    private static async Task SyncRegularExpensesForMonthAsync(
+        ApplicationDbContext dbContext,
+        MonthPlan monthPlan,
+        CancellationToken cancellationToken)
+    {
+        var definitions = await dbContext.RegularExpenseDefinitions
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.Order)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        if (definitions.Count == 0)
+        {
+            return;
+        }
+
+        var existingDefinitionIds = await dbContext.Expenses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == monthPlan.Id && x.RegularExpenseDefinitionId.HasValue)
+            .Select(x => x.RegularExpenseDefinitionId!.Value)
+            .ToListAsync(cancellationToken);
+
+        var existingSet = existingDefinitionIds.ToHashSet();
+
+        var maxOrder = await dbContext.Expenses
+            .Where(x => x.MonthPlanId == monthPlan.Id)
+            .Select(x => (int?)x.Order)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        foreach (var definition in definitions)
+        {
+            if (existingSet.Contains(definition.Id))
+            {
+                continue;
+            }
+
+            maxOrder++;
+            dbContext.Expenses.Add(new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Order = maxOrder,
+                Name = definition.Name,
+                CategoryId = definition.CategoryId,
+                TagId = definition.TagId,
+                RegularExpenseDefinitionId = definition.Id,
+                PlannedAmount = definition.Amount,
+                ActualAmount = 0,
+                ShowRemainingInUI = definition.ShowRemainingInUI
+            });
+        }
+    }
+
+    private async Task EmitBudgetExceededEventIfNeededAsync(
+        EnvelopeUsageSnapshot? before,
+        EnvelopeUsageSnapshot? after,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        if (after is null)
+        {
+            return;
+        }
+
+        var wasExceeded = before is not null && before.SpentAmount > before.Limit;
+        var isExceeded = after.SpentAmount > after.Limit;
+
+        if (wasExceeded || !isExceeded)
+        {
+            return;
+        }
+
+        await appEventPublisher.PublishAsync(new BudgetExceededEvent
+        {
+            CategoryId = after.CategoryId,
+            CategoryName = after.CategoryName,
+            Year = year,
+            Month = month,
+            EnvelopeLimit = after.Limit,
+            SpentAmount = after.SpentAmount
+        }, cancellationToken);
+    }
+
+    private static async Task<EnvelopeUsageSnapshot?> GetEnvelopeUsageSnapshotAsync(
+        ApplicationDbContext dbContext,
+        int monthPlanId,
+        int categoryId,
+        CancellationToken cancellationToken)
+    {
+        var category = await dbContext.Categories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == categoryId, cancellationToken);
+
+        if (category?.EnvelopeLimit is not > 0)
+        {
+            return null;
+        }
+
+        var spentAmount = await dbContext.Expenses
+            .Where(x => x.MonthPlanId == monthPlanId && x.CategoryId == categoryId)
+            .SumAsync(x => x.ActualAmount, cancellationToken);
+
+        return new EnvelopeUsageSnapshot(category.Id, category.Name, category.EnvelopeLimit.Value, spentAmount);
+    }
+
+    private sealed record EnvelopeUsageSnapshot(int CategoryId, string CategoryName, decimal Limit, decimal SpentAmount);
 }

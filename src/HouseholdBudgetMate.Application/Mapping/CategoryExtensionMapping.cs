@@ -12,6 +12,7 @@ public static class CategoryExtensionMapping
             Id = category.Id,
             Name = category.Name,
             Color = category.Color,
+            EnvelopeLimit = category.EnvelopeLimit,
             SupportsLineItems = category.SupportsLineItems,
             Tags = category.Tags
                 .Where(x => !x.IsDeleted)
@@ -27,7 +28,8 @@ public static class CategoryExtensionMapping
         {
             Id = tag.Id,
             CategoryId = tag.CategoryId,
-            Name = tag.Name
+            Name = tag.Name,
+            SupportsLineItemsOverride = tag.SupportsLineItemsOverride
         };
     }
     

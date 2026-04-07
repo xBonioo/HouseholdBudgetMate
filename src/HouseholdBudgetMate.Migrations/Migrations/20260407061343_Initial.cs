@@ -39,6 +39,7 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Color = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    EnvelopeLimit = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     SupportsLineItems = table.Column<bool>(type: "boolean", nullable: false),
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
                     DeletedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -195,6 +196,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     AccountId = table.Column<int>(type: "integer", nullable: false),
                     IsRegular = table.Column<bool>(type: "boolean", nullable: false),
                     RegularIncomeDefinitionId = table.Column<int>(type: "integer", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    DeletedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -216,15 +219,50 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "RegularExpenseDefinitions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    CategoryId = table.Column<int>(type: "integer", nullable: false),
+                    TagId = table.Column<int>(type: "integer", nullable: true),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    ShowRemainingInUI = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RegularExpenseDefinitions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RegularExpenseDefinitions_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_RegularExpenseDefinitions_Tags_TagId",
+                        column: x => x.TagId,
+                        principalTable: "Tags",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Expenses",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     MonthPlanId = table.Column<int>(type: "integer", nullable: false),
+                    Order = table.Column<int>(type: "integer", nullable: false),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     CategoryId = table.Column<int>(type: "integer", nullable: false),
                     TagId = table.Column<int>(type: "integer", nullable: true),
+                    RegularExpenseDefinitionId = table.Column<int>(type: "integer", nullable: true),
                     PlannedAmount = table.Column<decimal>(type: "numeric", nullable: false),
                     ActualAmount = table.Column<decimal>(type: "numeric", nullable: false),
                     ShowRemainingInUI = table.Column<bool>(type: "boolean", nullable: false),
@@ -248,6 +286,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         principalTable: "MonthPlans",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Expenses_RegularExpenseDefinitions_RegularExpenseDefinition~",
+                        column: x => x.RegularExpenseDefinitionId,
+                        principalTable: "RegularExpenseDefinitions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_Expenses_Tags_TagId",
                         column: x => x.TagId,
@@ -314,9 +358,20 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 column: "CategoryId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Expenses_MonthPlanId",
+                name: "IX_Expenses_MonthPlanId_Order",
                 table: "Expenses",
-                column: "MonthPlanId");
+                columns: new[] { "MonthPlanId", "Order" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Expenses_MonthPlanId_RegularExpenseDefinitionId",
+                table: "Expenses",
+                columns: new[] { "MonthPlanId", "RegularExpenseDefinitionId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Expenses_RegularExpenseDefinitionId",
+                table: "Expenses",
+                column: "RegularExpenseDefinitionId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Expenses_TagId",
@@ -339,6 +394,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 columns: new[] { "Year", "Month" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Incomes_Year_Month_RegularIncomeDefinitionId",
+                table: "Incomes",
+                columns: new[] { "Year", "Month", "RegularIncomeDefinitionId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_MonthPlans_Year_Month",
                 table: "MonthPlans",
                 columns: new[] { "Year", "Month" },
@@ -353,6 +414,26 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 name: "IX_MonthSavingsTransferItems_TransferDate",
                 table: "MonthSavingsTransferItems",
                 column: "TransferDate");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RegularExpenseDefinitions_CategoryId",
+                table: "RegularExpenseDefinitions",
+                column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RegularExpenseDefinitions_IsActive",
+                table: "RegularExpenseDefinitions",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RegularExpenseDefinitions_Order",
+                table: "RegularExpenseDefinitions",
+                column: "Order");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RegularExpenseDefinitions_TagId",
+                table: "RegularExpenseDefinitions",
+                column: "TagId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RegularIncomeDefinitions_AccountId",
@@ -398,10 +479,13 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 name: "MonthPlans");
 
             migrationBuilder.DropTable(
-                name: "Tags");
+                name: "RegularExpenseDefinitions");
 
             migrationBuilder.DropTable(
                 name: "Accounts");
+
+            migrationBuilder.DropTable(
+                name: "Tags");
 
             migrationBuilder.DropTable(
                 name: "Categories");

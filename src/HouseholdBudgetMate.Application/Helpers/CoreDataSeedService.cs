@@ -16,11 +16,11 @@ public sealed class CoreDataSeedService(
     [
         new("Zakupy", "#4CAF50", true),
         new("Samochód", "#1E88E5", true),
-        new("Zdrowie", "#E53935", true),
+        new("Zdrowie", "#E53935", false),
         new("Rozrywka", "#8E24AA", true),
         new("Dom", "#FB8C00", false),
         new("Inne", "#0473ff", false),
-        new("Pies", "#000080", true),
+        new("Pies", "#000080", false),
         new("Rozwój", "#ff0000", false),
         new("Hobby", "#DD99F0", false),
     ];
@@ -273,10 +273,24 @@ public sealed class CoreDataSeedService(
             candidates.Add(new AccountMonthBalance
             {
                 AccountId = ingAccountId,
-                Year = previousMonth.Year,
-                Month = previousMonth.Month,
-                ClosingBalance = 4000m
+                Year = now.Year-1,
+                Month = 12,
+                ClosingBalance = 1000m
             });
+                
+            for (int i = 1; i <= 12; i++)
+            {
+                candidates.Add(new AccountMonthBalance
+                {
+                    AccountId = ingAccountId,
+                    Year = now.Year,
+                    Month = i,
+                    ClosingBalance = 1000m
+                });
+                
+                if (i == previousMonth.Month) 
+                    break;
+            }
         }
 
         if (candidates.Count == 0)

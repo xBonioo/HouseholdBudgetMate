@@ -31,6 +31,11 @@ public sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
         builder.Property(x => x.IsRegular)
             .IsRequired();
 
+        builder.HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Property(x => x.IsDeleted)
+            .IsRequired();
+
         builder.Property(x => x.CreatedAtUtc)
             .IsRequired();
 
@@ -48,6 +53,8 @@ public sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(x => new { x.Year, x.Month });
+        builder.HasIndex(x => new { x.Year, x.Month, x.RegularIncomeDefinitionId })
+            .IsUnique();
         builder.HasIndex(x => x.AccountId);
         builder.HasIndex(x => x.RegularIncomeDefinitionId);
     }

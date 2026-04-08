@@ -397,7 +397,7 @@
                                        @bind-Value="_editExpense.TagId"
                                        Variant="Variant.Outlined"
                                        Clearable="true">
-                                @foreach (var tag in GetSelectableTags(_editExpense.CategoryId, _editExpense.TagId))
+                                @foreach (var tag in GetSelectableRootTags(_editExpense.CategoryId, _editExpense.TagId))
                                 {
                                     <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                                 }
@@ -547,7 +547,10 @@
                                                                @bind-Value="_editLineItem.TagId"
                                                                Variant="Variant.Outlined"
                                                                Clearable="true" Margin="Margin.Dense">
-                                                        @foreach (var tag in GetSelectableTags(_editLineItemExpenseId == expense.Id ? expense.CategoryId : 0, _editLineItem.TagId))
+                                                        @foreach (var tag in GetSelectableLineItemTags(
+                                                                      _editLineItemExpenseId == expense.Id ? expense.CategoryId : 0,
+                                                                      _editLineItemExpenseId == expense.Id ? expense.TagId : null,
+                                                                      _editLineItem.TagId))
                                                         {
                                                             <MudSelectItem T="int?"
                                                                            Value="@tag.Id">@tag.Name</MudSelectItem>
@@ -620,7 +623,7 @@
                                                    Variant="Variant.Outlined"
                                                    Clearable="true"
                                                    Margin="Margin.Dense">
-                                            @foreach (var tag in GetSelectableTags(expense.CategoryId, createModel.TagId))
+                                            @foreach (var tag in GetSelectableLineItemTags(expense.CategoryId, expense.TagId, createModel.TagId))
                                             {
                                                 <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                                             }
@@ -677,7 +680,7 @@
                                Label="Tag"
                                Variant="Variant.Outlined"
                                Clearable="true">
-                        @foreach (var tag in GetSelectableTags(_newExpense.CategoryId, _newExpense.TagId))
+                        @foreach (var tag in GetSelectableRootTags(_newExpense.CategoryId, _newExpense.TagId))
                         {
                             <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                         }
@@ -869,6 +872,58 @@
         return tags;
     }
 
+    private IReadOnlyList<TagDto> GetSelectableRootTags(int categoryId, int? selectedTagId)
+    {
+        var rootTags = GetSelectableTags(categoryId, selectedTagId)
+            .Where(x => !x.ParentTagId.HasValue)
+            .OrderBy(x => x.Name)
+            .ToList();
+
+        if (selectedTagId.HasValue && rootTags.All(x => x.Id != selectedTagId.Value))
+        {
+            var selected = _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == selectedTagId.Value);
+            if (selected is not null)
+            {
+                var parent = selected.ParentTagId.HasValue
+                    ? _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == selected.ParentTagId.Value)
+                    : selected;
+
+                if (parent is not null && rootTags.All(x => x.Id != parent.Id))
+                {
+                    rootTags.Insert(0, parent);
+                }
+            }
+        }
+
+        return rootTags;
+    }
+
+    private IReadOnlyList<TagDto> GetSelectableLineItemTags(int categoryId, int? expenseMainTagId, int? selectedTagId)
+    {
+        var allTags = GetSelectableTags(categoryId, selectedTagId);
+        if (!expenseMainTagId.HasValue)
+        {
+            return allTags;
+        }
+
+        var scopedTags = allTags
+            .Where(x => x.Id == expenseMainTagId.Value || x.ParentTagId == expenseMainTagId.Value)
+            .OrderBy(x => x.ParentTagId.HasValue ? 1 : 0)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        if (selectedTagId.HasValue && scopedTags.All(x => x.Id != selectedTagId.Value))
+        {
+            var selected = allTags.FirstOrDefault(x => x.Id == selectedTagId.Value);
+            if (selected is not null)
+            {
+                scopedTags.Add(selected);
+            }
+        }
+
+        return scopedTags;
+    }
+
     private Task OnCreateCategoryChanged(int categoryId)
     {
         _newExpense.CategoryId = categoryId;
@@ -1030,7 +1085,7 @@
             Id = expense.Id,
             Name = expense.Name,
             CategoryId = expense.CategoryId,
-            TagId = expense.TagId,
+            TagId = GetRootTagId(expense.TagId),
             PlannedAmount = expense.PlannedAmount,
             ActualAmount = expense.ActualAmount,
             ShowRemainingInUI = expense.ShowRemainingInUI,
@@ -1049,6 +1104,17 @@
     }
 
     private static string GetExpenseEditAnchorId(int expenseId) => $"expense-edit-anchor-{expenseId}";
+
+    private int? GetRootTagId(int? tagId)
+    {
+        if (!tagId.HasValue)
+        {
+            return null;
+        }
+
+        var tag = _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == tagId.Value);
+        return tag?.ParentTagId ?? tagId;
+    }
 
     private void CancelEdit()
     {

@@ -34,32 +34,32 @@
         <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wpływy</MudText>
         <MudGrid>
             <MudItem xs="12" md="4">
-                <MudTextField 
-                    @bind-Value="_newIncomeDefinition.Name" 
-                    MaxLength="64" 
+                <MudTextField
+                    @bind-Value="_newIncomeDefinition.Name"
+                    MaxLength="64"
                     Label="Nazwa"
                     Variant="Variant.Outlined"/>
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudNumericField T="decimal"
                                  @bind-Value="_newIncomeDefinition.Amount"
-                                 Label="Kwota" 
-                                 Variant="Variant.Outlined" 
-                                 Min="0" 
-                                 Culture="_culture" 
+                                 Label="Kwota"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Culture="_culture"
                                  Immediate="true"/>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudNumericField T="int" 
-                                 @bind-Value="_newIncomeDefinition.DayOfMonth" 
-                                 Label="Dzień miesiąca" 
-                                 Variant="Variant.Outlined" 
-                                 Min="1" 
+                <MudNumericField T="int"
+                                 @bind-Value="_newIncomeDefinition.DayOfMonth"
+                                 Label="Dzień miesiąca"
+                                 Variant="Variant.Outlined"
+                                 Min="1"
                                  Max="31"/>
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudSelect T="int" 
-                           @bind-Value="_newIncomeDefinition.AccountId" 
+                <MudSelect T="int"
+                           @bind-Value="_newIncomeDefinition.AccountId"
                            Label="Konto"
                            Variant="Variant.Outlined">
                     @foreach (var account in _accounts)
@@ -69,11 +69,12 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
-                <MudButton 
-                    Variant="Variant.Filled" 
-                    Color="Color.Primary" 
+                <MudButton
+                    Variant="Variant.Filled"
+                    Color="Color.Primary"
                     ButtonType="ButtonType.Button"
-                    OnClick="CreateIncomeDefinitionAsync">Dodaj</MudButton>
+                    OnClick="CreateIncomeDefinitionAsync">Dodaj
+                </MudButton>
             </MudItem>
         </MudGrid>
 
@@ -95,20 +96,26 @@
                 <RowTemplate Context="item">
                     @if (_editIncomeDefinition?.Id == item.Id)
                     {
-                        <MudTd><MudTextField 
-                                   @bind-Value="_editIncomeDefinition.Name" Variant="Variant.Outlined"/></MudTd>
-                        <MudTd><MudNumericField T="decimal" 
-                                                @bind-Value="_editIncomeDefinition.Amount"
-                                                Variant="Variant.Outlined"
-                                                Min="0" 
-                                                Culture="_culture"/></MudTd>
-                        <MudTd><MudNumericField T="int"
-                                                @bind-Value="_editIncomeDefinition.DayOfMonth" 
-                                                Variant="Variant.Outlined" 
-                                                Min="1" 
-                                                Max="31"/></MudTd>
                         <MudTd>
-                            <MudSelect T="int" 
+                            <MudTextField
+                                @bind-Value="_editIncomeDefinition.Name" Variant="Variant.Outlined"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudNumericField T="decimal"
+                                             @bind-Value="_editIncomeDefinition.Amount"
+                                             Variant="Variant.Outlined"
+                                             Min="0"
+                                             Culture="_culture"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudNumericField T="int"
+                                             @bind-Value="_editIncomeDefinition.DayOfMonth"
+                                             Variant="Variant.Outlined"
+                                             Min="1"
+                                             Max="31"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudSelect T="int"
                                        @bind-Value="_editIncomeDefinition.AccountId"
                                        Variant="Variant.Outlined">
                                 @foreach (var account in _accounts)
@@ -117,19 +124,23 @@
                                 }
                             </MudSelect>
                         </MudTd>
-                        <MudTd><MudSwitch @bind-Value="_editIncomeDefinition.IsActive" Color="Color.Primary"/></MudTd>
                         <MudTd>
-                            <MudButton 
-                                Variant="Variant.Filled" 
+                            <MudSwitch @bind-Value="_editIncomeDefinition.IsActive" Color="Color.Primary"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton
+                                Variant="Variant.Filled"
                                 Color="Color.Primary"
                                 Size="Size.Small"
                                 ButtonType="ButtonType.Button"
-                                OnClick="SaveIncomeEditAsync">Zapisz</MudButton>
+                                OnClick="SaveIncomeEditAsync">Zapisz
+                            </MudButton>
                             <MudButton
-                                Variant="Variant.Text" 
-                                Size="Size.Small" 
+                                Variant="Variant.Text"
+                                Size="Size.Small"
                                 ButtonType="ButtonType.Button"
-                                OnClick="CancelIncomeEdit">Anuluj</MudButton>
+                                OnClick="CancelIncomeEdit">Anuluj
+                            </MudButton>
                         </MudTd>
                     }
                     else
@@ -138,9 +149,14 @@
                         <MudTd>@item.Amount.ToString("0.00", _culture) zł</MudTd>
                         <MudTd>@item.DayOfMonth</MudTd>
                         <MudTd>@item.AccountName</MudTd>
-                        <MudTd><MudChip T="string" Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip></MudTd>
                         <MudTd>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" ButtonType="ButtonType.Button" OnClick="() => StartIncomeEdit(item)">Edytuj</MudButton>
+                            <MudChip T="string"
+                                     Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                       ButtonType="ButtonType.Button" OnClick="() => StartIncomeEdit(item)">Edytuj
+                            </MudButton>
                             <MudButton Variant="Variant.Outlined"
                                        Color="@(item.IsActive ? Color.Warning : Color.Success)"
                                        Size="Size.Small"
@@ -153,7 +169,7 @@
                                        Size="Size.Small"
                                        ButtonType="ButtonType.Button"
                                        OnClick="() => DeleteIncomeDefinitionPermanentlyAsync(item.Id)">
-                                Usuń na stałe
+                                Usuń
                             </MudButton>
                         </MudTd>
                     }
@@ -167,16 +183,16 @@
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudTextField
-                    @bind-Value="_newExpenseDefinition.Name" 
-                    MaxLength="160" 
-                    Label="Nazwa" 
+                    @bind-Value="_newExpenseDefinition.Name"
+                    MaxLength="160"
+                    Label="Nazwa"
                     Variant="Variant.Outlined"/>
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudSelect T="int"
                            Value="_newExpenseDefinition.CategoryId"
                            ValueChanged="OnCreateExpenseCategoryChanged"
-                           Label="Kategoria" 
+                           Label="Kategoria"
                            Variant="Variant.Outlined">
                     @foreach (var category in _categories)
                     {
@@ -188,9 +204,9 @@
                 <MudSelect T="int?"
                            @bind-Value="_newExpenseDefinition.TagId"
                            Label="Tag"
-                           Variant="Variant.Outlined" 
+                           Variant="Variant.Outlined"
                            Clearable="true">
-                    @foreach (var tag in GetSelectableTags(_newExpenseDefinition.CategoryId, _newExpenseDefinition.TagId))
+                    @foreach (var tag in GetSelectableRootTags(_newExpenseDefinition.CategoryId, _newExpenseDefinition.TagId))
                     {
                         <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                     }
@@ -198,10 +214,10 @@
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudNumericField T="decimal"
-                                 @bind-Value="_newExpenseDefinition.Amount" 
-                                 Label="Kwota" 
+                                 @bind-Value="_newExpenseDefinition.Amount"
+                                 Label="Kwota"
                                  Variant="Variant.Outlined"
-                                 Min="0" 
+                                 Min="0"
                                  Culture="_culture"
                                  Immediate="true"/>
             </MudItem>
@@ -211,10 +227,11 @@
                            Label="Pozostałe"/>
             </MudItem>
             <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
-                <MudButton 
-                    Variant="Variant.Filled" 
-                    Color="Color.Primary" 
-                    OnClick="CreateExpenseDefinitionAsync">Dodaj</MudButton>
+                <MudButton
+                    Variant="Variant.Filled"
+                    Color="Color.Primary"
+                    OnClick="CreateExpenseDefinitionAsync">Dodaj
+                </MudButton>
             </MudItem>
         </MudGrid>
 
@@ -242,11 +259,13 @@
                             <div id="@GetExpenseDefinitionEditAnchorId(item.Id)" class="expense-edit-anchor"></div>
                             @item.Order
                         </MudTd>
-                        <MudTd><MudTextField @bind-Value="_editExpenseDefinition.Name" Variant="Variant.Outlined"/></MudTd>
                         <MudTd>
-                            <MudSelect T="int" 
+                            <MudTextField @bind-Value="_editExpenseDefinition.Name" Variant="Variant.Outlined"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudSelect T="int"
                                        Value="_editExpenseDefinition.CategoryId"
-                                       ValueChanged="OnEditExpenseCategoryChanged" 
+                                       ValueChanged="OnEditExpenseCategoryChanged"
                                        Variant="Variant.Outlined">
                                 @foreach (var category in _categories)
                                 {
@@ -255,39 +274,45 @@
                             </MudSelect>
                         </MudTd>
                         <MudTd>
-                            <MudSelect T="int?" 
-                                       @bind-Value="_editExpenseDefinition.TagId" 
-                                       Variant="Variant.Outlined" 
+                            <MudSelect T="int?"
+                                       @bind-Value="_editExpenseDefinition.TagId"
+                                       Variant="Variant.Outlined"
                                        Clearable="true">
-                                @foreach (var tag in GetSelectableTags(_editExpenseDefinition.CategoryId, _editExpenseDefinition.TagId))
+                                @foreach (var tag in GetSelectableRootTags(_editExpenseDefinition.CategoryId, _editExpenseDefinition.TagId))
                                 {
                                     <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudTd>
-                        <MudTd><MudNumericField T="decimal"
-                                                @bind-Value="_editExpenseDefinition.Amount"
-                                                Variant="Variant.Outlined" 
-                                                Min="0"
-                                                Culture="_culture"/></MudTd>
                         <MudTd>
-                            <MudSwitch 
-                                @bind-Value="_editExpenseDefinition.ShowRemainingInUI" 
+                            <MudNumericField T="decimal"
+                                             @bind-Value="_editExpenseDefinition.Amount"
+                                             Variant="Variant.Outlined"
+                                             Min="0"
+                                             Culture="_culture"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudSwitch
+                                @bind-Value="_editExpenseDefinition.ShowRemainingInUI"
                                 Color="Color.Primary"/>
                         </MudTd>
-                        <MudTd><MudSwitch @bind-Value="_editExpenseDefinition.IsActive" Color="Color.Primary"/></MudTd>
                         <MudTd>
-                            <MudButton 
+                            <MudSwitch @bind-Value="_editExpenseDefinition.IsActive" Color="Color.Primary"/>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton
                                 Variant="Variant.Filled"
-                                Color="Color.Primary" 
-                                Size="Size.Small" 
+                                Color="Color.Primary"
+                                Size="Size.Small"
                                 ButtonType="ButtonType.Button"
-                                OnClick="SaveExpenseEditAsync">Zapisz</MudButton>
-                            <MudButton 
+                                OnClick="SaveExpenseEditAsync">Zapisz
+                            </MudButton>
+                            <MudButton
                                 Variant="Variant.Text"
-                                Size="Size.Small" 
+                                Size="Size.Small"
                                 ButtonType="ButtonType.Button"
-                                OnClick="CancelExpenseEdit">Anuluj</MudButton>
+                                OnClick="CancelExpenseEdit">Anuluj
+                            </MudButton>
                         </MudTd>
                     }
                     else
@@ -309,15 +334,22 @@
                         <MudTd>@item.CategoryName</MudTd>
                         <MudTd>@(item.TagName ?? "-")</MudTd>
                         <MudTd>@item.Amount.ToString("0.00", _culture) zł</MudTd>
-                        <MudTd><MudChip T="string" Color="@(item.ShowRemainingInUI ? Color.Success : Color.Default)">@(item.ShowRemainingInUI ? "Tak" : "Nie")</MudChip></MudTd>
-                        <MudTd><MudChip T="string" Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip></MudTd>
                         <MudTd>
-                            <MudButton 
-                                Variant="Variant.Outlined" 
-                                Color="Color.Primary" 
-                                Size="Size.Small" 
+                            <MudChip T="string"
+                                     Color="@(item.ShowRemainingInUI ? Color.Success : Color.Default)">@(item.ShowRemainingInUI ? "Tak" : "Nie")</MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudChip T="string"
+                                     Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudButton
+                                Variant="Variant.Outlined"
+                                Color="Color.Primary"
+                                Size="Size.Small"
                                 ButtonType="ButtonType.Button"
-                                OnClick="() => StartExpenseEdit(item)">Edytuj</MudButton>
+                                OnClick="() => StartExpenseEdit(item)">Edytuj
+                            </MudButton>
                             <MudButton
                                 Variant="Variant.Outlined"
                                 Color="@(item.IsActive ? Color.Warning : Color.Success)"
@@ -325,6 +357,13 @@
                                 ButtonType="ButtonType.Button"
                                 OnClick="() => ToggleExpenseDefinitionActiveAsync(item)">
                                 @(item.IsActive ? "Dezaktywuj" : "Aktywuj")
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       ButtonType="ButtonType.Button"
+                                       OnClick="() => DeleteExpenseDefinitionPermanentlyAsync(item.Id)">
+                                Usuń
                             </MudButton>
                         </MudTd>
                     }
@@ -346,6 +385,7 @@
     {
         DayOfMonth = 1
     };
+
     private readonly CreateRegularExpenseDefinitionRequest _newExpenseDefinition = new()
     {
         ShowRemainingInUI = true
@@ -375,7 +415,7 @@
     private async Task LoadAsync()
     {
         _isLoading = true;
-        
+
         try
         {
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
@@ -423,6 +463,13 @@
         }
 
         return tags;
+    }
+
+    private IReadOnlyList<TagDto> GetSelectableRootTags(int categoryId, int? selectedTagId)
+    {
+        return GetSelectableTags(categoryId, selectedTagId)
+            .Where(x => !x.ParentTagId.HasValue)
+            .ToList();
     }
 
     private Task OnCreateExpenseCategoryChanged(int categoryId)
@@ -675,4 +722,33 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
+
+    private async Task DeleteExpenseDefinitionPermanentlyAsync(int definitionId)
+    {
+        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", "Usunąć cykliczny wydatek na stałe?");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            await ExpenseService.DeleteRegularExpenseDefinitionPermanentlyAsync(
+                new DeleteRegularExpenseDefinitionRequest { Id = definitionId },
+                CancellationToken.None);
+
+            if (_editExpenseDefinition?.Id == definitionId)
+            {
+                _editExpenseDefinition = null;
+            }
+
+            await LoadAsync();
+            Snackbar.Add("Usunięto cykliczny wydatek na stałe.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
 }

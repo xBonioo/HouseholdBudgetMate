@@ -74,6 +74,20 @@
     border-left: 4px solid #6366f1;
 }
 
+.categories-page-root ::deep .tag-inline-row-root {
+    border-left-color: #6366f1;
+}
+
+.categories-page-root ::deep .tag-children-list {
+    margin-left: 28px;
+    padding-left: 14px;
+    border-left: 1px dashed #cbd5e1;
+}
+
+.categories-page-root ::deep .tag-inline-row-child {
+    border-left-color: #94a3b8;
+}
+
 .categories-page-root ::deep .tag-inline-main {
     min-width: 0;
     flex: 1;

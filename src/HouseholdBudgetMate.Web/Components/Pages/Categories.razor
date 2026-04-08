@@ -184,65 +184,93 @@
                                 }
                                 else
                                 {
-                                    @foreach (var tag in category.Tags.OrderBy(x => x.Name))
+                                    @foreach (var rootTag in GetRootTagsForDisplay(category))
                                     {
-                                        <MudPaper Class="pa-2 hb-panel tag-inline-row">
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween"
-                                                      AlignItems="AlignItems.Center"
-                                                      Wrap="Wrap.NoWrap">
-                                                @if (_editTag is not null && _editTag.Id == tag.Id)
+                                        <MudPaper Class="pa-2 hb-panel tag-inline-row tag-inline-row-root">
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                                @if (_editTag is not null && _editTag.Id == rootTag.Id)
                                                 {
-                                                    <MudStack Row="true"
-                                                              Spacing="2"
-                                                              AlignItems="AlignItems.Center"
-                                                              Wrap="Wrap.NoWrap"
-                                                              Class="tag-inline-main">
-                                                        <MudTextField
-                                                            @bind-Value="_editTag.Name"
-                                                            Label="Edytuj tag"
-                                                            Variant="Variant.Outlined"
-                                                            Margin="Margin.Dense"/>
-                                                        <MudSelect T="bool?"
-                                                                   @bind-Value="_editTag.SupportsLineItemsOverride"
-                                                                   Label="Pozycje"
-                                                                   Variant="Variant.Outlined"
-                                                                   Margin="Margin.Dense">
+                                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-inline-main">
+                                                        <MudTextField @bind-Value="_editTag.Name" Label="Edytuj tag" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                                                        <MudSelect T="int?" @bind-Value="_editTag.ParentTagId" Label="Tag główny" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                                            <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
+                                                            @foreach (var rootTagOption in GetRootTagOptions(category.Id, _editTag.Id))
+                                                            {
+                                                                <MudSelectItem T="int?" Value="@rootTagOption.Id">@rootTagOption.Name</MudSelectItem>
+                                                            }
+                                                        </MudSelect>
+                                                        <MudSelect T="bool?" @bind-Value="_editTag.SupportsLineItemsOverride" Label="Pozycje" Variant="Variant.Outlined" Margin="Margin.Dense">
                                                             <MudSelectItem T="bool?" Value="@((bool?)null)">Dziedzicz</MudSelectItem>
                                                             <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
                                                             <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
                                                         </MudSelect>
-                                                        <MudButton
-                                                            Variant="Variant.Filled"
-                                                            Color="Color.Primary"
-                                                            OnClick="SaveTagEditAsync">Zapisz
-                                                        </MudButton>
-                                                        <MudButton
-                                                            Variant="Variant.Text"
-                                                            OnClick="CancelTagEdit">
-                                                            Anuluj
-                                                        </MudButton>
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTagEditAsync">Zapisz</MudButton>
+                                                        <MudButton Variant="Variant.Text" OnClick="CancelTagEdit">Anuluj</MudButton>
                                                     </MudStack>
                                                 }
                                                 else
                                                 {
                                                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                                        <MudText Typo="Typo.subtitle2">@tag.Name</MudText>
+                                                        <MudText Typo="Typo.subtitle2">@rootTag.Name</MudText>
                                                         <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">
-                                                            @GetTagLineItemsLabel(tag.SupportsLineItemsOverride)
+                                                            @GetTagLineItemsLabel(rootTag.SupportsLineItemsOverride)
                                                         </MudChip>
                                                     </MudStack>
                                                 }
 
                                                 <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                                                   Color="Color.Primary"
-                                                                   OnClick="() => BeginTagEdit(tag)"/>
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                                   Color="Color.Error"
-                                                                   OnClick="() => DeleteTagAsync(tag.Id)"/>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginTagEdit(rootTag)"/>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteTagAsync(rootTag.Id)"/>
                                                 </MudStack>
                                             </MudStack>
                                         </MudPaper>
+
+                                        @if (GetChildTagsForDisplay(category, rootTag.Id).Count > 0)
+                                        {
+                                            <MudStack Spacing="1" Class="tag-children-list">
+                                                @foreach (var childTag in GetChildTagsForDisplay(category, rootTag.Id))
+                                                {
+                                                    <MudPaper Class="pa-2 hb-panel tag-inline-row tag-inline-row-child">
+                                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                                            @if (_editTag is not null && _editTag.Id == childTag.Id)
+                                                            {
+                                                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-inline-main">
+                                                                    <MudTextField @bind-Value="_editTag.Name" Label="Edytuj tag" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                                                                    <MudSelect T="int?" @bind-Value="_editTag.ParentTagId" Label="Tag główny" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                                                        <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
+                                                                        @foreach (var rootTagOption in GetRootTagOptions(category.Id, _editTag.Id))
+                                                                        {
+                                                                            <MudSelectItem T="int?" Value="@rootTagOption.Id">@rootTagOption.Name</MudSelectItem>
+                                                                        }
+                                                                    </MudSelect>
+                                                                    <MudSelect T="bool?" @bind-Value="_editTag.SupportsLineItemsOverride" Label="Pozycje" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                                                        <MudSelectItem T="bool?" Value="@((bool?)null)">Dziedzicz</MudSelectItem>
+                                                                        <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
+                                                                        <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
+                                                                    </MudSelect>
+                                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTagEditAsync">Zapisz</MudButton>
+                                                                    <MudButton Variant="Variant.Text" OnClick="CancelTagEdit">Anuluj</MudButton>
+                                                                </MudStack>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                                    <MudText Typo="Typo.subtitle2">@childTag.Name</MudText>
+                                                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">
+                                                                        @GetTagLineItemsLabel(childTag.SupportsLineItemsOverride)
+                                                                    </MudChip>
+                                                                </MudStack>
+                                                            }
+
+                                                            <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginTagEdit(childTag)"/>
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteTagAsync(childTag.Id)"/>
+                                                            </MudStack>
+                                                        </MudStack>
+                                                    </MudPaper>
+                                                }
+                                            </MudStack>
+                                        }
                                     }
                                 }
 
@@ -256,6 +284,17 @@
                                         Variant="Variant.Outlined"
                                         Margin="Margin.Dense"
                                         Class="tag-create-name"/>
+                                    <MudSelect T="int?"
+                                               @bind-Value="GetTagCreateModel(category.Id).ParentTagId"
+                                               Label="Tag główny"
+                                               Variant="Variant.Outlined"
+                                               Margin="Margin.Dense">
+                                        <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
+                                        @foreach (var rootTag in GetRootTagOptions(category.Id, null))
+                                        {
+                                            <MudSelectItem T="int?" Value="@rootTag.Id">@rootTag.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
                                     <MudSelect T="bool?"
                                                @bind-Value="GetTagCreateModel(category.Id).SupportsLineItemsOverride"
                                                Label="Pozycje"
@@ -492,6 +531,7 @@
             {
                 CategoryId = categoryId,
                 Name = model.Name,
+                ParentTagId = model.ParentTagId,
                 SupportsLineItemsOverride = model.SupportsLineItemsOverride
             }, CancellationToken.None);
 
@@ -512,8 +552,36 @@
             Id = tag.Id,
             CategoryId = tag.CategoryId,
             Name = tag.Name,
+            ParentTagId = tag.ParentTagId,
             SupportsLineItemsOverride = tag.SupportsLineItemsOverride
         };
+    }
+
+    private IReadOnlyList<TagDto> GetRootTagOptions(int categoryId, int? excludeTagId)
+    {
+        return _categories
+            .FirstOrDefault(x => x.Id == categoryId)?
+            .Tags
+            .Where(x => !x.ParentTagId.HasValue)
+            .Where(x => !excludeTagId.HasValue || x.Id != excludeTagId.Value)
+            .OrderBy(x => x.Name)
+            .ToList() ?? [];
+    }
+
+    private static IReadOnlyList<TagDto> GetRootTagsForDisplay(CategoryDto category)
+    {
+        return category.Tags
+            .Where(x => !x.ParentTagId.HasValue)
+            .OrderBy(x => x.Name)
+            .ToList();
+    }
+
+    private static IReadOnlyList<TagDto> GetChildTagsForDisplay(CategoryDto category, int parentTagId)
+    {
+        return category.Tags
+            .Where(x => x.ParentTagId == parentTagId)
+            .OrderBy(x => x.Name)
+            .ToList();
     }
 
     private static string GetTagLineItemsLabel(bool? overrideValue)

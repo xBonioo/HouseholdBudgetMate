@@ -28,6 +28,7 @@ public static class CategoryExtensionMapping
         {
             Id = tag.Id,
             CategoryId = tag.CategoryId,
+            ParentTagId = tag.ParentTagId,
             Name = tag.Name,
             SupportsLineItemsOverride = tag.SupportsLineItemsOverride
         };

@@ -3,6 +3,7 @@
 public class CreateTagRequest
 {
     public int CategoryId { get; set; }
+    public int? ParentTagId { get; set; }
     public string Name { get; set; } = null!;
     public bool? SupportsLineItemsOverride { get; set; }
 }

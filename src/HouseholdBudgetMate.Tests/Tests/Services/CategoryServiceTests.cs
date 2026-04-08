@@ -65,4 +65,73 @@ public sealed class CategoryServiceTests
         Assert.True(deletedTag.IsDeleted);
         Assert.NotNull(deletedTag.DeletedAtUtc);
     }
+
+    [Fact]
+    public async Task CreateTagAsync_Should_Assign_ParentTagId_When_Provided()
+    {
+        int categoryId;
+        int parentTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#22AA22" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var parentTag = new Tag { Name = "Spozywcze", CategoryId = categoryId };
+            context.Tags.Add(parentTag);
+            await context.SaveChangesAsync();
+            parentTagId = parentTag.Id;
+        }
+
+        var service = CreateService();
+        var created = await service.CreateTagAsync(new CreateTagRequest
+        {
+            CategoryId = categoryId,
+            Name = "Lidl",
+            ParentTagId = parentTagId
+        }, CancellationToken.None);
+
+        Assert.Equal(parentTagId, created.ParentTagId);
+    }
+
+    [Fact]
+    public async Task UpdateTagAsync_Should_Reject_Parent_That_Is_Already_Child_Tag()
+    {
+        int categoryId;
+        int parentTagId;
+        int childTagId;
+        int tagToUpdateId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Dom", Color = "#336699" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var parent = new Tag { Name = "Zakupy", CategoryId = categoryId };
+            context.Tags.Add(parent);
+            await context.SaveChangesAsync();
+            parentTagId = parent.Id;
+
+            var child = new Tag { Name = "Biedronka", CategoryId = categoryId, ParentTagId = parentTagId };
+            var independent = new Tag { Name = "Media", CategoryId = categoryId };
+            context.Tags.AddRange(child, independent);
+            await context.SaveChangesAsync();
+            childTagId = child.Id;
+            tagToUpdateId = independent.Id;
+        }
+
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateTagAsync(new UpdateTagRequest
+        {
+            Id = tagToUpdateId,
+            CategoryId = categoryId,
+            Name = "Media",
+            ParentTagId = childTagId
+        }, CancellationToken.None));
+    }
 }

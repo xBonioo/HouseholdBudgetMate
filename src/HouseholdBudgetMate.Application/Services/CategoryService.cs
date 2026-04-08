@@ -122,11 +122,13 @@ public sealed class CategoryService(
         }
 
         await EnsureTagNameUniqueAsync(dbContext, request.CategoryId, normalizedName, null, cancellationToken);
+        await EnsureParentTagValidAsync(dbContext, request.CategoryId, request.ParentTagId, null, cancellationToken);
 
         var tag = new Tag
         {
             CategoryId = request.CategoryId,
             Name = request.Name,
+            ParentTagId = request.ParentTagId,
             SupportsLineItemsOverride = request.SupportsLineItemsOverride
         };
 
@@ -154,9 +156,11 @@ public sealed class CategoryService(
         }
 
         await EnsureTagNameUniqueAsync(dbContext, request.CategoryId, normalizedName, tag.Id, cancellationToken);
+        await EnsureParentTagValidAsync(dbContext, request.CategoryId, request.ParentTagId, tag.Id, cancellationToken);
 
         tag.CategoryId = request.CategoryId;
         tag.Name = request.Name;
+        tag.ParentTagId = request.ParentTagId;
         tag.SupportsLineItemsOverride = request.SupportsLineItemsOverride;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -173,6 +177,15 @@ public sealed class CategoryService(
         var tag = await dbContext.Tags
                       .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                   ?? throw new NotFoundException("Tag not found.");
+
+        var childTags = await dbContext.Tags
+            .Where(x => x.ParentTagId == tag.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var childTag in childTags)
+        {
+            childTag.ParentTagId = null;
+        }
 
         tag.IsDeleted = true;
         tag.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
@@ -217,6 +230,39 @@ public sealed class CategoryService(
         if (exists)
         {
             throw new ConflictException("Tag name must be unique within category.");
+        }
+    }
+
+    private static async Task EnsureParentTagValidAsync(
+        ApplicationDbContext dbContext,
+        int categoryId,
+        int? parentTagId,
+        int? currentTagId,
+        CancellationToken cancellationToken)
+    {
+        if (!parentTagId.HasValue)
+        {
+            return;
+        }
+
+        if (currentTagId.HasValue && currentTagId.Value == parentTagId.Value)
+        {
+            throw new BadRequestException("Tag cannot be its own parent.");
+        }
+
+        var parentTag = await dbContext.Tags
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == parentTagId.Value, cancellationToken)
+            ?? throw new NotFoundException("Parent tag not found.");
+
+        if (parentTag.CategoryId != categoryId)
+        {
+            throw new BadRequestException("Parent tag must belong to selected category.");
+        }
+
+        if (parentTag.ParentTagId.HasValue)
+        {
+            throw new BadRequestException("Only one level of tag hierarchy is supported.");
         }
     }
 }

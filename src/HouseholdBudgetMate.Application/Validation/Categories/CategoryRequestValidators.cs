@@ -79,6 +79,9 @@ public sealed class CreateTagRequestValidator : AbstractValidator<CreateTagReque
     public CreateTagRequestValidator()
     {
         RuleFor(x => x.CategoryId).GreaterThan(0);
+        RuleFor(x => x.ParentTagId)
+            .GreaterThan(0)
+            .When(x => x.ParentTagId.HasValue);
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")
@@ -102,6 +105,9 @@ public sealed class UpdateTagRequestValidator : AbstractValidator<UpdateTagReque
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.CategoryId).GreaterThan(0);
+        RuleFor(x => x.ParentTagId)
+            .GreaterThan(0)
+            .When(x => x.ParentTagId.HasValue);
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")

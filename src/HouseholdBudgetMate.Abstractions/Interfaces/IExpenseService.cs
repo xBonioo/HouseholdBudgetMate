@@ -36,6 +36,8 @@ public interface IExpenseService
     Task DeleteExpenseAsync(DeleteExpenseRequest request, CancellationToken cancellationToken);
     Task DeleteRegularExpenseDefinitionAsync(DeleteRegularExpenseDefinitionRequest request,
         CancellationToken cancellationToken);
+    Task DeleteRegularExpenseDefinitionPermanentlyAsync(DeleteRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken);
     Task DeleteExpenseLineItemAsync(DeleteExpenseLineItemRequest request, CancellationToken cancellationToken);
 
     Task DeleteMonthSavingsTransferItemAsync(DeleteMonthSavingsTransferItemRequest request,

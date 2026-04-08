@@ -77,7 +77,11 @@ public sealed class ExpenseService(
         CreateRegularExpenseDefinitionValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await EnsureCategoryAndTagValidAsync(dbContext, request.CategoryId, request.TagId, cancellationToken);
+        var normalizedTagId = await EnsureCategoryAndTagValidAsync(
+            dbContext,
+            request.CategoryId,
+            request.TagId,
+            cancellationToken);
 
         var definition = new RegularExpenseDefinition
         {
@@ -86,7 +90,7 @@ public sealed class ExpenseService(
                 .MaxAsync(cancellationToken) + 1 ?? 1,
             Name = request.Name,
             CategoryId = request.CategoryId,
-            TagId = request.TagId,
+            TagId = normalizedTagId,
             Amount = request.Amount,
             IsActive = true,
             ShowRemainingInUI = request.ShowRemainingInUI
@@ -110,11 +114,15 @@ public sealed class ExpenseService(
                              .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                          ?? throw new NotFoundException("Regular expense definition not found.");
 
-        await EnsureCategoryAndTagValidAsync(dbContext, request.CategoryId, request.TagId, cancellationToken);
+        var normalizedTagId = await EnsureCategoryAndTagValidAsync(
+            dbContext,
+            request.CategoryId,
+            request.TagId,
+            cancellationToken);
 
         definition.Name = request.Name;
         definition.CategoryId = request.CategoryId;
-        definition.TagId = request.TagId;
+        definition.TagId = normalizedTagId;
         definition.Amount = request.Amount;
         definition.IsActive = request.IsActive;
         definition.ShowRemainingInUI = request.ShowRemainingInUI;
@@ -142,6 +150,22 @@ public sealed class ExpenseService(
         }
 
         definition.IsActive = false;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteRegularExpenseDefinitionPermanentlyAsync(
+        DeleteRegularExpenseDefinitionRequest request,
+        CancellationToken cancellationToken)
+    {
+        DeleteRegularExpenseDefinitionValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var definition = await dbContext.RegularExpenseDefinitions
+                             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
+                         ?? throw new NotFoundException("Regular expense definition not found.");
+
+        dbContext.RegularExpenseDefinitions.Remove(definition);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -334,19 +358,18 @@ public sealed class ExpenseService(
                            .FirstOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken)
                        ?? throw new NotFoundException("Category not found.");
 
-        Tag? tag = null;
-        if (request.TagId.HasValue)
-        {
-            tag = await dbContext.Tags
-                      .AsNoTracking()
-                      .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
-                  ?? throw new NotFoundException("Tag not found.");
-
-            if (tag.CategoryId != request.CategoryId)
-            {
-                throw new BadRequestException("Selected tag does not belong to selected category.");
-            }
-        }
+        var normalizedTagId = await EnsureCategoryAndTagValidAsync(
+            dbContext,
+            request.CategoryId,
+            request.TagId,
+            cancellationToken);
+        var normalizedTagName = normalizedTagId.HasValue
+            ? await dbContext.Tags
+                .AsNoTracking()
+                .Where(x => x.Id == normalizedTagId.Value)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
 
         var expense = new Expense
         {
@@ -357,7 +380,7 @@ public sealed class ExpenseService(
                 .MaxAsync(cancellationToken) + 1 ?? 1,
             Name = normalizedName,
             CategoryId = request.CategoryId,
-            TagId = request.TagId,
+            TagId = normalizedTagId,
             PlannedAmount = request.PlannedAmount,
             ActualAmount = request.ActualAmount,
             ShowRemainingInUI = request.ShowRemainingInUI
@@ -379,7 +402,7 @@ public sealed class ExpenseService(
             monthPlan.Month,
             cancellationToken);
 
-        return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, tag?.Name);
+        return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, normalizedTagName);
     }
 
     public async Task ReorderExpensesAsync(ReorderExpensesRequest request, CancellationToken cancellationToken)
@@ -464,6 +487,11 @@ public sealed class ExpenseService(
             if (tag.CategoryId != expense.CategoryId)
             {
                 throw new BadRequestException("Selected tag does not belong to selected category.");
+            }
+
+            if (expense.TagId.HasValue && tag.Id != expense.TagId.Value && tag.ParentTagId != expense.TagId.Value)
+            {
+                throw new BadRequestException("Selected line item tag must belong to expense main tag.");
             }
         }
 
@@ -554,6 +582,13 @@ public sealed class ExpenseService(
             {
                 throw new BadRequestException("Selected tag does not belong to selected category.");
             }
+
+            if (lineItem.Expense.TagId.HasValue
+                && tag.Id != lineItem.Expense.TagId.Value
+                && tag.ParentTagId != lineItem.Expense.TagId.Value)
+            {
+                throw new BadRequestException("Selected line item tag must belong to expense main tag.");
+            }
         }
 
         lineItem.Description = normalizedDescription;
@@ -639,23 +674,22 @@ public sealed class ExpenseService(
                            .FirstOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken)
                        ?? throw new NotFoundException("Category not found.");
 
-        Tag? tag = null;
-        if (request.TagId.HasValue)
-        {
-            tag = await dbContext.Tags
-                      .AsNoTracking()
-                      .FirstOrDefaultAsync(x => x.Id == request.TagId.Value, cancellationToken)
-                  ?? throw new NotFoundException("Tag not found.");
-
-            if (tag.CategoryId != request.CategoryId)
-            {
-                throw new BadRequestException("Selected tag does not belong to selected category.");
-            }
-        }
+        var normalizedTagId = await EnsureCategoryAndTagValidAsync(
+            dbContext,
+            request.CategoryId,
+            request.TagId,
+            cancellationToken);
+        var normalizedTagName = normalizedTagId.HasValue
+            ? await dbContext.Tags
+                .AsNoTracking()
+                .Where(x => x.Id == normalizedTagId.Value)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
 
         expense.Name = normalizedName;
         expense.CategoryId = request.CategoryId;
-        expense.TagId = request.TagId;
+        expense.TagId = normalizedTagId;
         expense.PlannedAmount = request.PlannedAmount;
         if (!await dbContext.ExpenseLineItems.AnyAsync(x => x.ExpenseId == expense.Id, cancellationToken))
         {
@@ -682,7 +716,7 @@ public sealed class ExpenseService(
             expense.MonthPlan.Month,
             cancellationToken);
 
-        return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, tag?.Name);
+        return await BuildExpenseDtoAsync(dbContext, expense.Id, cancellationToken, category.Name, normalizedTagName);
     }
 
     public async Task DeleteExpenseAsync(DeleteExpenseRequest request, CancellationToken cancellationToken)
@@ -848,7 +882,7 @@ public sealed class ExpenseService(
         return definition.MapRegularExpenseDefinitionToDto();
     }
 
-    private static async Task EnsureCategoryAndTagValidAsync(
+    private static async Task<int?> EnsureCategoryAndTagValidAsync(
         ApplicationDbContext dbContext,
         int categoryId,
         int? tagId,
@@ -865,7 +899,7 @@ public sealed class ExpenseService(
 
         if (!tagId.HasValue)
         {
-            return;
+            return null;
         }
 
         var tag = await dbContext.Tags
@@ -877,6 +911,23 @@ public sealed class ExpenseService(
         {
             throw new BadRequestException("Selected tag does not belong to selected category.");
         }
+
+        if (!tag.ParentTagId.HasValue)
+        {
+            return tag.Id;
+        }
+
+        var parentTag = await dbContext.Tags
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == tag.ParentTagId.Value, cancellationToken)
+            ?? throw new BadRequestException("Selected tag parent not found.");
+
+        if (parentTag.CategoryId != categoryId)
+        {
+            throw new BadRequestException("Selected tag parent does not belong to selected category.");
+        }
+
+        return parentTag.Id;
     }
 
     private static async Task SyncRegularExpensesForMonthAsync(

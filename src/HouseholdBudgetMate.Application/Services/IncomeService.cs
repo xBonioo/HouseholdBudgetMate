@@ -346,7 +346,7 @@ public sealed class IncomeService(
 
         var accounts = await dbContext.Accounts
             .AsNoTracking()
-            .Where(x => !x.IsArchived && x.Type != (int)AccountType.Savings)
+            .Where(x => x.Type != (int)AccountType.Savings)
             .Include(x => x.MonthBalances)
             .ToListAsync(cancellationToken);
 

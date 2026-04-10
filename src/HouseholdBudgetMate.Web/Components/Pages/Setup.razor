@@ -1,0 +1,132 @@
+﻿@page "/setup"
+@layout SetupLayout
+@using HouseholdBudgetMate.Web.Setup
+@using MudBlazor
+
+@inject ISetupConfigurationService SetupConfigurationService
+@inject RuntimeConfigurationState RuntimeConfigurationState
+@inject NavigationManager NavigationManager
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h5">Pierwsza konfiguracja aplikacji</MudText>
+    <MudText Typo="Typo.body2" Class="mt-1 mb-4">
+        Uzupełnij dane połączenia z PostgreSQL. Plik `config.json` zostanie zapisany w @RuntimeConfigurationState.ConfigFilePath.
+    </MudText>
+
+    <EditForm Model="_model" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator/>
+
+        <MudStack Spacing="2">
+            <MudTextField T="string" 
+                          Label="Host"
+                          @bind-Value="_model.Host"
+                          For="@(() => _model.Host)" 
+                          Required="true"/>
+            <MudNumericField T="int" 
+                             Label="Port" 
+                             @bind-Value="_model.Port" 
+                             For="@(() => _model.Port)" 
+                             Min="1"
+                             Max="65535"
+                             Required="true"/>
+            <MudTextField T="string" 
+                          Label="Login"
+                          @bind-Value="_model.Username" 
+                          For="@(() => _model.Username)"
+                          Required="true"/>
+            <MudTextField T="string" 
+                          Label="Haslo" 
+                          @bind-Value="_model.Password"
+                          For="@(() => _model.Password)"
+                          InputType="InputType.Password"
+                          Required="true"/>
+            <MudTextField T="string" 
+                          Label="Nazwa bazy"
+                          @bind-Value="_model.Database"
+                          For="@(() => _model.Database)" 
+                          Required="true"/>
+
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       ButtonType="ButtonType.Submit"
+                       Disabled="_isSaving">
+                @(_isSaving ? "Łączenie i migracja..." : "Zapisz i uruchom")
+            </MudButton>
+        </MudStack>
+    </EditForm>
+
+    <MudDivider Class="my-4"/>
+    <MudText Typo="Typo.caption">Scieżka pliku konfiguracji: @RuntimeConfigurationState.ConfigFilePath</MudText>
+</MudPaper>
+
+@if (_isSaving)
+{
+    <div class="setup-loading-backdrop">
+        <MudPaper Class="pa-6 setup-loading-panel" Elevation="4">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudText Typo="Typo.subtitle1">Trwa łączenie z bazą i wykonywanie migracji...</MudText>
+                <MudText Typo="Typo.body2">To może potrwać chwilę, nie zamykaj aplikacji.</MudText>
+            </MudStack>
+        </MudPaper>
+    </div>
+}
+
+<style>
+    .setup-loading-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .setup-loading-panel {
+        width: min(90vw, 540px);
+        text-align: center;
+    }
+</style>
+
+@code {
+    private readonly SetupInputModel _model = new();
+    private bool _isSaving;
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        if (RuntimeConfigurationState.IsConfigured)
+        {
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await SetupConfigurationService.SaveConfigurationAsync(_model, CancellationToken.None);
+            if (!result.IsSuccess)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}
+

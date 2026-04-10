@@ -1,0 +1,79 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="HouseholdBudgetMate"
+           Manufacturer="HouseholdBudgetMate"
+           Version="1.0.0.0"
+           UpgradeCode="44A35DA0-EEC3-4686-8D59-445D9F6A32AA"
+           InstallerVersion="500"
+           Scope="perMachine"
+           Language="1045"
+           Codepage="1250">
+
+    <SummaryInformation Description="HouseholdBudgetMate Installer" />
+    <MajorUpgrade DowngradeErrorMessage="Nowsza wersja HouseholdBudgetMate jest już zainstalowana." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="HouseholdBudgetMate" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="HouseholdBudgetMate" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="MainFeature" Title="HouseholdBudgetMate" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="StartMenuShortcutComponent" />
+      <ComponentRef Id="DesktopShortcutComponent" />
+      <ComponentRef Id="AutoStartComponent" />
+    </Feature>
+
+    <!-- Desktop shortcut can be enabled during install with ADDDESKTOPSHORTCUT=1 -->
+    <Property Id="ADDDESKTOPSHORTCUT" Value="0" />
+    <Property Id="ADDAUTOSTART" Value="1" />
+    
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+  </Package>
+
+  <Fragment>
+    <Component Id="StartMenuShortcutComponent" Directory="ProgramMenuDir" Guid="*">
+      <Shortcut Id="StartMenuShortcut"
+                Name="HouseholdBudgetMate"
+                Description="HouseholdBudgetMate"
+                Target="[INSTALLFOLDER]HouseholdBudgetMate.Tray.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="ProgramMenuDirCleanup" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\HouseholdBudgetMate" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="*" Condition="ADDDESKTOPSHORTCUT=1">
+      <Shortcut Id="DesktopShortcut"
+                Name="HouseholdBudgetMate"
+                Description="HouseholdBudgetMate"
+                Target="[INSTALLFOLDER]HouseholdBudgetMate.Tray.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\HouseholdBudgetMate" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="AutoStartComponent" Directory="INSTALLFOLDER" Guid="*" Condition="ADDAUTOSTART=1">
+      <RegistryValue Root="HKCU"
+                     Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                     Name="HouseholdBudgetMate"
+                     Type="string"
+                     Value="&quot;[INSTALLFOLDER]HouseholdBudgetMate.Tray.exe&quot;"
+                     KeyPath="yes" />
+    </Component>
+  </Fragment>
+  
+</Wix>
+

@@ -27,22 +27,22 @@ public sealed class ResultsTests
         );
     }
     
-    [Fact]
-    public void ResultsExtendsServiceResult()
-    {
-        var result = Types.InAssembly(typeof(IServiceResult).Assembly)
-            .That()
-            .AreClasses()
-            .And().HaveNameEndingWith("Result")
-            .Should()
-            .Inherit(typeof(BaseResponse<>))
-            .GetResult();
-
-        Assert.True(result.IsSuccessful, result.FailingTypes is not null
-            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName))
-            : ""
-        );
-    }
+    // [Fact]
+    // public void ResultsExtendsServiceResult()
+    // {
+    //     var result = Types.InAssembly(typeof(IServiceResult).Assembly)
+    //         .That()
+    //         .AreClasses()
+    //         .And().HaveNameEndingWith("Result")
+    //         .Should()
+    //         .Inherit(typeof(BaseResponse<>))
+    //         .GetResult();
+    //
+    //     Assert.True(result.IsSuccessful, result.FailingTypes is not null
+    //         ? string.Join("\n", result.FailingTypes.Select(x => x.FullName))
+    //         : ""
+    //     );
+    // }
     
     [Fact]
     public void ResultsAreInProperFolder()

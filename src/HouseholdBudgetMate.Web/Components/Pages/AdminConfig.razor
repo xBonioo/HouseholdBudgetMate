@@ -1,0 +1,101 @@
+﻿@page "/admin/config"
+@using HouseholdBudgetMate.Web.Setup
+@using MudBlazor
+
+@inject IAdminConfigurationService AdminConfigurationService
+@inject RuntimeConfigurationState RuntimeConfigurationState
+
+<PageTitle>Admin - Config</PageTitle>
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h5">Admin - config.json</MudText>
+    <MudText Typo="Typo.body2" Class="mt-1 mb-2">
+        Tu możesz edytować surowy plik konfiguracji. Zła konfiguracja może uniemożliwić start aplikacji.
+    </MudText>
+    <MudText Typo="Typo.caption" Class="mb-4 d-block">Sciezka: @RuntimeConfigurationState.ConfigFilePath</MudText>
+
+    @if (!string.IsNullOrWhiteSpace(_statusMessage))
+    {
+        <MudAlert Severity="@_statusSeverity" Dense="true" Class="mb-4">@_statusMessage</MudAlert>
+    }
+
+    <MudTextField T="string"
+                  Label="config.json"
+                  Variant="Variant.Outlined"
+                  FullWidth="true"
+                  Lines="18"
+                  @bind-Value="_json"/>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Default"
+                   OnClick="LoadAsync"
+                   Disabled="_isBusy">
+            Odśwież
+        </MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="SaveAsync"
+                   Disabled="_isBusy">
+            @(_isBusy ? "Zapisywanie..." : "Zapisz")
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private string _json = string.Empty;
+    private bool _isBusy;
+    private string? _statusMessage;
+    private Severity _statusSeverity = Severity.Info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isBusy = true;
+        _statusMessage = null;
+
+        try
+        {
+            _json = await AdminConfigurationService.ReadConfigurationJsonAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = $"Nie można odczytać config.json: {ex.Message}";
+            _statusSeverity = Severity.Error;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _isBusy = true;
+        _statusMessage = null;
+
+        try
+        {
+            var result = await AdminConfigurationService.SaveConfigurationJsonAsync(_json, CancellationToken.None);
+            if (!result.IsSuccess)
+            {
+                _statusMessage = result.ErrorMessage;
+                _statusSeverity = Severity.Error;
+                return;
+            }
+
+            _statusMessage = "Konfiguracja zapisana. W razie zmian hostingu zrestartuj aplikacje.";
+            _statusSeverity = Severity.Success;
+            _json = await AdminConfigurationService.ReadConfigurationJsonAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+}
+

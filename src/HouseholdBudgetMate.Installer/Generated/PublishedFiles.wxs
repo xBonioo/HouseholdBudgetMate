@@ -1,0 +1,158 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Directory Id="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988" Name="wwwroot">
+        <Directory Id="DirF3490AAEF955844017C8510596359117B7ACF9DF" Name="_content">
+          <Directory Id="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007" Name="MudBlazor">
+          </Directory>
+        </Directory>
+        <Directory Id="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF" Name="_framework">
+        </Directory>
+        <Directory Id="DirCB01474B4C8F952B06B9491D68EC8897CE527EDB" Name="Components">
+          <Directory Id="Dir7DBD56EFDD844A0CCB788342556D43514AFB321C" Name="Layout">
+          </Directory>
+          <Directory Id="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2" Name="Pages">
+          </Directory>
+        </Directory>
+        <Directory Id="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8" Name="images">
+        </Directory>
+      </Directory>
+    </DirectoryRef>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
+      <Component Id="CmpBC678F3600CDEFD583B88522810B2A538D8FFD6A" Guid="*" Bitness="always64" Directory="INSTALLFOLDER">
+        <File Id="FilBC678F3600CDEFD583B88522810B2A538D8FFD6A" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\appsettings.json" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpC2FF1C9D8AEF0D5BACD36DF453DD046FB715702C" Guid="*" Bitness="always64" Directory="INSTALLFOLDER">
+        <File Id="FilC2FF1C9D8AEF0D5BACD36DF453DD046FB715702C" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\HouseholdBudgetMate.Tray.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp3DA4CAFE988E0A8B77AD952EA453A824BE9F8A64" Guid="*" Bitness="always64" Directory="INSTALLFOLDER">
+        <File Id="Fil3DA4CAFE988E0A8B77AD952EA453A824BE9F8A64" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\HouseholdBudgetMate.Web.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpCFE8043F916940AB418DF1965AFBB4BCBE9FDB96" Guid="*" Bitness="always64" Directory="INSTALLFOLDER">
+        <File Id="FilCFE8043F916940AB418DF1965AFBB4BCBE9FDB96" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\HouseholdBudgetMate.Web.staticwebassets.endpoints.json" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpFA0368EA035E78F6849195A77EB1C68D181AAA57" Guid="*" Bitness="always64" Directory="INSTALLFOLDER">
+        <File Id="FilFA0368EA035E78F6849195A77EB1C68D181AAA57" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\web.config" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp182AA812471E90C22DDE6ACBAE24764761C1FE7F" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="Fil182AA812471E90C22DDE6ACBAE24764761C1FE7F" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.css" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpC29A20E149E68F003DCDDECD858EDEF84CE9BF23" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="FilC29A20E149E68F003DCDDECD858EDEF84CE9BF23" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.css.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp8B4E30B69DAE86D117FBC62BCD6B6016DDB7619E" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="Fil8B4E30B69DAE86D117FBC62BCD6B6016DDB7619E" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.css.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp7C6391C5AA8A39E56E877D5011F7D5157172295C" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="Fil7C6391C5AA8A39E56E877D5011F7D5157172295C" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.js" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpF08168F0D0C1057ACFAEAAE33F5545EBE64F0678" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="FilF08168F0D0C1057ACFAEAAE33F5545EBE64F0678" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp3242AAAAB15AC85653091E97D5C7748EE79721E3" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="Fil3242AAAAB15AC85653091E97D5C7748EE79721E3" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp3F36512EF7CCC3529539D2D3AB99A3F0BC49977A" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="Fil3F36512EF7CCC3529539D2D3AB99A3F0BC49977A" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.js.map" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpDDE016B16995932A56325DAAA9D4F9B95A48C9DB" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="FilDDE016B16995932A56325DAAA9D4F9B95A48C9DB" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.js.map.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp8B5DCEE8C22B5374020D76F2138911849B32236D" Guid="*" Bitness="always64" Directory="Dir2D5CA7AC5F82C9100142374FB9A0CB7CF503C007">
+        <File Id="Fil8B5DCEE8C22B5374020D76F2138911849B32236D" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_content\MudBlazor\MudBlazor.min.js.map.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp7CF7B91462033453B760608C4F1A31AC5DD3BE48" Guid="*" Bitness="always64" Directory="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF">
+        <File Id="Fil7CF7B91462033453B760608C4F1A31AC5DD3BE48" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_framework\blazor.server.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp81A83C37313D17E4798A906087B38F251F20F569" Guid="*" Bitness="always64" Directory="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF">
+        <File Id="Fil81A83C37313D17E4798A906087B38F251F20F569" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_framework\blazor.server.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp35CAC05A812EEAD1A8E6F12C377385401892EB16" Guid="*" Bitness="always64" Directory="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF">
+        <File Id="Fil35CAC05A812EEAD1A8E6F12C377385401892EB16" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_framework\blazor.server.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpAFF7C260D48A666F8899FE47332F759399EE922B" Guid="*" Bitness="always64" Directory="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF">
+        <File Id="FilAFF7C260D48A666F8899FE47332F759399EE922B" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_framework\blazor.web.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp6A4535C281A46CAD4B9B94CE1BE4DEA57BB2C6F1" Guid="*" Bitness="always64" Directory="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF">
+        <File Id="Fil6A4535C281A46CAD4B9B94CE1BE4DEA57BB2C6F1" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_framework\blazor.web.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpB6E8E65CD39897BA3CC8C13A9A63666F5DC87222" Guid="*" Bitness="always64" Directory="Dir4613112ABA79B830A86CB30DFB26FDCC7B67B2AF">
+        <File Id="FilB6E8E65CD39897BA3CC8C13A9A63666F5DC87222" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\_framework\blazor.web.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp2903C5B30CEB82EC7539499F09DC36B60A3F469D" Guid="*" Bitness="always64" Directory="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988">
+        <File Id="Fil2903C5B30CEB82EC7539499F09DC36B60A3F469D" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\app.css" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp79C9815215B7B8A19D289B1920B1C31A021DDA9B" Guid="*" Bitness="always64" Directory="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988">
+        <File Id="Fil79C9815215B7B8A19D289B1920B1C31A021DDA9B" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\app.css.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp34BFCFC5D64C9815BD6FCE8A227249BED08C8ADA" Guid="*" Bitness="always64" Directory="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988">
+        <File Id="Fil34BFCFC5D64C9815BD6FCE8A227249BED08C8ADA" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\app.css.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpE55AA8DB4316D1B5943A36CD97065B1F7028F5A0" Guid="*" Bitness="always64" Directory="Dir7DBD56EFDD844A0CCB788342556D43514AFB321C">
+        <File Id="FilE55AA8DB4316D1B5943A36CD97065B1F7028F5A0" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Layout\ReconnectModal.razor.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp78B1326EE0A8A02A61D783B1EBED0E3C0F42FEA7" Guid="*" Bitness="always64" Directory="Dir7DBD56EFDD844A0CCB788342556D43514AFB321C">
+        <File Id="Fil78B1326EE0A8A02A61D783B1EBED0E3C0F42FEA7" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Layout\ReconnectModal.razor.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpD8ECA8328E0C75CC39559194CC057C2ACBCE233F" Guid="*" Bitness="always64" Directory="Dir7DBD56EFDD844A0CCB788342556D43514AFB321C">
+        <File Id="FilD8ECA8328E0C75CC39559194CC057C2ACBCE233F" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Layout\ReconnectModal.razor.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp7426AC9EE26690D4A4602BF3F4B973CBCA79772C" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="Fil7426AC9EE26690D4A4602BF3F4B973CBCA79772C" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\Accounts.razor.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp9E4ABBEE9CEAEADAD31C97CAA0EDBC952CE035C2" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="Fil9E4ABBEE9CEAEADAD31C97CAA0EDBC952CE035C2" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\Accounts.razor.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpB9C30BA5B0A5179956E4576BA0A9161987B4F167" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="FilB9C30BA5B0A5179956E4576BA0A9161987B4F167" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\Accounts.razor.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpA37C36B93C82B31B99CB9944873E9E5553498D9F" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="FilA37C36B93C82B31B99CB9944873E9E5553498D9F" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage.razor.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp21B9B3024B84AD5DF1C9F7F51CC9C74D98DBB250" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="Fil21B9B3024B84AD5DF1C9F7F51CC9C74D98DBB250" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage.razor.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpC3C868899FE476F81442DA6052847201FC35CF8F" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="FilC3C868899FE476F81442DA6052847201FC35CF8F" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage.razor.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpA8873C750533DA4984CE233CAC581C95F693B20D" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="FilA8873C750533DA4984CE233CAC581C95F693B20D" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\RecurringPage.razor.js" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpACFF4137DD97AF1B49DACF174F122BF4137C7050" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="FilACFF4137DD97AF1B49DACF174F122BF4137C7050" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\RecurringPage.razor.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp4F18C5573FADB3C79DBCCBE6F1CEC54D463A829E" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
+        <File Id="Fil4F18C5573FADB3C79DBCCBE6F1CEC54D463A829E" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\RecurringPage.razor.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp0EE5B67F07B26FBEC1586C0DCC27FB9A4E95ACD9" Guid="*" Bitness="always64" Directory="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988">
+        <File Id="Fil0EE5B67F07B26FBEC1586C0DCC27FB9A4E95ACD9" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\HouseholdBudgetMate.Web.styles.css" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp3DCD7BCC9826231941238996A9615DF4391FAD04" Guid="*" Bitness="always64" Directory="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988">
+        <File Id="Fil3DCD7BCC9826231941238996A9615DF4391FAD04" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\HouseholdBudgetMate.Web.styles.css.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp1F4542AED58EDE4074C04DBDBDD3D117883FAE9A" Guid="*" Bitness="always64" Directory="Dir43E10CDBEEF5F987029BE25ECEF23A7D73177988">
+        <File Id="Fil1F4542AED58EDE4074C04DBDBDD3D117883FAE9A" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\HouseholdBudgetMate.Web.styles.css.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp9AA500CE53CAA9445F042C847787DADC08DBB829" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
+        <File Id="Fil9AA500CE53CAA9445F042C847787DADC08DBB829" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\favicon.ico" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp6DC7C67884C088E49C8AF9BB6504F2ABD4840102" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
+        <File Id="Fil6DC7C67884C088E49C8AF9BB6504F2ABD4840102" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\favicon.ico.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp331F2020616899E1493E3061A94E1DAF11B3DA01" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
+        <File Id="Fil331F2020616899E1493E3061A94E1DAF11B3DA01" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\favicon.ico.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp36E3CC200DC48947BE9D45A90DF64E1851B4DE85" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
+        <File Id="Fil36E3CC200DC48947BE9D45A90DF64E1851B4DE85" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\favicon.png" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp8A95297CFD65CA35AC5245B29D0F64C5A1CFDA21" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
+        <File Id="Fil8A95297CFD65CA35AC5245B29D0F64C5A1CFDA21" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\logo.png" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
+

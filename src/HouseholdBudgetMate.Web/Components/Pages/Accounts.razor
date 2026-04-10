@@ -2,6 +2,7 @@
 @using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Requests
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
 @using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Abstractions.Extensions
 @using HouseholdBudgetMate.Abstractions.Interfaces
@@ -39,15 +40,25 @@
                 <MudText Class="hb-kpi-value">@_accounts.Count</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" md="4">
-            <MudPaper Class="hb-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Łączne saldo aktywnych kont</MudText>
-                <MudText
-                    Class="hb-kpi-value">@GetActiveNonSavingsTotalForSelectedMonth().ToString("0.00", _culture) PLN
-                </MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="4">
+        @if (!IsSelectedMonthClosed())
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Class="hb-kpi-card">
+                    <MudText Typo="Typo.caption" Class="hb-muted">Łączne saldo aktywnych kont</MudText>
+                    <MudText Class="hb-kpi-value">@GetActiveNonSavingsTotalForSelectedMonth().ToString("0.00", _culture) PLN</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+        else
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Class="hb-kpi-card">
+                    <MudText Typo="Typo.caption" Class="hb-muted">Łączne saldo kont</MudText>
+                    <MudText Class="hb-kpi-value">@GetAllTotalForSelectedMonth().ToString("0.00", _culture) PLN</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+        <MudItem xs="12" md="@(IsSelectedMonthClosed() ? 4 : 3)">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Saldo + oszczędności</MudText>
                 <MudText Class="hb-kpi-value">@GetActiveTotalForSelectedMonth().ToString("0.00", _culture) PLN</MudText>
@@ -240,6 +251,7 @@
     private int _selectedMonth;
     private List<int> _availableYears = [];
     private List<int> _availableMonthsForSelectedYear = [];
+    private IReadOnlyList<AvailableMonthDto> _availablePlanMonths = [];
     private readonly Dictionary<int, decimal> _selectedMonthAmounts = new();
     private readonly Dictionary<int, string> _selectedMonthAmountInputs = new();
     private string? _loadError;
@@ -264,6 +276,7 @@
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).OrderBy(x => x.Order).ToList();
 
             var availablePlanMonths = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
+            _availablePlanMonths = availablePlanMonths;
             _availableYears = availablePlanMonths
                 .Select(x => x.Year)
                 .Concat(_accounts.SelectMany(x => x.MonthBalances).Select(x => x.Year))
@@ -633,6 +646,19 @@
         return _accounts
             .Where(x => !x.IsArchived)
             .Sum(x => GetSelectedMonthAmount(x.Id));
+    }
+
+    private decimal GetAllTotalForSelectedMonth()
+    {
+        return _accounts
+            .Where(x => x.Type != AccountType.Savings)
+            .Sum(x => GetSelectedMonthAmount(x.Id));
+    }
+
+    private bool IsSelectedMonthClosed()
+    {
+        var plan = _availablePlanMonths.FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth);
+        return plan?.IsClosed ?? false;
     }
 
     private readonly record struct MonthOption(int Value, string Label);

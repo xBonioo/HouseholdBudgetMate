@@ -1,0 +1,11 @@
+﻿@using HouseholdBudgetMate.Web.Components.Themes
+@using MudBlazor
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="@AppTheme.Default"/>
+<MudSnackbarProvider/>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="py-12">
+    @Body
+</MudContainer>
+

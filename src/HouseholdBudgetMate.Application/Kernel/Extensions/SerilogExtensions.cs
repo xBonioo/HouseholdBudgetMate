@@ -21,22 +21,35 @@ public static class SerilogExtensions
         builder.Logging.SetMinimumLevel(LogLevel.Trace);
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        if (string.IsNullOrWhiteSpace(connectionString))
-            throw new InvalidOperationException("DefaultConnection string is not configured.");
 
         _applicationType = builder.Configuration["Serilog:Properties:ApplicationType"] ?? "Unknown";
 
-        Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(builder.Configuration)
+        var loggerConfiguration = new LoggerConfiguration()
             .Filter.ByIncludingOnly(ShouldIncludeLogEvent)
             .Enrich.WithProperty("ApplicationType", _applicationType)
-            .WriteTo.PostgreSQL(
+            .Enrich.FromLogContext();
+
+        try
+        {
+            // Some first-run environments do not have full Serilog sink config ready yet.
+            loggerConfiguration = loggerConfiguration.ReadFrom.Configuration(builder.Configuration);
+        }
+        catch (InvalidOperationException)
+        {
+            // Fallback to minimal logger configuration so app can continue and reach /setup.
+        }
+
+        // During first-run setup there is no DB connection yet, so keep logger alive without PostgreSQL sink.
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            loggerConfiguration = loggerConfiguration.WriteTo.PostgreSQL(
                 connectionString: connectionString,
                 tableName: "Logs",
                 columnOptions: BuildColumnWriters(),
-                needAutoCreateTable: false)
-            .Enrich.FromLogContext()
-            .CreateLogger();
+                needAutoCreateTable: false);
+        }
+
+        Log.Logger = loggerConfiguration.CreateLogger();
 
         builder.Host.UseSerilog();
     }

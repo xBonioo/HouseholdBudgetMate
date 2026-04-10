@@ -2,6 +2,8 @@
 @using HouseholdBudgetMate.Application.Kernel.Timing
 @using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using HouseholdBudgetMate.Web.Services
 @using MudBlazor
 
 @inherits LayoutComponentBase
@@ -9,6 +11,7 @@
 @inject NavigationManager NavigationManager
 @inject IDateTimeProvider DateTimeProvider
 @inject IExpenseService ExpenseService
+@inject ArchiveMonthsCacheService ArchiveCache
 
 @* Required *@
 <MudThemeProvider Theme="@AppTheme.Default"/>
@@ -23,54 +26,68 @@
 <div class="layout-root">
     <MudLayout>
         <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
-            <MudHidden Breakpoint="Breakpoint.SmAndDown">
 
+            @* ── Left nav (hidden on mobile via CSS, no JS needed) ── *@
+            <div class="nav-desktop">
                 <MudButton Variant="Variant.Text"
                            Class="@GetNavClass("/")"
                            StartIcon="@Icons.Material.Filled.Dashboard"
-                           OnClick="@(() => NavigationManager.NavigateTo("/"))">
+                           Href="/">
                     Dashboard
                 </MudButton>
 
                 <MudButton Variant="Variant.Text"
                            Class="@GetNavClass("/plan")"
                            StartIcon="@Icons.Material.Filled.CalendarMonth"
-                           OnClick="GoToCurrentMonth">
+                           Href="@CurrentMonthHref">
                     Plan
                 </MudButton>
 
                 <MudButton Variant="Variant.Text"
                            Class="@GetNavClass("/accounts")"
                            StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
-                           OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
+                           Href="/accounts">
                     Konta
                 </MudButton>
 
                 <MudButton Variant="Variant.Text"
                            Class="@GetNavClass("/recurring")"
                            StartIcon="@Icons.Material.Filled.Repeat"
-                           OnClick="@(() => NavigationManager.NavigateTo("/recurring"))">
+                           Href="/recurring">
                     Cykliczne
                 </MudButton>
 
                 <MudButton Variant="Variant.Text"
                            Class="@GetNavClass("/categories")"
                            StartIcon="@Icons.Material.Filled.Category"
-                           OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
+                           Href="/categories">
                     Kategorie
                 </MudButton>
+            </div>
 
+            @* ── Centered logo (absolute positioning in CSS) ── *@
             <div class="appbar-logo-center">
                 <img src="images/logo.png" alt="logo" class="brand-logo"/>
             </div>
 
+            @* ── Push right nav to the right edge ── *@
             <MudSpacer/>
+
+            @* ── Right nav (hidden on mobile via CSS, no JS needed) ── *@
+            <div class="nav-desktop">
+                <MudButton Variant="Variant.Text"
+                           Class="@GetNavClass("/admin/config")"
+                           StartIcon="@Icons.Material.Filled.AdminPanelSettings"
+                           Href="/admin/config">
+                    Admin
+                </MudButton>
 
                 <MudMenu Variant="Variant.Text"
                          Color="Color.Inherit"
                          Label="Archiwum"
                          Class="appbar-button"
-                         StartIcon="@Icons.Material.Filled.DateRange">
+                         StartIcon="@Icons.Material.Filled.DateRange"
+                         MaxHeight="400">
                     @if (_monthGroups.Count == 0)
                     {
                         <MudMenuItem Disabled="true">Brak danych</MudMenuItem>
@@ -83,8 +100,8 @@
                             <MudMenuItem Disabled="true">@yearGroup.Year</MudMenuItem>
                             @foreach (var monthItem in yearGroup.Months.OrderByDescending(x => x.Month))
                             {
-                                <MudMenuItem
-                                    OnClick="@(() => NavigationManager.NavigateTo($"/plan/{monthItem.Year}/{monthItem.Month}"))">
+                                var href = $"/plan/{monthItem.Year}/{monthItem.Month}";
+                                <MudMenuItem Href="@href">
                                     @monthItem.Label
                                 </MudMenuItem>
                             }
@@ -96,15 +113,17 @@
                         }
                     }
                 </MudMenu>
-            </MudHidden>
+            </div>
 
+            @* ── Always-visible action button ── *@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Secondary"
                        StartIcon="@Icons.Material.Filled.Add"
                        Class="quick-add-button"
-                       OnClick="GoToCurrentMonth">
+                       Href="@CurrentMonthHref">
                 Dodaj wydatek
             </MudButton>
+
         </MudAppBar>
 
         <MudMainContent Class="app-main-content">
@@ -139,9 +158,114 @@
         public string Label { get; init; } = string.Empty;
     }
 
+    /// <summary>Computed once per render — safe to call before OnInitializedAsync.</summary>
+    private string CurrentMonthHref
+    {
+        get
+        {
+            var now = DateTimeProvider.GetLocalDateTime();
+            return $"/plan/{now.Year}/{now.Month}";
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        await LoadArchiveMonthsAsync();
+        // 1. Serve from cache immediately (no DB call, no waiting).
+        if (ArchiveCache.TryGetCache(out var cached))
+        {
+            _monthGroups = BuildMonthGroups(cached);
+            return;
+        }
+
+        // 2. Cache is stale — load from DB with a short timeout so we never block the layout.
+        try
+        {
+            await LoadAndCacheMonthsAsync();
+        }
+        catch
+        {
+            // If DB is unavailable, fall back to the current month so the bar stays functional.
+            if (_monthGroups.Count == 0)
+                SetFallbackMonthGroup();
+        }
+    }
+
+    /// <summary>
+    /// Uses the semaphore to avoid a cache stampede when many circuits initialise at once.
+    /// The timeout ensures we never hang the layout for longer than ~10 s even with EF retries.
+    /// </summary>
+    private async Task LoadAndCacheMonthsAsync()
+    {
+        // Wait at most 10 s to enter the lock (another circuit may already be loading).
+        if (!await ArchiveCache.Semaphore.WaitAsync(TimeSpan.FromSeconds(10)))
+        {
+            // Timed out waiting for the lock — try the cache one more time, then give up.
+            if (ArchiveCache.TryGetCache(out var cached))
+                _monthGroups = BuildMonthGroups(cached);
+            else
+                SetFallbackMonthGroup();
+            return;
+        }
+
+        try
+        {
+            // Double-check: another circuit may have populated the cache while we were waiting.
+            if (ArchiveCache.TryGetCache(out var cached))
+            {
+                _monthGroups = BuildMonthGroups(cached);
+                return;
+            }
+
+            // Limit the DB call to 5 s — prevents EF retry logic from blocking for minutes.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var months = await ExpenseService.GetAvailableMonthsAsync(cts.Token);
+
+            ArchiveCache.UpdateCache(months);
+            _monthGroups = BuildMonthGroups(months);
+
+            if (_monthGroups.Count == 0)
+                SetFallbackMonthGroup();
+        }
+        finally
+        {
+            ArchiveCache.Semaphore.Release();
+        }
+    }
+
+    private List<YearMonthGroup> BuildMonthGroups(IReadOnlyList<AvailableMonthDto> months)
+    {
+        var groups = months
+            .GroupBy(x => x.Year)
+            .OrderByDescending(x => x.Key)
+            .Select(yearGroup => new YearMonthGroup
+            {
+                Year = yearGroup.Key,
+                Months = yearGroup
+                    .OrderByDescending(x => x.Month)
+                    .Select(x => new MonthLink
+                    {
+                        Year = x.Year,
+                        Month = x.Month,
+                        Label = $"{(x.IsClosed ? "(🔒) " : string.Empty)}{new DateTime(x.Year, x.Month, 1).ToString("MMMM", _culture)}"
+                    })
+                    .ToList()
+            })
+            .ToList();
+
+        return groups;
+    }
+
+    private void SetFallbackMonthGroup()
+    {
+        var now = DateTimeProvider.GetLocalDateTime();
+        _monthGroups =
+        [
+            new YearMonthGroup
+            {
+                Year = now.Year,
+                Months = [new MonthLink { Year = now.Year, Month = now.Month, Label = now.ToString("MMMM", _culture) }]
+            }
+        ];
     }
 
     private string GetNavClass(string pathPrefix)
@@ -156,48 +280,6 @@
         return isActive
             ? "appbar-button appbar-button-active"
             : "appbar-button";
-    }
-
-    private async Task LoadArchiveMonthsAsync()
-    {
-        var months = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
-
-        _monthGroups = months
-            .GroupBy(x => x.Year)
-            .OrderByDescending(x => x.Key)
-            .Select(yearGroup => new YearMonthGroup
-            {
-                Year = yearGroup.Key,
-                Months = yearGroup
-                    .OrderByDescending(x => x.Month)
-                    .Select(x => new MonthLink
-                    {
-                        Year = x.Year,
-                        Month = x.Month,
-                        Label = $"{new DateTime(x.Year, x.Month, 1).ToString("MMMM", _culture)}{(x.IsClosed ? " (zamk.)" : string.Empty)}"
-                    })
-                    .ToList()
-            })
-            .ToList();
-
-        if (_monthGroups.Count == 0)
-        {
-            var now = DateTimeProvider.GetLocalDateTime();
-            _monthGroups =
-            [
-                new YearMonthGroup
-                {
-                    Year = now.Year,
-                    Months = [new MonthLink { Year = now.Year, Month = now.Month, Label = $"{now.Month:00} {now.ToString("MMMM", _culture)}" }]
-                }
-            ];
-        }
-    }
-
-    private void GoToCurrentMonth()
-    {
-        var now = DateTimeProvider.GetLocalDateTime();
-        NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
 
 }

@@ -28,13 +28,13 @@ public sealed class CoreDataSeedService(
     private static readonly IReadOnlyList<TagSeedDefinition> DefaultTags =
     [
         new("Zakupy", "Spożywcze"),
-        new("Zakupy", "Lidl"),
-        new("Zakupy", "Auchan"),
-        new("Zakupy", "Biedronka"),
-        new("Zakupy", "Giełda"),
-        new("Zakupy", "Żabka"),
-        new("Zakupy", "Grabówka"),
-        new("Zakupy", "Allegro"),
+        new("Zakupy", "Lidl", "Spożywcze"),
+        new("Zakupy", "Auchan", "Spożywcze"),
+        new("Zakupy", "Biedronka", "Spożywcze"),
+        new("Zakupy", "Giełda", "Spożywcze"),
+        new("Zakupy", "Żabka", "Spożywcze"),
+        new("Zakupy", "Grabówka", "Spożywcze"),
+        new("Zakupy", "Allegro", "Spożywcze"),
 
         new("Zakupy", "Kosmetyki"),
         new("Zakupy", "Ciuchy"),
@@ -50,9 +50,9 @@ public sealed class CoreDataSeedService(
         new("Inne", "Prezent"),
 
         new("Samochód", "Paliwo"),
-        new("Samochód", "Orlen"),
-        new("Samochód", "Plus"),
-        new("Samochód", "Auchan"),
+        new("Samochód", "Orlen", "Samochód"),
+        new("Samochód", "Plus", "Samochód"),
+        new("Samochód", "Auchan", "Samochód"),
         
         new("Samochód", "Serwis"),
         new("Samochód", "Ubezpieczenie"),
@@ -75,25 +75,21 @@ public sealed class CoreDataSeedService(
     private static readonly IReadOnlyList<AccountSeedDefinition> DefaultAccounts =
     [
         new("ING", AccountType.Bank, 1),
-        new("Pekao", AccountType.Bank, 2),
-        new("VELO", AccountType.Bank, 3),
-        new("Santander", AccountType.Bank, 4),
-        new("ZEN", AccountType.Bank, 5),
-        new("Portfel", AccountType.Cash, 6),
-        new("Oszczędności", AccountType.Savings, 7)
+        new("ZEN", AccountType.Bank, 2),
+        new("Portfel", AccountType.Cash, 3),
+        new("Oszczędności", AccountType.Savings, 4)
     ];
 
     private static readonly IReadOnlyList<AccountBalanceSeedDefinition> DefaultAccountBalances =
     [
-        new("ING", 3500m),
-        new("Portfel", 450m),
+        new("ING", 350m),
+        new("Portfel", 100m),
         new("Oszczędności", 12000m)
     ];
 
     private static readonly IReadOnlyList<RegularIncomeSeedDefinition> DefaultRegularIncomes =
     [
         new("Wynagrodzenie", 7000m, 7, "ING"),
-        new("PFRON - Twoje nowe mozliwości", 800m, 15, "ING"),
         new("Zasiłek pielegnacyjny", 215.84m, 15, "ING")
     ];
 
@@ -111,6 +107,7 @@ public sealed class CoreDataSeedService(
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
+        if (!dbContext.Database.CanConnect()) return;
         if (dbContext.Accounts.Any()) return;
 
         await SeedDefaultCategoriesAsync(dbContext, cancellationToken);
@@ -126,6 +123,8 @@ public sealed class CoreDataSeedService(
         var now = dateTimeProvider.GetLocalDateTime();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (!await dbContext.Database.CanConnectAsync(cancellationToken)) return;
 
         var exists = await dbContext.MonthPlans
             .AnyAsync(x => x.Year == now.Year && x.Month == now.Month, cancellationToken);
@@ -186,14 +185,16 @@ public sealed class CoreDataSeedService(
         var categoriesByNameDictionary = categoriesByName
             .ToDictionary(x => x.Name, x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-        var existingTagKeys = (await dbContext.Tags
+        var existingTags = await dbContext.Tags
                 .IgnoreQueryFilters()
-                .Select(x => new { x.CategoryId, x.Name })
-                .ToListAsync(cancellationToken))
-            .Select(x => $"{x.CategoryId}:{x.Name}".ToUpperInvariant())
-            .ToHashSet();
+                .ToListAsync(cancellationToken);
 
-        var tagsToCreate = DefaultTags
+        var existingTagsByCategoryAndName = existingTags
+            .GroupBy(x => (x.CategoryId, x.Name), new CategoryTagNameKeyComparer())
+            .ToDictionary(x => x.Key, x => x.First(), new CategoryTagNameKeyComparer());
+
+        var rootTagsToCreate = DefaultTags
+            .Where(x => x.ParentTagName is null)
             .Where(x => categoriesByNameDictionary.ContainsKey(x.CategoryName))
             .Select(x => new Tag
             {
@@ -201,19 +202,85 @@ public sealed class CoreDataSeedService(
                 Name = x.TagName,
                 IsDeleted = false
             })
-            .Where(x => !existingTagKeys.Contains($"{x.CategoryId}:{x.Name}".ToUpperInvariant()))
+            .Where(x => !existingTagsByCategoryAndName.ContainsKey((x.CategoryId, x.Name)))
             .ToList();
 
-        if (tagsToCreate.Count == 0)
+        if (rootTagsToCreate.Count > 0)
+        {
+            await dbContext.Tags.AddRangeAsync(rootTagsToCreate, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            existingTags = await dbContext.Tags
+                .IgnoreQueryFilters()
+                .ToListAsync(cancellationToken);
+
+            existingTagsByCategoryAndName = existingTags
+                .GroupBy(x => (x.CategoryId, x.Name), new CategoryTagNameKeyComparer())
+                .ToDictionary(x => x.Key, x => x.First(), new CategoryTagNameKeyComparer());
+        }
+
+        var childTagsToCreate = new List<Tag>();
+        var childTagsToBackfillParent = new List<Tag>();
+
+        foreach (var seed in DefaultTags.Where(x => x.ParentTagName is not null))
+        {
+            if (!categoriesByNameDictionary.TryGetValue(seed.CategoryName, out var categoryId))
+            {
+                continue;
+            }
+
+            if (!existingTagsByCategoryAndName.TryGetValue((categoryId, seed.ParentTagName!), out var parentTag))
+            {
+                logger.LogWarning(
+                    "Skipping child tag seed because parent tag is missing. Category: {CategoryName}, Parent: {ParentTagName}, Child: {ChildTagName}",
+                    seed.CategoryName, seed.ParentTagName, seed.TagName);
+                continue;
+            }
+
+            if (existingTagsByCategoryAndName.TryGetValue((categoryId, seed.TagName), out var existingTag))
+            {
+                if (!existingTag.ParentTagId.HasValue && existingTag.Id != parentTag.Id)
+                {
+                    existingTag.ParentTagId = parentTag.Id;
+                    childTagsToBackfillParent.Add(existingTag);
+                }
+
+                continue;
+            }
+
+            var childTag = new Tag
+            {
+                CategoryId = categoryId,
+                Name = seed.TagName,
+                ParentTagId = parentTag.Id,
+                IsDeleted = false
+            };
+
+            childTagsToCreate.Add(childTag);
+            existingTagsByCategoryAndName[(categoryId, seed.TagName)] = childTag;
+        }
+
+        if (childTagsToCreate.Count == 0 && childTagsToBackfillParent.Count == 0 && rootTagsToCreate.Count == 0)
         {
             logger.LogWarning("Skipping tag seed because required categories are missing.");
             return;
         }
 
-        await dbContext.Tags.AddRangeAsync(tagsToCreate, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (childTagsToCreate.Count > 0)
+        {
+            await dbContext.Tags.AddRangeAsync(childTagsToCreate, cancellationToken);
+        }
 
-        logger.LogInformation("Default tags seeded.");
+        if (childTagsToCreate.Count > 0 || childTagsToBackfillParent.Count > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        logger.LogInformation(
+            "Default tags seeded. Roots: {RootCount}, Children: {ChildCount}, ParentBackfilled: {BackfillCount}",
+            rootTagsToCreate.Count,
+            childTagsToCreate.Count,
+            childTagsToBackfillParent.Count);
     }
 
     private async Task SeedDefaultAccountsAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
@@ -442,7 +509,16 @@ public sealed class CoreDataSeedService(
 
     private readonly record struct CategorySeedDefinition(string Name, string Color, bool SupportsLineItems);
 
-    private readonly record struct TagSeedDefinition(string CategoryName, string TagName);
+    private readonly record struct TagSeedDefinition(string CategoryName, string TagName, string? ParentTagName = null);
+
+    private sealed class CategoryTagNameKeyComparer : IEqualityComparer<(int CategoryId, string Name)>
+    {
+        public bool Equals((int CategoryId, string Name) x, (int CategoryId, string Name) y)
+            => x.CategoryId == y.CategoryId && string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((int CategoryId, string Name) obj)
+            => HashCode.Combine(obj.CategoryId, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Name));
+    }
 
     private readonly record struct AccountSeedDefinition(string Name, AccountType Type, int Order);
 

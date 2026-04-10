@@ -15,8 +15,10 @@
         <Project Path="src/HouseholdBudgetMate.Abstractions/HouseholdBudgetMate.Abstractions.csproj" />
         <Project Path="src/HouseholdBudgetMate.Application/HouseholdBudgetMate.Application.csproj" />
         <Project Path="src/HouseholdBudgetMate.Domain/HouseholdBudgetMate.Domain.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Installer/HouseholdBudgetMate.Installer.wixproj" Type="b7dd6f7e-def8-4e67-b5b7-07ef123db6f0" />
         <Project Path="src/HouseholdBudgetMate.Migrations/HouseholdBudgetMate.Migrations.csproj" />
         <Project Path="src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj" />
+        <Project Path="src/HouseholdBudgetMate.Tray/HouseholdBudgetMate.Tray.csproj" />
         <Project Path="src/HouseholdBudgetMate.Web/HouseholdBudgetMate.Web.csproj" />
     </Folder>
 </Solution>

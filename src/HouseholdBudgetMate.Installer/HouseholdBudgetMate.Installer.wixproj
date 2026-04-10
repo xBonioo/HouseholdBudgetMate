@@ -1,0 +1,39 @@
+﻿<Project Sdk="WixToolset.Sdk/4.0.5">
+
+  <PropertyGroup>
+    <OutputName>HouseholdBudgetMateInstaller</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+
+    <WebProjectPath>$(MSBuildThisFileDirectory)..\HouseholdBudgetMate.Web\HouseholdBudgetMate.Web.csproj</WebProjectPath>
+    <TrayProjectPath>$(MSBuildThisFileDirectory)..\HouseholdBudgetMate.Tray\HouseholdBudgetMate.Tray.csproj</TrayProjectPath>
+
+    <PublishDir>$(MSBuildThisFileDirectory)..\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish</PublishDir>
+    <PublishDirNormalized>$([System.String]::Copy('$(PublishDir)').TrimEnd('\'))</PublishDirNormalized>
+
+    <GeneratedWxs>$(MSBuildThisFileDirectory)Generated\PublishedFiles.wxs</GeneratedWxs>
+    <DefineConstants>PublishDir=$(PublishDirNormalized)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="4.0.6" />
+  </ItemGroup>
+
+  <Target Name="PublishApp" Condition="'$(SkipPublish)' != 'true'">
+    <Exec Command="dotnet publish &quot;$(WebProjectPath)&quot; -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:EnableCompressionInSingleFile=true /p:IncludeAllContentForSelfExtract=true /p:DebugType=None -o &quot;$(PublishDirNormalized)&quot;" />
+    <Exec Command="dotnet publish &quot;$(TrayProjectPath)&quot; -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:EnableCompressionInSingleFile=true /p:IncludeAllContentForSelfExtract=true /p:DebugType=None -o &quot;$(PublishDirNormalized)&quot;" />
+  </Target>
+
+  <Target Name="ValidatePublishDir">
+    <Error Condition="!Exists('$(PublishDirNormalized)\HouseholdBudgetMate.Web.exe')" Text="Brak pliku publish: $(PublishDirNormalized)\HouseholdBudgetMate.Web.exe" />
+    <Error Condition="!Exists('$(PublishDirNormalized)\HouseholdBudgetMate.Tray.exe')" Text="Brak pliku publish: $(PublishDirNormalized)\HouseholdBudgetMate.Tray.exe" />
+  </Target>
+
+  <Target Name="GeneratePublishedFilesFragment">
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)Generate-PublishedFilesWxs.ps1&quot; -PublishDir &quot;$(PublishDirNormalized)&quot; -OutputPath &quot;$(GeneratedWxs)&quot;" />
+  </Target>
+
+  <Target Name="PrepareInstallerInputs"
+          BeforeTargets="Build"
+          DependsOnTargets="PublishApp;ValidatePublishDir;GeneratePublishedFilesFragment" />
+
+</Project>

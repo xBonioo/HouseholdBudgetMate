@@ -7,10 +7,10 @@ public class WebStoragePathProvider : IStoragePathProvider
 {
     private readonly string _baseFolder;
 
-    public WebStoragePathProvider(IWebHostEnvironment env)
+    public WebStoragePathProvider()
     {
-        _baseFolder = Path.Combine(env.ContentRootPath, "..", "..", Constants.FolderNameFiles);
-        _baseFolder = Path.GetFullPath(_baseFolder);
+        var appDataDirectory = WritableAppDataPathResolver.Resolve("HouseholdBudgetMate");
+        _baseFolder = Path.Combine(appDataDirectory, Constants.FolderNameFiles);
 
         if (!Directory.Exists(_baseFolder)) Directory.CreateDirectory(_baseFolder);
     }

@@ -58,7 +58,7 @@
                 </MudPaper>
             </MudItem>
         }
-        <MudItem xs="12" md="@(IsSelectedMonthClosed() ? 4 : 3)">
+        <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Saldo + oszczędności</MudText>
                 <MudText Class="hb-kpi-value">@GetActiveTotalForSelectedMonth().ToString("0.00", _culture) PLN</MudText>

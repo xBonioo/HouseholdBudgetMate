@@ -14,6 +14,6 @@ public enum AccountType
     Savings = 3,
     
     [Display(Name = "Inne")]
-    Other = 4
+    Other = 99
 }
 

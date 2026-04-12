@@ -19,7 +19,8 @@ public sealed class ExpenseService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider,
     IAppEventPublisher appEventPublisher,
-    IIncomeService incomeService) : IExpenseService
+    IIncomeService incomeService,
+    ILoanService loanService) : IExpenseService
 {
     private static readonly YearMonthRequestValidator YearMonthValidator = new();
     private static readonly DateInMonthRequestValidator DateInMonthValidator = new();
@@ -226,6 +227,7 @@ public sealed class ExpenseService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await incomeService.SyncRegularIncomesForMonthAsync(year, month, cancellationToken);
+        await loanService.SyncLoanInstallmentsForMonthAsync(year, month, cancellationToken);
     }
 
     public async Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken)
@@ -241,6 +243,7 @@ public sealed class ExpenseService(
             await SyncRegularExpensesForMonthAsync(dbContext, monthPlan, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
             await incomeService.SyncRegularIncomesForMonthAsync(year, month, cancellationToken);
+            await loanService.SyncLoanInstallmentsForMonthAsync(year, month, cancellationToken);
         }
 
         var expenseEntities = await dbContext.Expenses

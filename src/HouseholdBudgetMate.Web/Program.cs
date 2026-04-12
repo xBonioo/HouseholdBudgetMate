@@ -136,6 +136,7 @@ builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IIncomeService, IncomeService>();
+builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddScoped<IAdminConfigurationService, AdminConfigurationService>();
 
 builder.Services.AddScoped<IAppEventPublisher, LoggingAppEventPublisher>();
@@ -149,6 +150,8 @@ builder.AddSerilogLogging();
 var applicationConfig = builder.Configuration.GetSection("Application").Get<ApplicationConfiguration>()
                         ?? throw new InvalidOperationException("Application configuration is missing");
 builder.Services.AddSingleton(applicationConfig);
+// builder.WebHost.UseUrls("https://0.0.0.0:5001");
+// builder.WebHost.UseUrls("http://0.0.0.0:5000");
 
 try
 {

@@ -18,7 +18,12 @@ public sealed class ExpenseServiceTests
     {
         var factory = TestDbContextFactory.CreateFactory(_dbName);
         var provider = new StaticDateTimeProvider(DateTime.UtcNow);
-        return new ExpenseService(factory, provider, eventPublisher ?? new RecordingAppEventPublisher(), new NoOpIncomeService());
+        return new ExpenseService(
+            factory,
+            provider,
+            eventPublisher ?? new RecordingAppEventPublisher(),
+            new NoOpIncomeService(),
+            new NoOpLoanService());
     }
 
     [Fact]
@@ -376,7 +381,12 @@ public sealed class ExpenseServiceTests
         var now = DateTime.UtcNow;
         var provider = new StaticDateTimeProvider(now);
         var incomeService = new IncomeService(factory, provider);
-        var expenseService = new ExpenseService(factory, provider, new RecordingAppEventPublisher(), incomeService);
+        var expenseService = new ExpenseService(
+            factory,
+            provider,
+            new RecordingAppEventPublisher(),
+            incomeService,
+            new NoOpLoanService());
 
         await expenseService.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
         {

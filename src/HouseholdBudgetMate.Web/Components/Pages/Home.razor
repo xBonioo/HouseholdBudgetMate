@@ -11,6 +11,7 @@
 @inject IDateTimeProvider DateTimeProvider
 @inject IExpenseService ExpenseService
 @inject IIncomeService IncomeService
+@inject ILoanService LoanService
 
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
@@ -30,6 +31,11 @@
                    OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
             Zarządzaj kontami
         </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.CreditScore"
+                   OnClick="@(() => NavigationManager.NavigateTo("/loans"))">
+            Zarządzaj kredytami
+        </MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Repeat"
                    OnClick="@(() => NavigationManager.NavigateTo("/recurring"))">
             Zarządzaj cyklicznymi
@@ -39,6 +45,35 @@
             Zarządzaj kategoriami
         </MudButton>
     </MudStack>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h6">Nadchodzące raty kredytów</MudText>
+        <MudChip T="int" Color="Color.Secondary">@_upcomingInstallments.Count</MudChip>
+    </MudStack>
+
+    @if (_upcomingInstallments.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak nadchodzących rat w kolejnych 3 miesiącach.</MudText>
+    }
+    else
+    {
+        <MudList T="UpcomingInstallmentItem" Dense="true" Class="mt-2">
+            @foreach (var item in _upcomingInstallments)
+            {
+                <MudListItem T="UpcomingInstallmentItem">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width:100%;">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body1">@item.LoanName</MudText>
+                            <MudText Typo="Typo.caption" Class="hb-muted">@($"{item.Month:D2}/{item.Year}")</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body1">@item.Amount.ToString("0.00", _culture) PLN</MudText>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    }
 </MudPaper>
 
 <MudGrid Class="mt-1">
@@ -135,6 +170,7 @@
     private string _monthLabel = string.Empty;
     private List<ExpenseDto> _recentExpenses = [];
     private LiveBalanceDto _liveBalance = new();
+    private List<UpcomingInstallmentItem> _upcomingInstallments = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,7 +186,18 @@
             var now = DateTimeProvider.GetLocalDateTime();
             _monthPlan = await ExpenseService.GetMonthAsync(now.Year, now.Month, CancellationToken.None);
             _liveBalance = await IncomeService.GetLiveBalanceAsync(now.Year, now.Month, CancellationToken.None);
+            var loans = await LoanService.GetAllAsync(CancellationToken.None);
             _monthLabel = $"{now:MMMM yyyy}";
+
+            var windowStart = new DateOnly(now.Year, now.Month, 1);
+            var windowEnd = windowStart.AddMonths(3);
+            _upcomingInstallments = loans
+                .SelectMany(x => x.Installments.Select(i => new UpcomingInstallmentItem(x.Name, i.Year, i.Month, i.DueDate, i.Amount, i.IsPaid)))
+                .Where(x => !x.IsPaid)
+                .Where(x => x.DueDate >= windowStart && x.DueDate < windowEnd)
+                .OrderBy(x => x.DueDate)
+                .Take(6)
+                .ToList();
 
             if (_monthPlan is null)
             {
@@ -180,5 +227,13 @@
         var now = DateTimeProvider.GetLocalDateTime();
         NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
+
+    private sealed record UpcomingInstallmentItem(
+        string LoanName,
+        int Year,
+        int Month,
+        DateOnly DueDate,
+        decimal Amount,
+        bool IsPaid);
     
 }

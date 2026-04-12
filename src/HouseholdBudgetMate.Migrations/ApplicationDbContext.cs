@@ -9,17 +9,26 @@ namespace HouseholdBudgetMate.Migrations;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
     public DbSet<LogEntry> Logs { get; set; }
+    
     public DbSet<Category> Categories { get; set; }
     public DbSet<Tag> Tags { get; set; }
+    
     public DbSet<MonthPlan> MonthPlans { get; set; }
+    public DbSet<MonthSavingsTransferItem> MonthSavingsTransferItems { get; set; }
+    
     public DbSet<Expense> Expenses { get; set; }
     public DbSet<ExpenseLineItem> ExpenseLineItems { get; set; }
+    public DbSet<RegularExpenseDefinition> RegularExpenseDefinitions { get; set; }
+    
     public DbSet<Account> Accounts { get; set; }
     public DbSet<AccountMonthBalance> AccountMonthBalances { get; set; }
     public DbSet<Income> Incomes { get; set; }
     public DbSet<RegularIncomeDefinition> RegularIncomeDefinitions { get; set; }
-    public DbSet<RegularExpenseDefinition> RegularExpenseDefinitions { get; set; }
-    public DbSet<MonthSavingsTransferItem> MonthSavingsTransferItems { get; set; }
+    
+    public DbSet<Loan> Loans { get; set; }
+    public DbSet<LoanInstallment> LoanInstallments { get; set; }
+    public DbSet<LoanRateEntry> LoanRateEntries { get; set; }
+    public DbSet<LoanCharge> LoanCharges { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -6,6 +6,7 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using MudBlazor
 
@@ -13,6 +14,7 @@
 @inject IExpenseService ExpenseService
 @inject IAccountService AccountService
 @inject ICategoryService CategoryService
+@inject ILoanService LoanService
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 
@@ -371,6 +373,36 @@
             </MudTable>
         }
     </MudPaper>
+
+    <MudPaper Class="pa-4 hb-panel">
+        <MudText Typo="Typo.h6" Class="mb-2">Raty kredytów</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">Rate i zmianę WIBOR zarządzasz na stronie Kredyty. Tutaj widzisz podgląd cyklicznych rat.</MudText>
+
+        @if (_loanRecurringItems.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak aktywnych rat kredytowych.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_loanRecurringItems" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Kredyt</MudTh>
+                    <MudTh>Następna rata</MudTh>
+                    <MudTh>Kwota</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd>@item.LoanName</MudTd>
+                    <MudTd>@item.Label</MudTd>
+                    <MudTd>@item.Amount.ToString("0.00", _culture) zł</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@(item.IsPaid ? Color.Success : Color.Warning)">@(item.IsPaid ? "Zapłacona" : "Do zapłaty")</MudChip>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+
 </MudStack>
 
 @code {
@@ -380,6 +412,8 @@
     private List<CategoryDto> _categories = [];
     private List<RegularIncomeDefinitionDto> _incomeDefinitions = [];
     private List<RegularExpenseDefinitionDto> _expenseDefinitions = [];
+    private List<LoanDto> _loans = [];
+    private List<LoanRecurringItem> _loanRecurringItems = [];
 
     private readonly CreateRegularIncomeDefinitionRequest _newIncomeDefinition = new()
     {
@@ -422,6 +456,16 @@
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
             _incomeDefinitions = (await IncomeService.GetRegularDefinitionsAsync(CancellationToken.None)).ToList();
             _expenseDefinitions = (await ExpenseService.GetRegularExpenseDefinitionsAsync(CancellationToken.None)).ToList();
+            _loans = (await LoanService.GetAllAsync(CancellationToken.None)).ToList();
+            _loanRecurringItems = _loans
+                .Where(x => x.IsActive)
+                .SelectMany(x => x.Installments
+                    .Where(i => !i.IsPaid)
+                    .OrderBy(i => i.DueDate)
+                    .Take(1)
+                    .Select(i => new LoanRecurringItem(x.Name, $"{i.Month:D2}/{i.Year}", i.Amount, i.IsPaid)))
+                .OrderBy(x => x.LoanName)
+                .ToList();
 
             if (_newIncomeDefinition.AccountId == 0 && _accounts.Count > 0)
             {
@@ -432,6 +476,7 @@
             {
                 _newExpenseDefinition.CategoryId = _categories[0].Id;
             }
+
         }
         catch (Exception ex)
         {
@@ -750,5 +795,8 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
+
+
+    private sealed record LoanRecurringItem(string LoanName, string Label, decimal Amount, bool IsPaid);
 
 }

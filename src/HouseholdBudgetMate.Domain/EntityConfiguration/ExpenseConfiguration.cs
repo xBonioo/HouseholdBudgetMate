@@ -58,8 +58,15 @@ public sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .HasForeignKey(x => x.RegularExpenseDefinitionId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(x => x.LoanInstallment)
+            .WithOne(x => x.Expense)
+            .HasForeignKey<Expense>(x => x.LoanInstallmentId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(x => new { x.MonthPlanId, x.Order });
         builder.HasIndex(x => new { x.MonthPlanId, x.RegularExpenseDefinitionId })
+            .IsUnique();
+        builder.HasIndex(x => x.LoanInstallmentId)
             .IsUnique();
     }
 }

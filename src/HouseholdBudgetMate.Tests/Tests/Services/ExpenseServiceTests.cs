@@ -303,6 +303,65 @@ public sealed class ExpenseServiceTests
     }
 
     [Fact]
+    public async Task CopySelectedExpensesToNextMonthAsync_Should_Copy_Selected_Items_With_Actual_Set_To_Zero()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#6D4C41" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+
+        var first = await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 8,
+            Name = "A",
+            CategoryId = categoryId,
+            PlannedAmount = 120m,
+            ActualAmount = 70m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        var second = await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 8,
+            Name = "B",
+            CategoryId = categoryId,
+            PlannedAmount = 50m,
+            ActualAmount = 10m,
+            ShowRemainingInUI = false
+        }, CancellationToken.None);
+
+        var copiedCount = await service.CopySelectedExpensesToNextMonthAsync(new CopySelectedExpensesToNextMonthRequest
+        {
+            Year = 2026,
+            Month = 8,
+            ExpenseIds = [first.Id, second.Id]
+        }, CancellationToken.None);
+
+        Assert.Equal(2, copiedCount);
+
+        var september = await service.GetMonthAsync(2026, 9, CancellationToken.None);
+        var copiedA = Assert.Single(september.Expenses, x => x.Name == "A");
+        var copiedB = Assert.Single(september.Expenses, x => x.Name == "B");
+
+        Assert.Equal(120m, copiedA.PlannedAmount);
+        Assert.Equal(0m, copiedA.ActualAmount);
+        Assert.True(copiedA.ShowRemainingInUI);
+
+        Assert.Equal(50m, copiedB.PlannedAmount);
+        Assert.Equal(0m, copiedB.ActualAmount);
+        Assert.False(copiedB.ShowRemainingInUI);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_Should_Throw_When_Month_Is_Closed()
     {
         int categoryId;

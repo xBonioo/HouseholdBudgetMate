@@ -136,6 +136,31 @@ public sealed class ReorderExpensesRequestValidator : AbstractValidator<ReorderE
     }
 }
 
+public sealed class CopySelectedExpensesToNextMonthRequestValidator : AbstractValidator<CopySelectedExpensesToNextMonthRequest>
+{
+    public CopySelectedExpensesToNextMonthRequestValidator()
+    {
+        RuleFor(x => x.Year)
+            .InclusiveBetween(2000, 3000)
+            .WithMessage("Year is out of allowed range.");
+
+        RuleFor(x => x.Month)
+            .InclusiveBetween(1, 12)
+            .WithMessage("Month must be in range 1..12.");
+
+        RuleFor(x => x.ExpenseIds)
+            .NotEmpty()
+            .WithMessage("At least one expense must be selected.");
+
+        RuleForEach(x => x.ExpenseIds)
+            .GreaterThan(0);
+
+        RuleFor(x => x.ExpenseIds)
+            .Must(ids => ids.Distinct().Count() == ids.Count)
+            .WithMessage("Expense ids must be unique.");
+    }
+}
+
 public sealed class CreateExpenseLineItemRequestValidator : AbstractValidator<CreateExpenseLineItemRequest>
 {
     public CreateExpenseLineItemRequestValidator()

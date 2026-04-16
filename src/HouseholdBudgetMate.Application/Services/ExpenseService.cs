@@ -32,6 +32,7 @@ public sealed class ExpenseService(
     private static readonly UpdateMonthSavingsTransferItemRequestValidator UpdateSavingsTransferItemValidator = new();
     private static readonly UpdateExpenseRequestValidator UpdateExpenseValidator = new();
     private static readonly ReorderExpensesRequestValidator ReorderExpensesValidator = new();
+    private static readonly CopySelectedExpensesToNextMonthRequestValidator CopySelectedExpensesToNextMonthValidator = new();
     private static readonly UpdateExpenseLineItemRequestValidator UpdateExpenseLineItemValidator = new();
     private static readonly DeleteMonthSavingsTransferItemRequestValidator DeleteSavingsTransferItemValidator = new();
     private static readonly DeleteExpenseRequestValidator DeleteExpenseValidator = new();
@@ -570,6 +571,85 @@ public sealed class ExpenseService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<int> CopySelectedExpensesToNextMonthAsync(
+        CopySelectedExpensesToNextMonthRequest request,
+        CancellationToken cancellationToken)
+    {
+        CopySelectedExpensesToNextMonthValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var sourceMonthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+
+        var sourceExpenses = await dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == sourceMonthPlan.Id && request.ExpenseIds.Contains(x.Id))
+            .OrderBy(x => x.Order)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        if (sourceExpenses.Count != request.ExpenseIds.Count)
+        {
+            throw new BadRequestException("Some expenses were not found in selected month.");
+        }
+
+        var nextMonthDate = new DateTime(request.Year, request.Month, 1).AddMonths(1);
+        var targetMonthPlan = await GetOrCreateMonthPlanAsync(dbContext, nextMonthDate.Year, nextMonthDate.Month,
+            cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(targetMonthPlan);
+
+        var existingRegularDefinitionIdsInTarget = await dbContext.Expenses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == targetMonthPlan.Id && x.RegularExpenseDefinitionId.HasValue)
+            .Select(x => x.RegularExpenseDefinitionId!.Value)
+            .ToListAsync(cancellationToken);
+
+        var existingRegularDefinitionIdsSet = existingRegularDefinitionIdsInTarget.ToHashSet();
+
+        var maxOrder = await dbContext.Expenses
+            .Where(x => x.MonthPlanId == targetMonthPlan.Id)
+            .Select(x => (int?)x.Order)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        var createdCount = 0;
+        foreach (var sourceExpense in sourceExpenses)
+        {
+            if (sourceExpense.RegularExpenseDefinitionId.HasValue
+                && existingRegularDefinitionIdsSet.Contains(sourceExpense.RegularExpenseDefinitionId.Value))
+            {
+                continue;
+            }
+
+            maxOrder++;
+            dbContext.Expenses.Add(new Expense
+            {
+                MonthPlanId = targetMonthPlan.Id,
+                Order = maxOrder,
+                Name = sourceExpense.Name,
+                CategoryId = sourceExpense.CategoryId,
+                TagId = sourceExpense.TagId,
+                RegularExpenseDefinitionId = sourceExpense.RegularExpenseDefinitionId,
+                PlannedAmount = sourceExpense.PlannedAmount,
+                ActualAmount = 0,
+                ShowRemainingInUI = sourceExpense.ShowRemainingInUI
+            });
+
+            createdCount++;
+            if (sourceExpense.RegularExpenseDefinitionId.HasValue)
+            {
+                existingRegularDefinitionIdsSet.Add(sourceExpense.RegularExpenseDefinitionId.Value);
+            }
+        }
+
+        if (createdCount > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return createdCount;
     }
 
     public async Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request,

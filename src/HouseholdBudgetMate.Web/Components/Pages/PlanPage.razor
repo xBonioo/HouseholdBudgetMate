@@ -189,13 +189,33 @@
     <MudPaper Class="pa-4 hb-panel">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
             <MudText Typo="Typo.h6">Wpływy miesiąca</MudText>
-            <MudButton
-                Variant="Variant.Outlined"
-                Color="Color.Secondary"
-                StartIcon="@Icons.Material.Filled.Repeat"
-                OnClick="NavigateToRegularIncomes">
-                Zarządzaj cyklicznymi
-            </MudButton>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudButton
+                    Variant="Variant.Outlined"
+                    Color="Color.Secondary"
+                    StartIcon="@Icons.Material.Filled.Repeat"
+                    OnClick="NavigateToRegularIncomes">
+                    Zarządzaj cyklicznymi
+                </MudButton>
+                <MudButton
+                    Variant="Variant.Outlined"
+                    Color="@(_isCopyMode ? Color.Warning : Color.Primary)"
+                    StartIcon="@Icons.Material.Filled.ContentCopy"
+                    OnClick="ToggleCopyMode">
+                    @(_isCopyMode ? "Anuluj kopiowanie" : "Kopiuj do następnego miesiąca")
+                </MudButton>
+                @if (_isCopyMode)
+                {
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Check"
+                        Disabled="@(_selectedExpenseIdsForCopy.Count == 0)"
+                        OnClick="CopySelectedExpensesAsync">
+                        Kopiuj zaznaczone
+                    </MudButton>
+                }
+            </MudStack>
         </MudStack>
         <MudGrid>
             <MudItem xs="12" md="4">
@@ -447,17 +467,31 @@
                     else
                     {
                         <MudTd Class="expense-order-column">
-                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                <MudText Typo="Typo.caption">@expense.Order</MudText>
-                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
-                                               Size="Size.Small"
-                                               Disabled="@IsFirstExpense(expense.Id)"
-                                               OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
-                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
-                                               Size="Size.Small"
-                                               Disabled="@IsLastExpense(expense.Id)"
-                                               OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
-                            </MudStack>
+                            @if (_isCopyMode)
+                            {
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudCheckBox T="bool"
+                                                 Value="@_selectedExpenseIdsForCopy.Contains(expense.Id)"
+                                                 ValueChanged="@(value => SetExpenseCopySelection(expense.Id, value))"
+                                                 Dense="true"
+                                                 Color="Color.Primary"/>
+                                    <MudText Typo="Typo.caption">@expense.Order</MudText>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.caption">@expense.Order</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                   Size="Size.Small"
+                                                   Disabled="@IsFirstExpense(expense.Id)"
+                                                   OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
+                                    <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                   Size="Size.Small"
+                                                   Disabled="@IsLastExpense(expense.Id)"
+                                                   OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
+                                </MudStack>
+                            }
                         </MudTd>
                         <MudTd>
                             @if (IsExpenseNameTruncated(expense.Name))
@@ -482,6 +516,7 @@
                                     Variant="Variant.Outlined"
                                     Color="Color.Primary"
                                     Size="Size.Small"
+                                    Disabled="@_isCopyMode"
                                     ButtonType="ButtonType.Button"
                                     OnClick="() => StartEditAsync(expense)">Edytuj
                                 </MudButton>
@@ -489,6 +524,7 @@
                                     Variant="Variant.Outlined"
                                     Color="Color.Error"
                                     Size="Size.Small"
+                                    Disabled="@_isCopyMode"
                                     ButtonType="ButtonType.Button"
                                     OnClick="() => DeleteExpenseAsync(expense.Id)">Usuń
                                 </MudButton>
@@ -498,6 +534,7 @@
                                         Variant="Variant.Text"
                                         Color="Color.Secondary"
                                         Size="Size.Small"
+                                        Disabled="@_isCopyMode"
                                         ButtonType="ButtonType.Button"
                                         OnClick="() => ToggleLineItems(expense.Id)">
                                         @(_expandedExpenseIds.Contains(expense.Id) ? "▲" : "▼")
@@ -790,6 +827,8 @@
     private int? _editLineItemExpenseId;
     private int? _expenseIdPendingScrollIntoView;
     private bool _isCreateExpenseFormVisible;
+    private bool _isCopyMode;
+    private readonly HashSet<int> _selectedExpenseIdsForCopy = [];
 
     private IReadOnlyList<EnvelopeProgressItemDto> EnvelopeProgressItems => BuildEnvelopeProgressItems();
 
@@ -827,6 +866,7 @@
             _liveBalance = await IncomeService.GetLiveBalanceAsync(Year, Month, CancellationToken.None);
             
             _expandedExpenseIds.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
+            _selectedExpenseIdsForCopy.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
 
             ApplyKpiFromMonthPlan();
 
@@ -1314,6 +1354,8 @@
             : new DateTime(Year, Month, 1).AddMonths(monthOffset);
 
         _editExpense = null;
+        _isCopyMode = false;
+        _selectedExpenseIdsForCopy.Clear();
         NavigationManager.NavigateTo($"/plan/{targetMonth.Year}/{targetMonth.Month}");
     }
 
@@ -1358,6 +1400,78 @@
             }, CancellationToken.None);
 
             await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void ToggleCopyMode()
+    {
+        _isCopyMode = !_isCopyMode;
+        if (!_isCopyMode)
+        {
+            _selectedExpenseIdsForCopy.Clear();
+        }
+    }
+
+    private Task SetExpenseCopySelection(int expenseId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            _selectedExpenseIdsForCopy.Add(expenseId);
+        }
+        else
+        {
+            _selectedExpenseIdsForCopy.Remove(expenseId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task CopySelectedExpensesAsync()
+    {
+        if (_selectedExpenseIdsForCopy.Count == 0)
+        {
+            Snackbar.Add("Wybierz co najmniej jedną pozycję do skopiowania.", Severity.Warning);
+            return;
+        }
+
+        var nextMonth = new DateTime(Year, Month, 1).AddMonths(1);
+        var confirmation = await ConfirmAsync(
+            $"Skopiować {_selectedExpenseIdsForCopy.Count} pozycji do {nextMonth.ToString("MMMM yyyy", Culture)}?");
+        if (!confirmation)
+        {
+            return;
+        }
+
+        try
+        {
+            var orderedSelectedExpenseIds = OrderedExpenses
+                .Where(x => _selectedExpenseIdsForCopy.Contains(x.Id))
+                .Select(x => x.Id)
+                .ToList();
+
+            var copiedCount = await ExpenseService.CopySelectedExpensesToNextMonthAsync(
+                new CopySelectedExpensesToNextMonthRequest
+                {
+                    Year = Year,
+                    Month = Month,
+                    ExpenseIds = orderedSelectedExpenseIds
+                },
+                CancellationToken.None);
+
+            _selectedExpenseIdsForCopy.Clear();
+            _isCopyMode = false;
+
+            if (copiedCount == 0)
+            {
+                Snackbar.Add("Nie skopiowano żadnej pozycji.", Severity.Info);
+                return;
+            }
+
+            Snackbar.Add($"Skopiowano {copiedCount} pozycji do {nextMonth.ToString("MMMM yyyy", Culture)}.", Severity.Success);
         }
         catch (Exception ex)
         {

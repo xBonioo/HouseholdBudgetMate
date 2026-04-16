@@ -28,6 +28,8 @@ public interface IExpenseService
         CancellationToken cancellationToken);
 
     Task ReorderExpensesAsync(ReorderExpensesRequest request, CancellationToken cancellationToken);
+    Task<int> CopySelectedExpensesToNextMonthAsync(CopySelectedExpensesToNextMonthRequest request,
+        CancellationToken cancellationToken);
     Task ReorderRegularExpenseDefinitionsAsync(ReorderRegularExpenseDefinitionsRequest request,
         CancellationToken cancellationToken);
 

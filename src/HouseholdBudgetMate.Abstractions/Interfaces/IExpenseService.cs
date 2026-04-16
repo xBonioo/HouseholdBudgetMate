@@ -6,6 +6,7 @@ namespace HouseholdBudgetMate.Abstractions.Interfaces;
 public interface IExpenseService
 {
     Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken);
+    Task<DashboardSummaryDto> GetDashboardSummaryAsync(int year, int month, CancellationToken cancellationToken);
     Task<IReadOnlyList<AvailableMonthDto>> GetAvailableMonthsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<RegularExpenseDefinitionDto>> GetRegularExpenseDefinitionsAsync(CancellationToken cancellationToken);
 

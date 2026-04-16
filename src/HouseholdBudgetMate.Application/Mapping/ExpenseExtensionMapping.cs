@@ -10,6 +10,7 @@ public static class ExpenseExtensionMapping
         return new ExpenseDto
         {
             Id = expense.Id,
+            UpdatedAtUtc = expense.UpdatedAtUtc,
             MonthPlanId = expense.MonthPlanId,
             Order = expense.Order,
             Name = expense.Name,

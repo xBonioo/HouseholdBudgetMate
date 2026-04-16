@@ -7,6 +7,7 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests
 @using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Web.Services
 @using MudBlazor
 
 @inject IExpenseService ExpenseService
@@ -56,6 +57,12 @@
     <MudGrid>
         <MudItem xs="12" md="3">
             <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.IncomesTotal.ToString("0.00", Culture) PLN</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Planowane</MudText>
                 <MudText Class="hb-kpi-value">@_kpi.PlannedTotal.ToString("0.00") PLN</MudText>
             </MudPaper>
@@ -68,17 +75,8 @@
         </MudItem>
         <MudItem xs="12" md="3">
             <MudPaper Class="hb-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Pozostało</MudText>
-                <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00") PLN</MudText>
-                <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
-                                   Color="@GetRemainingBarColor()"/>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudPaper Class="hb-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
-                <MudText Class="hb-kpi-value">@_liveBalance.CurrentBalance.ToString("0.00", Culture) PLN</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">Konta + wpływy - wydatki</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Wydatki poza planem</MudText>
+                <MudText Class="hb-kpi-value">@UnplannedSpentTotal.ToString("0.00", Culture) PLN</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -86,21 +84,31 @@
     <MudGrid>
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Konta (bez oszczędności)</MudText>
-                <MudText Class="hb-kpi-value">@_liveBalance.AccountsBaseTotal.ToString("0.00", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Pozostało</MudText>
+                <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00") PLN</MudText>
+                <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
+                                   Color="@GetRemainingBarColor()"/>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
-                <MudText Class="hb-kpi-value">@_liveBalance.IncomesTotal.ToString("0.00", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.CurrentBalance.ToString("0.00", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Konta + wpływy - wydatki</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" md="4">
+        @* <MudItem xs="12" md="3">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Przelew na oszczędności</MudText>
-                <MudText Class="hb-kpi-value">@_liveBalance.SavingsTransfersTotal.ToString("0.00", Culture) PLN
-                </MudText>
+                <MudText Class="hb-kpi-value">@_liveBalance.SavingsTransfersTotal.ToString("0.00", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Suma odłożonych pieniędzy</MudText>
+                </MudPaper>
+        </MudItem> *@
+        <MudItem xs="12" md="4">
+            <MudPaper Class="hb-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Zaoszczędzone w miesiącu</MudText>
+                <MudText Class="hb-kpi-value">@_dashboardSummary.SavedAmountThisMonth.ToString("0.00", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Przyrost majątku (M/M)</MudText>
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -738,6 +746,7 @@
     private List<AccountDto> _accounts = [];
     private List<IncomeDto> _incomes = [];
     private LiveBalanceDto _liveBalance = new();
+    private DashboardSummaryDto _dashboardSummary = new();
     private MonthPlanKpiDto _kpi = new();
 
     private readonly CreateMonthSavingsTransferItemRequest _newSavingsTransfer = new()
@@ -786,6 +795,7 @@
 
     private string? CreateExpenseEnvelopeWarning => BuildCreateExpenseEnvelopeWarning();
     private bool IsMonthClosed => _monthPlan?.IsClosed == true;
+    private decimal UnplannedSpentTotal => _monthPlan?.Expenses.Where(x => x.IsUnplanned).Sum(x => x.ActualAmount) ?? 0m;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -811,6 +821,7 @@
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
             _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
+            _dashboardSummary = await ExpenseService.GetDashboardSummaryAsync(Year, Month, CancellationToken.None);
 
             _incomes = (await IncomeService.GetMonthIncomesAsync(Year, Month, CancellationToken.None)).ToList();
             _liveBalance = await IncomeService.GetLiveBalanceAsync(Year, Month, CancellationToken.None);
@@ -962,17 +973,7 @@
 
     private Color GetRemainingBarColor()
     {
-        if (_kpi.RemainingTotal <= 0)
-        {
-            return Color.Error;
-        }
-
-        if (_kpi.RemainingPercent <= 20)
-        {
-            return Color.Warning;
-        }
-
-        return Color.Success;
+        return RemainingBudgetColorResolver.Resolve(_kpi.RemainingTotal, _kpi.RemainingPercent);
     }
 
     private string GetRowClass(ExpenseDto expense, int _)

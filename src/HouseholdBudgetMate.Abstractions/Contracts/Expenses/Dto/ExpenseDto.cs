@@ -3,6 +3,7 @@
 public sealed class ExpenseDto
 {
     public int Id { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
     public int MonthPlanId { get; set; }
     public int Order { get; set; }
     public string Name { get; set; } = null!;

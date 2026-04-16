@@ -1,6 +1,7 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Facility.Events;
+using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
@@ -270,6 +271,129 @@ public sealed class ExpenseService(
             .ToListAsync(cancellationToken);
 
         return BuildMonthPlanDto(monthPlan, expenses, savingsTransfers);
+    }
+
+    public async Task<DashboardSummaryDto> GetDashboardSummaryAsync(int year, int month, CancellationToken cancellationToken)
+    {
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
+        var monthPlan = await GetMonthAsync(year, month, cancellationToken);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var incomesCount = await dbContext.Incomes
+            .AsNoTracking()
+            .CountAsync(x => x.Year == year && x.Month == month, cancellationToken);
+
+        var savingsTransfersCount = await dbContext.MonthSavingsTransferItems
+            .AsNoTracking()
+            .CountAsync(x => x.MonthPlanId == monthPlan.Id, cancellationToken);
+
+        var expensesByMonth = await dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlan.Year == year && x.MonthPlan.Month <= month)
+            .GroupBy(x => x.MonthPlan.Month)
+            .Select(g => new
+            {
+                Month = g.Key,
+                Planned = g.Sum(x => x.PlannedAmount),
+                Spent = g.Sum(x => x.ActualAmount)
+            })
+            .ToListAsync(cancellationToken);
+
+        var incomesByMonth = await dbContext.Incomes
+            .AsNoTracking()
+            .Where(x => x.Year == year && x.Month <= month)
+            .GroupBy(x => x.Month)
+            .Select(g => new
+            {
+                Month = g.Key,
+                Total = g.Sum(x => x.Amount)
+            })
+            .ToListAsync(cancellationToken);
+
+        var expensesMap = expensesByMonth.ToDictionary(x => x.Month);
+        var incomesMap = incomesByMonth.ToDictionary(x => x.Month, x => x.Total);
+
+        var accountBalances = await dbContext.AccountMonthBalances
+            .AsNoTracking()
+            .Where(x => x.Year < year || (x.Year == year && x.Month <= month))
+            .Select(x => new AccountBalanceSnapshot(
+                x.AccountId,
+                x.Account.Type,
+                x.Year,
+                x.Month,
+                x.ClosingBalance))
+            .ToListAsync(cancellationToken);
+
+        var timeline = new List<DashboardMonthlySavingsDto>(month);
+        for (var i = 1; i <= month; i++)
+        {
+            expensesMap.TryGetValue(i, out var expenseData);
+            incomesMap.TryGetValue(i, out var incomeAmount);
+
+            var currentMonthDate = new DateTime(year, i, 1);
+            var previousMonthDate = currentMonthDate.AddMonths(-1);
+
+            var currentGeneralMoney = SumLatestClosingBalances(accountBalances, year, i, includeSavings: false);
+            var previousGeneralMoney = SumLatestClosingBalances(accountBalances, previousMonthDate.Year, previousMonthDate.Month,
+                includeSavings: false);
+            var currentSavingsMoney = SumLatestClosingBalances(accountBalances, year, i, includeSavings: true);
+            var previousSavingsMoney = SumLatestClosingBalances(accountBalances, previousMonthDate.Year, previousMonthDate.Month,
+                includeSavings: true);
+
+            var generalMoneyDelta = currentGeneralMoney - previousGeneralMoney;
+            var savingsMoneyDelta = currentSavingsMoney - previousSavingsMoney;
+
+            var plannedAmount = expenseData?.Planned ?? 0m;
+            var spentAmount = expenseData?.Spent ?? 0m;
+            var savedAmount = generalMoneyDelta + savingsMoneyDelta;
+
+            timeline.Add(new DashboardMonthlySavingsDto
+            {
+                Year = year,
+                Month = i,
+                PlannedAmount = plannedAmount,
+                SpentAmount = spentAmount,
+                IncomeAmount = incomeAmount,
+                SavedAmount = savedAmount
+            });
+        }
+
+        var categoryRemaining = monthPlan.Expenses
+            .GroupBy(x => new { x.CategoryId, x.CategoryName })
+            .Select(g => new DashboardCategoryRemainingDto
+            {
+                CategoryId = g.Key.CategoryId,
+                CategoryName = g.Key.CategoryName,
+                PlannedAmount = g.Where(x => x.PlannedAmount > 0).Sum(x => x.PlannedAmount),
+                SpentAmount = g.Where(x => x.PlannedAmount > 0).Sum(x => x.ActualAmount),
+                RemainingAmount = g.Sum(CalculateRemainingContribution)
+            })
+            .Where(x => x.RemainingAmount > 0)
+            .OrderByDescending(x => x.RemainingAmount)
+            .ToList();
+
+        var monthlyCount = timeline.Count == 0 ? 1 : timeline.Count;
+        var averageMonthlyIncome = timeline.Sum(x => x.IncomeAmount) / monthlyCount;
+        var averageMonthlySpent = timeline.Sum(x => x.SpentAmount) / monthlyCount;
+        var averageMonthlySaved = timeline.Sum(x => x.SavedAmount) / monthlyCount;
+        var savedAmountThisMonth = timeline.FirstOrDefault(x => x.Month == month)?.SavedAmount ?? 0m;
+
+        return new DashboardSummaryDto
+        {
+            Year = year,
+            Month = month,
+            TransactionCount = monthPlan.Expenses.Count + incomesCount + savingsTransfersCount,
+            UnplannedSpentTotal = monthPlan.Expenses.Where(x => x.IsUnplanned).Sum(x => x.ActualAmount),
+            SavedAmountThisMonth = savedAmountThisMonth,
+            SavedAmountYearToDate = timeline.Sum(x => x.SavedAmount),
+            AverageMonthlyIncome = averageMonthlyIncome,
+            AverageMonthlySpent = averageMonthlySpent,
+            AverageMonthlySaved = averageMonthlySaved,
+            CategoryRemainingItems = categoryRemaining,
+            SavingsTimeline = timeline
+        };
     }
 
     public async Task<MonthSavingsTransferItemDto> CreateMonthSavingsTransferItemAsync(
@@ -819,6 +943,40 @@ public sealed class ExpenseService(
     {
         return !plannedAmount.HasValue || plannedAmount <= 0;
     }
+
+    private static decimal CalculateRemainingContribution(ExpenseDto expense)
+    {
+        if (expense.PlannedAmount <= 0)
+        {
+            return 0;
+        }
+
+        if (expense.ShowRemainingInUI)
+        {
+            return Math.Max(0, expense.RemainingAmount);
+        }
+
+        return expense.ActualAmount == 0 ? expense.PlannedAmount : 0;
+    }
+
+    private static decimal SumLatestClosingBalances(
+        IReadOnlyList<AccountBalanceSnapshot> balances,
+        int year,
+        int month,
+        bool includeSavings)
+    {
+        return balances
+            .Where(x => (x.AccountType == (int)AccountType.Savings) == includeSavings)
+            .GroupBy(x => x.AccountId)
+            .Sum(group => group
+                .Where(x => x.Year < year || (x.Year == year && x.Month <= month))
+                .OrderByDescending(x => x.Year)
+                .ThenByDescending(x => x.Month)
+                .Select(x => x.ClosingBalance)
+                .FirstOrDefault());
+    }
+
+    private sealed record AccountBalanceSnapshot(int AccountId, int AccountType, int Year, int Month, decimal ClosingBalance);
 
     private static async Task RecalculateActualAmountAsync(
         ApplicationDbContext dbContext,

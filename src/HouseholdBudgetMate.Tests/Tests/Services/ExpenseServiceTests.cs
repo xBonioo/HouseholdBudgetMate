@@ -577,4 +577,150 @@ public sealed class ExpenseServiceTests
 
         Assert.Contains(november.Expenses, x => x.Name == "Netflix" && x.PlannedAmount == 60m);
     }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Calculate_Month_And_Ytd_Metrics()
+    {
+        int categoryId;
+        int accountId;
+        int savingsAccountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#43A047" };
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            var savingsAccount = new Account { Name = "Skarbonka", Type = (int)AccountType.Savings };
+            context.Categories.Add(category);
+            context.Accounts.Add(account);
+            context.Accounts.Add(savingsAccount);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+            accountId = account.Id;
+            savingsAccountId = savingsAccount.Id;
+
+            var january = new MonthPlan { Year = 2026, Month = 1 };
+            var february = new MonthPlan { Year = 2026, Month = 2 };
+            context.MonthPlans.AddRange(january, february);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.AddRange(
+                new AccountMonthBalance
+                {
+                    AccountId = accountId,
+                    Year = 2025,
+                    Month = 12,
+                    ClosingBalance = 900m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = accountId,
+                    Year = 2026,
+                    Month = 1,
+                    ClosingBalance = 1000m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = accountId,
+                    Year = 2026,
+                    Month = 2,
+                    ClosingBalance = 1100m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = savingsAccountId,
+                    Year = 2025,
+                    Month = 12,
+                    ClosingBalance = 150m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = savingsAccountId,
+                    Year = 2026,
+                    Month = 1,
+                    ClosingBalance = 200m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = savingsAccountId,
+                    Year = 2026,
+                    Month = 2,
+                    ClosingBalance = 260m
+                });
+
+            context.Expenses.AddRange(
+                new Expense
+                {
+                    MonthPlanId = january.Id,
+                    Order = 1,
+                    Name = "Zakupy styczen",
+                    CategoryId = categoryId,
+                    PlannedAmount = 100m,
+                    ActualAmount = 60m,
+                    ShowRemainingInUI = true
+                },
+                new Expense
+                {
+                    MonthPlanId = february.Id,
+                    Order = 1,
+                    Name = "Zakupy luty",
+                    CategoryId = categoryId,
+                    PlannedAmount = 200m,
+                    ActualAmount = 250m,
+                    ShowRemainingInUI = true
+                },
+                new Expense
+                {
+                    MonthPlanId = february.Id,
+                    Order = 2,
+                    Name = "Nieplanowany",
+                    CategoryId = categoryId,
+                    PlannedAmount = 0m,
+                    ActualAmount = 30m,
+                    ShowRemainingInUI = true
+                });
+
+            context.Incomes.AddRange(
+                new Income
+                {
+                    Year = 2026,
+                    Month = 1,
+                    Name = "Wyplata 1",
+                    Amount = 500m,
+                    AccountId = accountId,
+                    ExpectedDayOfMonth = new DateOnly(2026, 1, 10)
+                },
+                new Income
+                {
+                    Year = 2026,
+                    Month = 2,
+                    Name = "Wyplata 2",
+                    Amount = 600m,
+                    AccountId = accountId,
+                    ExpectedDayOfMonth = new DateOnly(2026, 2, 10)
+                });
+
+            context.MonthSavingsTransferItems.Add(new MonthSavingsTransferItem
+            {
+                MonthPlanId = february.Id,
+                Amount = 200m,
+                TransferDate = new DateOnly(2026, 2, 12)
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 2, CancellationToken.None);
+
+        Assert.Equal(4, summary.TransactionCount);
+        Assert.Equal(30m, summary.UnplannedSpentTotal);
+        Assert.Equal(160m, summary.SavedAmountThisMonth);
+        Assert.Equal(310m, summary.SavedAmountYearToDate);
+        Assert.Equal(550m, summary.AverageMonthlyIncome);
+        Assert.Equal(170m, summary.AverageMonthlySpent);
+        Assert.Equal(155m, summary.AverageMonthlySaved);
+        Assert.Equal(2, summary.SavingsTimeline.Count);
+        Assert.Equal(150m, summary.SavingsTimeline.Single(x => x.Month == 1).SavedAmount);
+        Assert.Equal(160m, summary.SavingsTimeline.Single(x => x.Month == 2).SavedAmount);
+    }
 }

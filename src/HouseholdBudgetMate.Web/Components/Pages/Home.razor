@@ -4,6 +4,7 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Application.Kernel.Timing
+@using HouseholdBudgetMate.Web.Services
 @using MudBlazor
 
 @inject ISnackbar Snackbar
@@ -47,6 +48,100 @@
     </MudStack>
 </MudPaper>
 
+<MudGrid Class="mt-1">
+    <MudItem xs="12" md="4">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Suma planowana</MudText>
+            <MudText Class="hb-kpi-value">@_kpi.PlannedTotal.ToString("0.00", _culture) PLN</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Suma wydana</MudText>
+            <MudText Class="hb-kpi-value">@_kpi.SpentTotal.ToString("0.00", _culture) PLN</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Pozostało</MudText>
+            <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00", _culture) PLN</MudText>
+            <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
+                               Color="@RemainingBudgetColorResolver.Resolve(_kpi.RemainingTotal, _kpi.RemainingPercent)"/>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Class="mt-1">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Liczba transakcji</MudText>
+            <MudText Class="hb-kpi-value">@_dashboardSummary.TransactionCount</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Wydatki poza planem</MudText>
+            <MudText Class="hb-kpi-value">@_dashboardSummary.UnplannedSpentTotal.ToString("0.00", _culture) PLN</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Zaoszczędzone w miesiącu</MudText>
+            <MudText Class="hb-kpi-value">@_dashboardSummary.SavedAmountThisMonth.ToString("0.00", _culture) PLN</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="hb-kpi-card">
+            <MudText Typo="Typo.caption" Class="hb-muted">Zaoszczędzone YTD</MudText>
+            <MudText Class="hb-kpi-value">@_dashboardSummary.SavedAmountYearToDate.ToString("0.00", _culture) PLN</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Szybki podgląd wpływów i oszczędności</MudText>
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.caption" Class="hb-muted">Średnie wpływy miesięczne (YTD)</MudText>
+            <MudText Typo="Typo.h6">@_dashboardSummary.AverageMonthlyIncome.ToString("0.00", _culture) PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.caption" Class="hb-muted">Średnie wydatki miesięczne (YTD)</MudText>
+            <MudText Typo="Typo.h6">@_dashboardSummary.AverageMonthlySpent.ToString("0.00", _culture) PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.caption" Class="hb-muted">Średnie oszczędności miesięczne (YTD)</MudText>
+            <MudText Typo="Typo.h6">@_dashboardSummary.AverageMonthlySaved.ToString("0.00", _culture) PLN</MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h6">Live balance</MudText>
+        <MudChip T="string" Color="Color.Primary">@_liveBalance.CurrentBalance.ToString("0.00") PLN</MudChip>
+    </MudStack>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Konta bez oszczędności</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.AccountsBaseTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.IncomesTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Wydatki miesiąca</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.ExpensesTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudText Typo="Typo.caption" Class="hb-muted">Oszczędności miesiąca</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.SavingsTransfersTotal.ToString("0.00") PLN</MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
 <MudPaper Class="pa-4 mt-4 hb-panel">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
         <MudText Typo="Typo.h6">Nadchodzące raty kredytów</MudText>
@@ -76,53 +171,64 @@
     }
 </MudPaper>
 
-<MudGrid Class="mt-1">
-    <MudItem xs="12" md="4">
-        <MudPaper Class="hb-kpi-card">
-            <MudText Typo="Typo.caption" Class="hb-muted">Suma planowana</MudText>
-            <MudText Class="hb-kpi-value">@_kpi.PlannedTotal.ToString("0.00", _culture) PLN</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" md="4">
-        <MudPaper Class="hb-kpi-card">
-            <MudText Typo="Typo.caption" Class="hb-muted">Suma wydana</MudText>
-            <MudText Class="hb-kpi-value">@_kpi.SpentTotal.ToString("0.00", _culture) PLN</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" md="4">
-        <MudPaper Class="hb-kpi-card">
-            <MudText Typo="Typo.caption" Class="hb-muted">Pozostało</MudText>
-            <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00", _culture) PLN</MudText>
-            <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
-                               Color="@(_kpi.RemainingTotal <= 0 ? Color.Error : Color.Primary)"/>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
-
-<MudPaper Class="pa-4 mt-4 hb-panel">
+@* <MudPaper Class="pa-4 mt-4 hb-panel">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-        <MudText Typo="Typo.h6">Live balance</MudText>
-        <MudChip T="string" Color="Color.Primary">@_liveBalance.CurrentBalance.ToString("0.00") PLN</MudChip>
+        <MudText Typo="Typo.h6">Pozostałe koszty wg kategorii</MudText>
+        <MudChip T="int" Color="Color.Primary">@_dashboardSummary.CategoryRemainingItems.Count</MudChip>
     </MudStack>
 
-    <MudGrid Class="mt-2">
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Konta bez oszczędności</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.AccountsBaseTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.IncomesTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Wydatki miesiąca</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.ExpensesTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Oszczędności miesiąca</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.SavingsTransfersTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-    </MudGrid>
+    @if (_dashboardSummary.CategoryRemainingItems.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak kategorii z pozostałą kwotą.</MudText>
+    }
+    else
+    {
+        <MudStack Spacing="1" Class="mt-2">
+            @foreach (var item in _dashboardSummary.CategoryRemainingItems)
+            {
+                var percent = item.PlannedAmount <= 0 ? 0 : Math.Clamp((double)(item.SpentAmount / item.PlannedAmount * 100), 0, 100);
+                <MudPaper Class="pa-2 envelope-row">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.body2">@item.CategoryName</MudText>
+                        <MudText Typo="Typo.caption" Class="hb-muted">
+                            pozostało: @item.RemainingAmount.ToString("0.00", _culture) PLN
+                        </MudText>
+                    </MudStack>
+                    <MudProgressLinear Class="mt-1" Rounded="true" Value="@percent" Color="Color.Info"/>
+                </MudPaper>
+            }
+        </MudStack>
+    }
+</MudPaper> *@
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Zaoszczędzone pieniądze w miesiącach (YTD)</MudText>
+
+    @if (_dashboardSummary.SavingsTimeline.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do podsumowania rocznego.</MudText>
+    }
+    else
+    {
+        <MudTable Items="_dashboardSummary.SavingsTimeline" Dense="true" Hover="true" Class="mt-3">
+            <HeaderContent>
+                <MudTh>Miesiąc</MudTh>
+                <MudTh>Planowane</MudTh>
+                <MudTh>Wydane</MudTh>
+                <MudTh>Zaoszczędzone</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="item">
+                <MudTd>@($"{item.Month:D2}/{item.Year}")</MudTd>
+                <MudTd>@item.PlannedAmount.ToString("0.00", _culture) PLN</MudTd>
+                <MudTd>@item.SpentAmount.ToString("0.00", _culture) PLN</MudTd>
+                <MudTd>
+                    <MudChip T="string" Color="@(item.SavedAmount >= 0 ? Color.Success : Color.Error)">
+                        @item.SavedAmount.ToString("0.00", _culture) PLN
+                    </MudChip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
@@ -171,6 +277,7 @@
     private List<ExpenseDto> _recentExpenses = [];
     private LiveBalanceDto _liveBalance = new();
     private List<UpcomingInstallmentItem> _upcomingInstallments = [];
+    private DashboardSummaryDto _dashboardSummary = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -185,6 +292,7 @@
         {
             var now = DateTimeProvider.GetLocalDateTime();
             _monthPlan = await ExpenseService.GetMonthAsync(now.Year, now.Month, CancellationToken.None);
+            _dashboardSummary = await ExpenseService.GetDashboardSummaryAsync(now.Year, now.Month, CancellationToken.None);
             _liveBalance = await IncomeService.GetLiveBalanceAsync(now.Year, now.Month, CancellationToken.None);
             var loans = await LoanService.GetAllAsync(CancellationToken.None);
             _monthLabel = $"{now:MMMM yyyy}";
@@ -203,12 +311,14 @@
             {
                 _kpi = new MonthPlanKpiDto();
                 _recentExpenses = [];
+                _dashboardSummary = new DashboardSummaryDto { Year = now.Year, Month = now.Month };
                 return;
             }
 
             _kpi = _monthPlan.Kpi;
             _recentExpenses = _monthPlan.Expenses
-                .OrderByDescending(x => x.Id)
+                .OrderByDescending(x => x.UpdatedAtUtc)
+                .ThenByDescending(x => x.Id)
                 .Take(6)
                 .ToList();
         }

@@ -34,6 +34,9 @@
 
     <MudPaper Class="pa-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wpływy</MudText>
+        <MudChip T="string" Color="Color.Primary" Class="mb-3">
+            Suma aktywnych wpływów: @RecurringIncomesTotal.ToString("0.00", _culture) zł
+        </MudChip>
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudTextField
@@ -182,6 +185,9 @@
 
     <MudPaper Class="pa-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wydatki</MudText>
+        <MudChip T="string" Color="Color.Warning" Class="mb-3">
+            Suma aktywnych wydatków: @RecurringExpensesTotal.ToString("0.00", _culture) zł
+        </MudChip>
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudTextField
@@ -414,6 +420,8 @@
     private List<RegularExpenseDefinitionDto> _expenseDefinitions = [];
     private List<LoanDto> _loans = [];
     private List<LoanRecurringItem> _loanRecurringItems = [];
+    private decimal RecurringIncomesTotal => _incomeDefinitions.Where(x => x.IsActive).Sum(x => x.Amount);
+    private decimal RecurringExpensesTotal => _expenseDefinitions.Where(x => x.IsActive).Sum(x => x.Amount);
 
     private readonly CreateRegularIncomeDefinitionRequest _newIncomeDefinition = new()
     {

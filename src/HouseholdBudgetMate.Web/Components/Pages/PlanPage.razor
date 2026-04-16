@@ -197,24 +197,6 @@
                     OnClick="NavigateToRegularIncomes">
                     Zarządzaj cyklicznymi
                 </MudButton>
-                <MudButton
-                    Variant="Variant.Outlined"
-                    Color="@(_isCopyMode ? Color.Warning : Color.Primary)"
-                    StartIcon="@Icons.Material.Filled.ContentCopy"
-                    OnClick="ToggleCopyMode">
-                    @(_isCopyMode ? "Anuluj kopiowanie" : "Kopiuj do następnego miesiąca")
-                </MudButton>
-                @if (_isCopyMode)
-                {
-                    <MudButton
-                        Variant="Variant.Filled"
-                        Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Check"
-                        Disabled="@(_selectedExpenseIdsForCopy.Count == 0)"
-                        OnClick="CopySelectedExpensesAsync">
-                        Kopiuj zaznaczone
-                    </MudButton>
-                }
             </MudStack>
         </MudStack>
         <MudGrid>
@@ -348,8 +330,30 @@
     </MudPaper>
 
     <MudPaper Class="pa-4 hb-panel">
-        <MudText Typo="Typo.h6" Class="mb-2">Lista wydatków</MudText>
-
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6">Lista wydatków</MudText>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudButton
+                    Variant="Variant.Outlined"
+                    Color="@(_isCopyMode ? Color.Warning : Color.Primary)"
+                    StartIcon="@Icons.Material.Filled.ContentCopy"
+                    OnClick="ToggleCopyMode">
+                    @(_isCopyMode ? "Anuluj kopiowanie" : "Kopiuj do następnego miesiąca")
+                </MudButton>
+                @if (_isCopyMode)
+                {
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Check"
+                        Disabled="@(_selectedExpenseIdsForCopy.Count == 0)"
+                        OnClick="CopySelectedExpensesAsync">
+                        Kopiuj zaznaczone
+                    </MudButton>
+                }
+            </MudStack>
+        </MudStack>
+    
         @if (EnvelopeProgressItems.Count > 0)
         {
             <MudStack Spacing="1" Class="mb-4">

@@ -1153,22 +1153,7 @@ public sealed class ExpenseService(
             throw new BadRequestException("Selected tag does not belong to selected category.");
         }
 
-        if (!tag.ParentTagId.HasValue)
-        {
-            return tag.Id;
-        }
-
-        var parentTag = await dbContext.Tags
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == tag.ParentTagId.Value, cancellationToken)
-            ?? throw new BadRequestException("Selected tag parent not found.");
-
-        if (parentTag.CategoryId != categoryId)
-        {
-            throw new BadRequestException("Selected tag parent does not belong to selected category.");
-        }
-
-        return parentTag.Id;
+        return tag.Id;
     }
 
     private static async Task SyncRegularExpensesForMonthAsync(

@@ -425,15 +425,34 @@
                             </MudSelect>
                         </MudTd>
                         <MudTd>
-                            <MudSelect T="int?"
-                                       @bind-Value="_editExpense.TagId"
-                                       Variant="Variant.Outlined"
-                                       Clearable="true">
-                                @foreach (var tag in GetSelectableRootTags(_editExpense.CategoryId, _editExpense.TagId))
+                            <MudStack Spacing="1">
+                                <MudSelect T="int?"
+                                           Value="_editExpenseRootTagId"
+                                           ValueChanged="OnEditRootTagChanged"
+                                           Variant="Variant.Outlined"
+                                           Label="Tag glowny"
+                                           Clearable="true">
+                                    @foreach (var tag in GetSelectableRootTags(_editExpense.CategoryId, _editExpenseRootTagId))
+                                    {
+                                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+
+                                @if (CanSelectSubTag(_editExpense.CategoryId, _editExpenseRootTagId))
                                 {
-                                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                                    <MudSelect T="int?"
+                                               Value="GetSelectedSubTagIdForEditExpense()"
+                                               ValueChanged="OnEditSubTagChanged"
+                                               Variant="Variant.Outlined"
+                                               Label="Podtag"
+                                               Clearable="true">
+                                        @foreach (var tag in GetSelectableSubTags(_editExpense.CategoryId, _editExpenseRootTagId, _editExpense.TagId))
+                                        {
+                                            <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
                                 }
-                            </MudSelect>
+                            </MudStack>
                         </MudTd>
                         <MudTd>
                             <MudTextField T="string"
@@ -725,16 +744,33 @@
                 </MudItem>
                 <MudItem xs="12" md="2">
                     <MudSelect T="int?"
-                               @bind-Value="_newExpense.TagId"
-                               Label="Tag"
+                               Value="_newExpenseRootTagId"
+                               ValueChanged="OnCreateRootTagChanged"
+                               Label="Tag glowny"
                                Variant="Variant.Outlined"
                                Clearable="true">
-                        @foreach (var tag in GetSelectableRootTags(_newExpense.CategoryId, _newExpense.TagId))
+                        @foreach (var tag in GetSelectableRootTags(_newExpense.CategoryId, _newExpenseRootTagId))
                         {
                             <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
                         }
                     </MudSelect>
                 </MudItem>
+                @if (CanSelectSubTag(_newExpense.CategoryId, _newExpenseRootTagId))
+                {
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="int?"
+                                   Value="GetSelectedSubTagIdForCreateExpense()"
+                                   ValueChanged="OnCreateSubTagChanged"
+                                   Label="Podtag"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true">
+                            @foreach (var tag in GetSelectableSubTags(_newExpense.CategoryId, _newExpenseRootTagId, _newExpense.TagId))
+                            {
+                                <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
                 <MudItem xs="12" md="2">
                     <MudTextField T="string"
                                   Value="_newExpensePlannedAmountInput"
@@ -814,6 +850,8 @@
     };
 
     private UpdateExpenseRequest? _editExpense;
+    private int? _newExpenseRootTagId;
+    private int? _editExpenseRootTagId;
     private string _newExpensePlannedAmountInput = "0,00";
     private string _newExpenseActualAmountInput = "0,00";
     private string _editExpensePlannedAmountInput = "0,00";
@@ -953,6 +991,58 @@
         return rootTags;
     }
 
+    private IReadOnlyList<TagDto> GetSelectableSubTags(int categoryId, int? rootTagId, int? selectedTagId)
+    {
+        if (!rootTagId.HasValue)
+        {
+            return [];
+        }
+
+        var subTags = GetSelectableTags(categoryId, selectedTagId)
+            .Where(x => x.ParentTagId == rootTagId.Value)
+            .OrderBy(x => x.Name)
+            .ToList();
+
+        if (selectedTagId.HasValue && subTags.All(x => x.Id != selectedTagId.Value))
+        {
+            var selected = _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == selectedTagId.Value);
+            if (selected is not null && selected.ParentTagId == rootTagId.Value)
+            {
+                subTags.Insert(0, selected);
+            }
+        }
+
+        return subTags;
+    }
+
+    private bool HasSubTags(int categoryId, int? rootTagId)
+    {
+        if (!rootTagId.HasValue)
+        {
+            return false;
+        }
+
+        return _categories
+            .FirstOrDefault(x => x.Id == categoryId)
+            ?.Tags
+            .Any(x => x.ParentTagId == rootTagId.Value) == true;
+    }
+
+    private bool CanSelectSubTag(int categoryId, int? rootTagId)
+    {
+        if (!rootTagId.HasValue)
+        {
+            return false;
+        }
+
+        if (SupportsLineItemsForSelection(categoryId, rootTagId))
+        {
+            return false;
+        }
+
+        return HasSubTags(categoryId, rootTagId);
+    }
+
     private IReadOnlyList<TagDto> GetSelectableLineItemTags(int categoryId, int? expenseMainTagId, int? selectedTagId)
     {
         var allTags = GetSelectableTags(categoryId, selectedTagId);
@@ -982,6 +1072,7 @@
     private Task OnCreateCategoryChanged(int categoryId)
     {
         _newExpense.CategoryId = categoryId;
+        _newExpenseRootTagId = null;
         _newExpense.TagId = null;
         if (SupportsLineItemsForSelection(categoryId, _newExpense.TagId))
         {
@@ -1000,7 +1091,84 @@
         }
 
         _editExpense.CategoryId = categoryId;
+        _editExpenseRootTagId = null;
         _editExpense.TagId = null;
+        if (SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId))
+        {
+            _editExpense.ActualAmount = 0;
+            _editExpenseActualAmountInput = FormatDecimalInput(_editExpense.ActualAmount);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnCreateRootTagChanged(int? rootTagId)
+    {
+        _newExpenseRootTagId = rootTagId;
+        _newExpense.TagId = rootTagId;
+
+        if (SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpense.TagId))
+        {
+            _newExpense.ActualAmount = 0;
+            _newExpenseActualAmountInput = FormatDecimalInput(_newExpense.ActualAmount);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnCreateSubTagChanged(int? subTagId)
+    {
+        if (SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpenseRootTagId))
+        {
+            _newExpense.TagId = _newExpenseRootTagId;
+            return Task.CompletedTask;
+        }
+
+        _newExpense.TagId = subTagId ?? _newExpenseRootTagId;
+
+        if (SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpense.TagId))
+        {
+            _newExpense.ActualAmount = 0;
+            _newExpenseActualAmountInput = FormatDecimalInput(_newExpense.ActualAmount);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditRootTagChanged(int? rootTagId)
+    {
+        if (_editExpense is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _editExpenseRootTagId = rootTagId;
+        _editExpense.TagId = rootTagId;
+
+        if (SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId))
+        {
+            _editExpense.ActualAmount = 0;
+            _editExpenseActualAmountInput = FormatDecimalInput(_editExpense.ActualAmount);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditSubTagChanged(int? subTagId)
+    {
+        if (_editExpense is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpenseRootTagId))
+        {
+            _editExpense.TagId = _editExpenseRootTagId;
+            return Task.CompletedTask;
+        }
+
+        _editExpense.TagId = subTagId ?? _editExpenseRootTagId;
+
         if (SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId))
         {
             _editExpense.ActualAmount = 0;
@@ -1083,6 +1251,7 @@
             await ExpenseService.CreateExpenseAsync(_newExpense, CancellationToken.None);
 
             _newExpense.Name = string.Empty;
+            _newExpenseRootTagId = null;
             _newExpense.TagId = null;
             _newExpense.PlannedAmount = 0;
             _newExpense.ActualAmount = 0;
@@ -1130,15 +1299,22 @@
             Id = expense.Id,
             Name = expense.Name,
             CategoryId = expense.CategoryId,
-            TagId = GetRootTagId(expense.TagId),
+            TagId = expense.TagId,
             PlannedAmount = expense.PlannedAmount,
             ActualAmount = expense.ActualAmount,
             ShowRemainingInUI = expense.ShowRemainingInUI,
         };
 
+        _editExpenseRootTagId = GetRootTagId(expense.TagId);
+
         if (expense.HasLineItems)
         {
             _editExpense.ActualAmount = expense.LineItems.Sum(x => x.Amount);
+        }
+
+        if (SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpenseRootTagId))
+        {
+            _editExpense.TagId = _editExpenseRootTagId;
         }
 
         _editExpensePlannedAmountInput = FormatDecimalInput(_editExpense.PlannedAmount);
@@ -1164,8 +1340,36 @@
     private void CancelEdit()
     {
         _editExpense = null;
+        _editExpenseRootTagId = null;
         _editExpensePlannedAmountInput = FormatDecimalInput(0);
         _editExpenseActualAmountInput = FormatDecimalInput(0);
+    }
+
+    private int? GetSelectedSubTagIdForCreateExpense()
+    {
+        if (!CanSelectSubTag(_newExpense.CategoryId, _newExpenseRootTagId)
+            || !_newExpenseRootTagId.HasValue
+            || !_newExpense.TagId.HasValue)
+        {
+            return null;
+        }
+
+        var selectedTag = _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == _newExpense.TagId.Value);
+        return selectedTag?.ParentTagId == _newExpenseRootTagId ? selectedTag.Id : null;
+    }
+
+    private int? GetSelectedSubTagIdForEditExpense()
+    {
+        if (_editExpense is null
+            || !CanSelectSubTag(_editExpense.CategoryId, _editExpenseRootTagId)
+            || !_editExpenseRootTagId.HasValue
+            || !_editExpense.TagId.HasValue)
+        {
+            return null;
+        }
+
+        var selectedTag = _categories.SelectMany(x => x.Tags).FirstOrDefault(x => x.Id == _editExpense.TagId.Value);
+        return selectedTag?.ParentTagId == _editExpenseRootTagId ? selectedTag.Id : null;
     }
 
     private async Task SaveEditAsync()
@@ -1196,6 +1400,7 @@
 
             await ExpenseService.UpdateExpenseAsync(_editExpense, CancellationToken.None);
             _editExpense = null;
+            _editExpenseRootTagId = null;
             _editExpensePlannedAmountInput = FormatDecimalInput(0);
             _editExpenseActualAmountInput = FormatDecimalInput(0);
             await LoadAsync();

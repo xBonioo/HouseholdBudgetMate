@@ -129,6 +129,117 @@ public sealed class ExpenseServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_Should_Keep_Selected_SubTagId()
+    {
+        int categoryId;
+        int childTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#6D4C41" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var rootTag = new Tag { Name = "Internetowe", CategoryId = category.Id };
+            context.Tags.Add(rootTag);
+            await context.SaveChangesAsync();
+
+            var childTag = new Tag { Name = "Aliexpress", CategoryId = category.Id, ParentTagId = rootTag.Id };
+            context.Tags.Add(childTag);
+            await context.SaveChangesAsync();
+
+            categoryId = category.Id;
+            childTagId = childTag.Id;
+        }
+
+        var service = CreateService();
+        var created = await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Zakupy online",
+            CategoryId = categoryId,
+            TagId = childTagId,
+            PlannedAmount = 100m,
+            ActualAmount = 0m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        Assert.Equal(childTagId, created.TagId);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var saved = await verifyContext.Expenses.AsNoTracking().SingleAsync(x => x.Id == created.Id);
+        Assert.Equal(childTagId, saved.TagId);
+    }
+
+    [Fact]
+    public async Task UpdateExpenseAsync_Should_Keep_Selected_SubTagId()
+    {
+        int expenseId;
+        int categoryId;
+        int rootTagId;
+        int childTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#6D4C41" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var rootTag = new Tag { Name = "Internetowe", CategoryId = category.Id };
+            context.Tags.Add(rootTag);
+            await context.SaveChangesAsync();
+
+            var childTag = new Tag { Name = "Allegro", CategoryId = category.Id, ParentTagId = rootTag.Id };
+            context.Tags.Add(childTag);
+            await context.SaveChangesAsync();
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy",
+                CategoryId = category.Id,
+                TagId = rootTag.Id,
+                PlannedAmount = 120m,
+                ActualAmount = 80m,
+                ShowRemainingInUI = true
+            };
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+
+            expenseId = expense.Id;
+            categoryId = category.Id;
+            rootTagId = rootTag.Id;
+            childTagId = childTag.Id;
+        }
+
+        var service = CreateService();
+
+        var updated = await service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = expenseId,
+            Name = "Zakupy",
+            CategoryId = categoryId,
+            TagId = childTagId,
+            PlannedAmount = 120m,
+            ActualAmount = 80m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        Assert.Equal(childTagId, updated.TagId);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var saved = await verifyContext.Expenses.AsNoTracking().SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(childTagId, saved.TagId);
+        Assert.NotEqual(rootTagId, saved.TagId);
+    }
+
+    [Fact]
     public async Task SavingsTransferItems_Crud_Should_Work()
     {
         var service = CreateService();

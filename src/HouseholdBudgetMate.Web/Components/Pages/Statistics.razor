@@ -1,0 +1,690 @@
+@page "/statistics"
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Application.Kernel.Timing
+@using MudBlazor
+
+@inject IExpenseService ExpenseService
+@inject ICategoryService CategoryService
+@inject IDateTimeProvider DateTimeProvider
+@inject ISnackbar Snackbar
+
+<MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+</MudOverlay>
+
+<MudPaper Class="hb-page-header">
+    <MudText Typo="Typo.h4">Statystyki roczne</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted">
+        Dane tylko dla miesięcy, które faktycznie mają uzupełnione wpisy.
+    </MudText>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3">
+        <MudSelect T="int" Value="@_selectedYear" ValueChanged="OnSelectedYearChanged" Label="Rok"
+                   Variant="Variant.Outlined" Margin="Margin.Dense">
+            @foreach (var year in _statistics.AvailableYears)
+            {
+                <MudSelectItem Value="@year">@year</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Wyszukiwarka zakupów</MudText>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_historySearchQuery"
+                          Label="Nazwa lub opis"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"/>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="int?"
+                       Value="_searchCategoryId"
+                       ValueChanged="OnSearchCategoryChanged"
+                       Label="Kategoria"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Clearable="true">
+                @foreach (var category in _categories.OrderBy(x => x.Name))
+                {
+                    <MudSelectItem T="int?" Value="@category.Id">@category.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="int?"
+                       Value="_searchRootTagId"
+                       ValueChanged="OnSearchRootTagChanged"
+                       Label="Tag główny"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Clearable="true"
+                       Disabled="@(!_searchCategoryId.HasValue)">
+                @foreach (var tag in GetSearchRootTags())
+                {
+                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="int?"
+                       @bind-Value="_searchSubTagId"
+                       Label="Podtag"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Clearable="true"
+                       Disabled="@(!CanSearchBySubTag())">
+                @foreach (var tag in GetSearchSubTags())
+                {
+                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="SearchHistoryAsync">
+                Szukaj
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_hasSearchExecuted && _historySearchResults.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak wyników dla podanych filtrów.</MudText>
+    }
+    else if (_historySearchResults.Count > 0)
+    {
+        <div style="overflow-x: auto;">
+            <MudTable Items="_historySearchResults" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Rok</MudTh>
+                    <MudTh>Miesiąc</MudTh>
+                    <MudTh>Nazwa</MudTh>
+                    <MudTh>Kategoria</MudTh>
+                    <MudTh>Tag</MudTh>
+                    <MudTh>Podtag</MudTh>
+                    <MudTh>Opis (trafienie)</MudTh>
+                    <MudTh>Kwota</MudTh>
+                    <MudTh>Akcje</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd DataLabel="Rok">@item.Year</MudTd>
+                    <MudTd DataLabel="Miesiąc">@GetMonthShortLabelForYear(item.Year, item.Month)</MudTd>
+                    <MudTd DataLabel="Nazwa">@item.ExpenseName</MudTd>
+                    <MudTd DataLabel="Kategoria">@item.CategoryName</MudTd>
+                    <MudTd DataLabel="Tag">@(item.RootTagName ?? "-")</MudTd>
+                    <MudTd DataLabel="Podtag">@(item.SubTagName ?? "-")</MudTd>
+                    <MudTd DataLabel="Opis">@(item.MatchingDescription ?? "-")</MudTd>
+                    <MudTd DataLabel="Kwota" Style="white-space: nowrap;">@FormatMoney(item.ActualAmount)</MudTd>
+                    <MudTd DataLabel="Akcje">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   Href="@GetExpenseEditLink(item)">
+                            Otwórz edycję
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Statystyki wydatków per kategoria</MudText>
+
+    @if (_statistics.CategoryStatistics.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych kategorii dla wybranego roku.</MudText>
+    }
+    else
+    {
+        <div style="overflow-x: auto;">
+            <MudSimpleTable Dense="true" Hover="true" Class="mt-3">
+                <thead>
+                <tr>
+                    <th>Kategoria / Tag</th>
+                    <th>Suma</th>
+                    <th>Średnia miesięczna</th>
+                    <th>Miesięcy z wydatkami</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var category in _statistics.CategoryStatistics)
+                {
+                    var categoryId = category.CategoryId;
+                    var isSelected = _selectedCategoryId == categoryId;
+                    <tr class="@(isSelected ? "mud-theme-primary" : string.Empty)" style="cursor:pointer;" @onclick="() => ToggleCategory(category)">
+                        <td>@category.CategoryName</td>
+                        <td style="white-space: nowrap;">@FormatMoney(category.TotalSpent)</td>
+                        <td style="white-space: nowrap;">@FormatMoney(category.AverageMonthlySpent)</td>
+                        <td>@category.MonthsWithExpenses</td>
+                    </tr>
+
+                    @if (isSelected)
+                    {
+                        var tagRows = GetVisibleTagRows(categoryId);
+                        if (tagRows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="hb-muted">Brak danych tagów dla tej kategorii.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var tag in tagRows)
+                            {
+                                <tr>
+                                    <td>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <span style="display:inline-block; width:@(tag.Depth * 16)px;"></span>
+                                            @if (tag.HasChildren && tag.TagId.HasValue)
+                                            {
+                                                <MudIconButton Size="Size.Small"
+                                                               Icon="@(IsExpanded(tag.TagId.Value) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                                               OnClick="() => ToggleTag(tag.TagId.Value)"/>
+                                            }
+                                            else
+                                            {
+                                                <span style="display:inline-block; width:24px;"></span>
+                                            }
+                                            <MudText Typo="Typo.body2">@tag.TagName</MudText>
+                                        </MudStack>
+                                    </td>
+                                    <td style="white-space: nowrap;">@FormatMoney(tag.TotalSpent)</td>
+                                    <td style="white-space: nowrap;">@FormatMoney(tag.AverageMonthlySpent)</td>
+                                    <td>@tag.MonthsWithExpenses</td>
+                                </tr>
+                            }
+                        }
+                    }
+                }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Suma wydatków kategorii w całej historii</MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-3" AlignItems="AlignItems.Center">
+        <MudSelect T="int"
+                   MultiSelection="true"
+                   Label="Kategorie"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense"
+                   SelectedValues="_selectedLifetimeCategoryIds"
+                   SelectedValuesChanged="OnSelectedLifetimeCategoriesChanged">
+            @foreach (var category in _categories.OrderBy(x => x.Name))
+            {
+                <MudSelectItem T="int" Value="@category.Id">@category.Name</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="LoadCategoryLifetimeTotalsAsync">
+            Przelicz
+        </MudButton>
+    </MudStack>
+
+    @if (_categoryLifetimeTotals.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Wybierz kategorie do przeliczenia.</MudText>
+    }
+    else
+    {
+        <MudTable Items="_categoryLifetimeTotals" Dense="true" Hover="true" Class="mt-3">
+            <HeaderContent>
+                <MudTh>Kategoria</MudTh>
+                <MudTh>Suma wydatków</MudTh>
+                <MudTh>Zakres lat</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="item">
+                <MudTd DataLabel="Kategoria">@item.CategoryName</MudTd>
+                <MudTd DataLabel="Suma wydatków" Style="white-space: nowrap;">@FormatMoney(item.TotalSpent)</MudTd>
+                <MudTd DataLabel="Zakres lat">@GetYearRangeLabel(item)</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Podsumowanie roczne (rok @_selectedYear)</MudText>
+
+    @if (_statistics.MonthlyFinance.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do podsumowania rocznego.</MudText>
+    }
+    else
+    {
+        <MudTable Items="GetYearSummaryRows()" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-3">
+            <HeaderContent>
+                <MudTh>Metryka</MudTh>
+                <MudTh>Suma roczna</MudTh>
+                <MudTh>Średnia na miesiąc</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="item">
+                <MudTd DataLabel="Metryka">@item.Label</MudTd>
+                <MudTd DataLabel="Suma roczna" Style="white-space: nowrap;">@FormatMoney(item.Total)</MudTd>
+                <MudTd DataLabel="Średnia na miesiąc" Style="white-space: nowrap;">@FormatMoney(item.MonthlyAverage)</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Historia roczna: miesiąc × kategoria × kwota</MudText>
+
+    @if (_statistics.CategoryBreakdown.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do tabeli rocznej.</MudText>
+    }
+    else
+    {
+        <div style="overflow-x: auto;">
+            <MudTable Items="_statistics.CategoryBreakdown" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Kategoria</MudTh>
+                    @foreach (var month in _statistics.PopulatedMonths)
+                    {
+                        <MudTh>@GetMonthShortLabel(month)</MudTh>
+                    }
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd>@item.CategoryName</MudTd>
+                    @for (var index = 0; index < _statistics.PopulatedMonths.Count; index++)
+                    {
+                        var monthIndex = index;
+                        <MudTd Style="white-space: nowrap;">@FormatMoney(item.MonthlySpent.ElementAtOrDefault(monthIndex))</MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Podsumowanie miesięczne (wpływy, plan, oszczędności)</MudText>
+
+    <MudTable Items="_statistics.MonthlyFinance" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-3">
+        <HeaderContent>
+            <MudTh>Miesiąc</MudTh>
+            <MudTh>Wpływy</MudTh>
+            <MudTh>Plan</MudTh>
+            <MudTh>Wydane</MudTh>
+            <MudTh>Poza planem</MudTh>
+            <MudTh>Przekazane na oszczędności</MudTh>
+            <MudTh>Faktycznie zaoszczędzone</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="item">
+            <MudTd DataLabel="Miesiąc">@GetMonthLabel(item.Month)</MudTd>
+            <MudTd DataLabel="Wpływy" Style="white-space: nowrap;">@FormatMoney(item.IncomeAmount)</MudTd>
+            <MudTd DataLabel="Plan" Style="white-space: nowrap;">@FormatMoney(item.PlannedAmount)</MudTd>
+            <MudTd DataLabel="Wydane" Style="white-space: nowrap;">@FormatMoney(item.SpentAmount)</MudTd>
+            <MudTd DataLabel="Poza planem" Style="white-space: nowrap;">@FormatMoney(item.UnplannedSpentAmount)</MudTd>
+            <MudTd DataLabel="Na oszczędności" Style="white-space: nowrap;">@FormatMoney(item.SavingsTransferredAmount)</MudTd>
+            <MudTd DataLabel="Faktycznie zaoszczędzone">
+                <MudChip T="decimal" Color="@(item.SavedAmount >= 0 ? Color.Success : Color.Error)">
+                    @FormatMoney(item.SavedAmount)
+                </MudChip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Stan kont w miesiącach roku</MudText>
+
+    @if (_statistics.AccountBalances.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak zapisanych sald kont dla wybranego roku.</MudText>
+    }
+    else
+    {
+        <div style="overflow-x: auto;">
+            <MudTable Items="_statistics.AccountBalances" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Konto</MudTh>
+                    @foreach (var month in _statistics.AccountBalanceMonths)
+                    {
+                        <MudTh>@GetMonthShortLabel(month)</MudTh>
+                    }
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd>@item.AccountName</MudTd>
+                    @for (var index = 0; index < _statistics.AccountBalanceMonths.Count; index++)
+                    {
+                        var monthIndex = index;
+                        <MudTd Style="white-space: nowrap;">@FormatMoney(item.MonthlyClosingBalances.ElementAtOrDefault(monthIndex))</MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    private readonly CultureInfo _culture = new("pl-PL");
+    private bool _isLoading;
+    private int _selectedYear;
+    private int? _selectedCategoryId;
+    private int? _searchCategoryId;
+    private int? _searchRootTagId;
+    private int? _searchSubTagId;
+    private bool _hasSearchExecuted;
+    private string _historySearchQuery = string.Empty;
+    private readonly HashSet<int> _expandedTagIds = [];
+    private HashSet<int> _selectedLifetimeCategoryIds = [];
+    private List<CategoryDto> _categories = [];
+    private List<ExpenseHistorySearchResultDto> _historySearchResults = [];
+    private List<CategoryLifetimeExpenseTotalDto> _categoryLifetimeTotals = [];
+    private YearStatisticsDto _statistics = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selectedYear = DateTimeProvider.GetLocalDateOnly().Year;
+        _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+        await LoadStatisticsAsync();
+    }
+
+    private async Task OnSelectedYearChanged(int year)
+    {
+        _selectedYear = year;
+        _selectedCategoryId = null;
+        _expandedTagIds.Clear();
+        await LoadStatisticsAsync();
+    }
+
+    private async Task LoadStatisticsAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            _statistics = await ExpenseService.GetYearStatisticsAsync(_selectedYear, CancellationToken.None);
+            if (!_statistics.AvailableYears.Contains(_selectedYear) && _statistics.AvailableYears.Count > 0)
+            {
+                _selectedYear = _statistics.AvailableYears[0];
+                _statistics = await ExpenseService.GetYearStatisticsAsync(_selectedYear, CancellationToken.None);
+            }
+
+            if (_selectedCategoryId.HasValue && !_statistics.CategoryStatistics.Any(x => x.CategoryId == _selectedCategoryId.Value))
+            {
+                _selectedCategoryId = null;
+                _expandedTagIds.Clear();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _statistics = new YearStatisticsDto
+            {
+                Year = _selectedYear,
+                AvailableYears = [_selectedYear],
+                PopulatedMonths = []
+            };
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ToggleCategory(CategoryYearStatisticsDto category)
+    {
+        if (_selectedCategoryId == category.CategoryId)
+        {
+            _selectedCategoryId = null;
+            _expandedTagIds.Clear();
+            return;
+        }
+
+        _selectedCategoryId = category.CategoryId;
+        _expandedTagIds.Clear();
+    }
+
+    private List<CategoryTagYearStatisticsDto> GetVisibleTagRows(int categoryId)
+    {
+        var allRows = _statistics.CategoryTagStatistics
+            .Where(x => x.CategoryId == categoryId)
+            .ToList();
+
+        if (allRows.Count == 0)
+        {
+            return [];
+        }
+
+        var childrenByParent = allRows
+            .Where(x => x.TagId.HasValue)
+            .ToLookup(x => x.ParentTagId);
+
+        var rootRows = allRows
+            .Where(x => !x.ParentTagId.HasValue)
+            .OrderByDescending(x => x.TotalSpent)
+            .ThenBy(x => x.TagName)
+            .ToList();
+
+        var result = new List<CategoryTagYearStatisticsDto>();
+        foreach (var root in rootRows)
+        {
+            result.Add(root);
+            AppendExpandedChildren(root, childrenByParent, result);
+        }
+
+        return result;
+    }
+
+    private void AppendExpandedChildren(
+        CategoryTagYearStatisticsDto parent,
+        ILookup<int?, CategoryTagYearStatisticsDto> childrenByParent,
+        List<CategoryTagYearStatisticsDto> result)
+    {
+        if (!parent.TagId.HasValue || !_expandedTagIds.Contains(parent.TagId.Value))
+        {
+            return;
+        }
+
+        var children = childrenByParent[parent.TagId]
+            .OrderByDescending(x => x.TotalSpent)
+            .ThenBy(x => x.TagName)
+            .ToList();
+
+        if (children.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var child in children)
+        {
+            result.Add(child);
+            AppendExpandedChildren(child, childrenByParent, result);
+        }
+    }
+
+    private void ToggleTag(int tagId)
+    {
+        if (!_expandedTagIds.Add(tagId))
+        {
+            _expandedTagIds.Remove(tagId);
+        }
+    }
+
+    private bool IsExpanded(int tagId)
+    {
+        return _expandedTagIds.Contains(tagId);
+    }
+
+    private string GetMonthLabel(int month)
+    {
+        return new DateTime(_selectedYear, month, 1).ToString("MMMM", _culture);
+    }
+
+    private string GetMonthShortLabel(int month)
+    {
+        return new DateTime(_selectedYear, month, 1).ToString("MMM", _culture);
+    }
+
+    private string GetMonthShortLabelForYear(int year, int month)
+    {
+        return new DateTime(year, month, 1).ToString("MMM", _culture);
+    }
+
+    private string FormatMoney(decimal value)
+    {
+        return $"{value.ToString("0.00", _culture)}\u00A0zł";
+    }
+
+    private IReadOnlyList<YearSummaryRow> GetYearSummaryRows()
+    {
+        var monthsCount = _statistics.MonthlyFinance.Count == 0 ? 1 : _statistics.MonthlyFinance.Count;
+
+        var totalIncome = _statistics.MonthlyFinance.Sum(x => x.IncomeAmount);
+        var totalSpent = _statistics.MonthlyFinance.Sum(x => x.SpentAmount);
+        var totalSaved = _statistics.MonthlyFinance.Sum(x => x.SavedAmount);
+
+        return
+        [
+            new YearSummaryRow("Wpływy", totalIncome, totalIncome / monthsCount),
+            new YearSummaryRow("Wydatki", totalSpent, totalSpent / monthsCount),
+            new YearSummaryRow("Zaoszczędzone", totalSaved, totalSaved / monthsCount)
+        ];
+    }
+
+    private async Task SearchHistoryAsync()
+    {
+        try
+        {
+            _historySearchResults = (await ExpenseService.SearchExpenseHistoryAsync(
+                new SearchExpenseHistoryRequest
+                {
+                    Query = _historySearchQuery,
+                    CategoryId = _searchCategoryId,
+                    RootTagId = _searchRootTagId,
+                    SubTagId = _searchSubTagId,
+                    MaxResults = 300
+                },
+                CancellationToken.None)).ToList();
+            _hasSearchExecuted = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private IReadOnlyList<TagDto> GetSearchRootTags()
+    {
+        if (!_searchCategoryId.HasValue)
+        {
+            return [];
+        }
+
+        return _categories
+            .FirstOrDefault(x => x.Id == _searchCategoryId.Value)
+            ?.Tags
+            .Where(x => !x.ParentTagId.HasValue)
+            .OrderBy(x => x.Name)
+            .ToList() ?? [];
+    }
+
+    private bool CanSearchBySubTag()
+    {
+        if (!_searchCategoryId.HasValue || !_searchRootTagId.HasValue)
+        {
+            return false;
+        }
+
+        return _categories
+            .FirstOrDefault(x => x.Id == _searchCategoryId.Value)
+            ?.Tags
+            .Any(x => x.ParentTagId == _searchRootTagId.Value) == true;
+    }
+
+    private IReadOnlyList<TagDto> GetSearchSubTags()
+    {
+        if (!CanSearchBySubTag())
+        {
+            return [];
+        }
+
+        return _categories
+            .FirstOrDefault(x => x.Id == _searchCategoryId!.Value)
+            ?.Tags
+            .Where(x => x.ParentTagId == _searchRootTagId)
+            .OrderBy(x => x.Name)
+            .ToList() ?? [];
+    }
+
+    private Task OnSearchCategoryChanged(int? categoryId)
+    {
+        _searchCategoryId = categoryId;
+        _searchRootTagId = null;
+        _searchSubTagId = null;
+        return Task.CompletedTask;
+    }
+
+    private Task OnSearchRootTagChanged(int? rootTagId)
+    {
+        _searchRootTagId = rootTagId;
+        _searchSubTagId = null;
+        return Task.CompletedTask;
+    }
+
+    private string GetExpenseEditLink(ExpenseHistorySearchResultDto item)
+    {
+        return $"/plan/{item.Year}/{item.Month}?editExpenseId={item.ExpenseId}";
+    }
+
+    private void OnSelectedLifetimeCategoriesChanged(IReadOnlyCollection<int>? categoryIds)
+    {
+        _selectedLifetimeCategoryIds = categoryIds?.ToHashSet() ?? [];
+    }
+
+    private async Task LoadCategoryLifetimeTotalsAsync()
+    {
+        try
+        {
+            var selectedIds = _selectedLifetimeCategoryIds.Count == 0
+                ? null
+                : _selectedLifetimeCategoryIds.ToList();
+
+            if (selectedIds is null)
+            {
+                _categoryLifetimeTotals = new List<CategoryLifetimeExpenseTotalDto>();
+            }
+            else
+            {
+                _categoryLifetimeTotals = (await ExpenseService.GetCategoryLifetimeExpenseTotalsAsync(
+                    selectedIds,
+                    CancellationToken.None)).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static string GetYearRangeLabel(CategoryLifetimeExpenseTotalDto item)
+    {
+        if (!item.FirstYear.HasValue || !item.LastYear.HasValue)
+        {
+            return "-";
+        }
+
+        return item.FirstYear == item.LastYear
+            ? item.FirstYear.Value.ToString(CultureInfo.InvariantCulture)
+            : $"{item.FirstYear.Value}-{item.LastYear.Value}";
+    }
+
+    private sealed record YearSummaryRow(string Label, decimal Total, decimal MonthlyAverage);
+}

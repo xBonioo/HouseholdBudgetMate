@@ -486,9 +486,9 @@ public sealed class LoanServiceTests
                 InterestRate = loan.InterestRate,
                 MarginRate = loan.MarginRate,
                 InitialReferenceRate = null,
-                RepaymentDayOfMonth = loan.RepaymentDayOfMonth + 1,
+                RepaymentDayOfMonth = loan.RepaymentDayOfMonth,
                 StartDate = loan.StartDate,
-                EndDate = loan.EndDate,
+                EndDate = loan.EndDate.AddMonths(1),
                 IsActive = loan.IsActive
             }, CancellationToken.None));
     }

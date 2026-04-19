@@ -816,6 +816,8 @@
 @code {
     [Parameter] public int Year { get; set; }
     [Parameter] public int Month { get; set; }
+    [SupplyParameterFromQuery(Name = "editExpenseId")]
+    public int? EditExpenseId { get; set; }
 
     private bool _isLoading;
     private MonthPlanDto? _monthPlan;
@@ -928,6 +930,15 @@
             _newSavingsTransfer.TransferDate = _newSavingsTransfer.TransferDate == default
                 ? new DateOnly(Year, Month, 1)
                 : _newSavingsTransfer.TransferDate;
+
+            if (EditExpenseId.HasValue)
+            {
+                var expenseToEdit = _monthPlan.Expenses.FirstOrDefault(x => x.Id == EditExpenseId.Value);
+                if (expenseToEdit is not null && _editExpense?.Id != expenseToEdit.Id)
+                {
+                    await StartEditAsync(expenseToEdit);
+                }
+            }
         }
         catch (Exception ex)
         {

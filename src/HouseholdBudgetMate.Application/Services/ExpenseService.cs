@@ -214,7 +214,19 @@ public sealed class ExpenseService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var nextMonth = new DateTime(year, month, 1).AddMonths(1);
-        await OpenMonthAsync(nextMonth.Year, nextMonth.Month, cancellationToken);
+        var nextMonthState = await GetOrCreateMonthPlanStateAsync(dbContext, nextMonth.Year, nextMonth.Month, cancellationToken);
+
+        // Do not reopen or alter an already existing next month.
+        if (!nextMonthState.WasCreated)
+        {
+            return;
+        }
+
+        await SyncRegularExpensesForMonthAsync(dbContext, nextMonthState.MonthPlan, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await incomeService.SyncRegularIncomesForMonthAsync(nextMonth.Year, nextMonth.Month, cancellationToken);
+        await loanService.SyncLoanInstallmentsForMonthAsync(nextMonth.Year, nextMonth.Month, cancellationToken);
     }
 
     public async Task OpenMonthAsync(int year, int month, CancellationToken cancellationToken)
@@ -222,13 +234,27 @@ public sealed class ExpenseService(
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+        var monthPlanState = await GetOrCreateMonthPlanStateAsync(dbContext, year, month, cancellationToken);
+        var monthPlan = monthPlanState.MonthPlan;
+
+        if (!monthPlanState.WasCreated && !monthPlan.IsClosed)
+        {
+            return;
+        }
+
         if (monthPlan.IsClosed)
+        {
+            monthPlan.IsClosed = false;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!monthPlanState.WasCreated)
         {
             return;
         }
 
         await SyncRegularExpensesForMonthAsync(dbContext, monthPlan, cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await incomeService.SyncRegularIncomesForMonthAsync(year, month, cancellationToken);
@@ -241,9 +267,10 @@ public sealed class ExpenseService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+        var monthPlanState = await GetOrCreateMonthPlanStateAsync(dbContext, year, month, cancellationToken);
+        var monthPlan = monthPlanState.MonthPlan;
 
-        if (!monthPlan.IsClosed)
+        if (monthPlanState.WasCreated && !monthPlan.IsClosed)
         {
             await SyncRegularExpensesForMonthAsync(dbContext, monthPlan, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -383,13 +410,15 @@ public sealed class ExpenseService(
         var averageMonthlySpent = timeline.Sum(x => x.SpentAmount) / monthlyCount;
         var averageMonthlySaved = timeline.Sum(x => x.SavedAmount) / monthlyCount;
         var savedAmountThisMonth = timeline.FirstOrDefault(x => x.Month == month)?.SavedAmount ?? 0m;
+        var expenseTransactionCount = monthPlan.Expenses
+            .Sum(expense => expense.SupportsLineItems ? expense.LineItems.Count : 1);
 
         return new DashboardSummaryDto
         {
             Year = year,
             Month = month,
-            TransactionCount = monthPlan.Expenses.Count + incomesCount + savingsTransfersCount,
-            UnplannedSpentTotal = monthPlan.Expenses.Where(x => x.IsUnplanned).Sum(x => x.ActualAmount),
+            TransactionCount = expenseTransactionCount + incomesCount + savingsTransfersCount,
+            UnplannedSpentTotal = monthPlan.Expenses.Sum(x => CalculateOutsidePlanContribution(x.PlannedAmount, x.ActualAmount)),
             SavedAmountThisMonth = savedAmountThisMonth,
             SavedAmountYearToDate = timeline.Sum(x => x.SavedAmount),
             AverageMonthlyIncome = averageMonthlyIncome,
@@ -630,7 +659,7 @@ public sealed class ExpenseService(
                 {
                     PlannedAmount = x.Sum(item => item.PlannedAmount),
                     SpentAmount = x.Sum(item => item.ActualAmount),
-                    UnplannedSpentAmount = x.Where(item => item.PlannedAmount <= 0).Sum(item => item.ActualAmount)
+                    UnplannedSpentAmount = x.Sum(item => CalculateOutsidePlanContribution(item.PlannedAmount, item.ActualAmount))
                 });
 
         var incomesByMonth = await dbContext.Incomes
@@ -1478,12 +1507,22 @@ public sealed class ExpenseService(
         int month,
         CancellationToken cancellationToken)
     {
+        var monthPlanState = await GetOrCreateMonthPlanStateAsync(dbContext, year, month, cancellationToken);
+        return monthPlanState.MonthPlan;
+    }
+
+    private static async Task<MonthPlanState> GetOrCreateMonthPlanStateAsync(
+        ApplicationDbContext dbContext,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
         var monthPlan = await dbContext.MonthPlans
             .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
 
         if (monthPlan is not null)
         {
-            return monthPlan;
+            return new MonthPlanState(monthPlan, false);
         }
 
         monthPlan = new MonthPlan
@@ -1496,7 +1535,7 @@ public sealed class ExpenseService(
         dbContext.MonthPlans.Add(monthPlan);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return monthPlan;
+        return new MonthPlanState(monthPlan, true);
     }
 
     private static MonthPlanDto BuildMonthPlanDto(
@@ -1564,6 +1603,16 @@ public sealed class ExpenseService(
         }
 
         return expense.ActualAmount == 0 ? expense.PlannedAmount : 0;
+    }
+
+    private static decimal CalculateOutsidePlanContribution(decimal plannedAmount, decimal actualAmount)
+    {
+        if (plannedAmount <= 0)
+        {
+            return actualAmount;
+        }
+
+        return Math.Max(actualAmount - plannedAmount, 0m);
     }
 
     private static decimal SumLatestClosingBalances(
@@ -1689,6 +1738,7 @@ public sealed class ExpenseService(
 
     private sealed record TagSnapshot(int Id, int CategoryId, int? ParentTagId, string Name);
     private sealed record TagHierarchySnapshot(int? RootTagId, string? RootTagName, int? SubTagId, string? SubTagName);
+    private sealed record MonthPlanState(MonthPlan MonthPlan, bool WasCreated);
 
     private static async Task RecalculateActualAmountAsync(
         ApplicationDbContext dbContext,

@@ -17,10 +17,6 @@ using HouseholdBudgetMate.Web.Setup;
 using HouseholdBudgetMate.Web.Components;
 using Microsoft.AspNetCore.Localization;
 using MudBlazor.Services;
-using QuestPDF;
-using QuestPDF.Infrastructure;
-
-Settings.License = LicenseType.Community;
 
 var executableDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
 var appDataDirectory = WritableAppDataPathResolver.Resolve("HouseholdBudgetMate");

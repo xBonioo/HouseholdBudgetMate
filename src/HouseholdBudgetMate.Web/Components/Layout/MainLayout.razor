@@ -14,115 +14,77 @@
 @inject ArchiveMonthsCacheService ArchiveCache
 
 @* Required *@
-<MudThemeProvider Theme="@AppTheme.Default"/>
-<MudPopoverProvider/>
+<MudThemeProvider Theme="@AppTheme.Default" />
+<MudPopoverProvider />
 
 @* Needed for dialogs *@
-<MudDialogProvider/>
+<MudDialogProvider />
 
 @* Needed for snackbars *@
-<MudSnackbarProvider/>
+<MudSnackbarProvider />
 
 <div class="layout-root">
     <MudLayout>
         <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
             
-            @* <MudIconButton Icon="@Icons.Material.Filled.Menu" *@
-            @*                Color="Color.Inherit" *@
-            @*                Edge="Edge.Start" *@
-            @*                OnClick="ToggleDrawer" *@
-            @*                Class="d-md-none"/> *@
-            @* *@
-            @* <MudDrawer @bind-Open="_drawerOpen" *@
-            @*            Variant="DrawerVariant.Temporary" *@
-            @*            Class="d-md-none"> *@
-            @* *@
-            @*     <MudNavMenu> *@
-            @*         <MudNavLink Href="/">Dashboard</MudNavLink> *@
-            @*         <MudNavLink Href="@CurrentMonthHref">Plan</MudNavLink> *@
-            @*         <MudNavLink Href="/accounts">Konta</MudNavLink> *@
-            @*         <MudNavLink Href="/loans">Kredyty</MudNavLink> *@
-            @*         <MudNavLink Href="/recurring">Cykliczne</MudNavLink> *@
-            @*         <MudNavLink Href="/categories">Kategorie</MudNavLink> *@
-            @*     </MudNavMenu> *@
-            @* *@
-            @* </MudDrawer> *@
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                           OnClick="ToggleDrawer" Class="mobile-menu-button" aria-label="Otwórz menu" />
             
             @* ── Left nav (hidden on mobile via CSS, no JS needed) ── *@
             <div class="nav-desktop">
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/")"
-                           StartIcon="@Icons.Material.Filled.Dashboard"
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/")" StartIcon="@Icons.Material.Filled.Dashboard"
                            Href="/">
                     Dashboard
                 </MudButton>
 
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/plan")"
-                           StartIcon="@Icons.Material.Filled.CalendarMonth"
-                           Href="@CurrentMonthHref">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/plan")"
+                           StartIcon="@Icons.Material.Filled.CalendarMonth" Href="@CurrentMonthHref">
                     Plan
                 </MudButton>
 
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/accounts")"
-                           StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
-                           Href="/accounts">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/accounts")"
+                           StartIcon="@Icons.Material.Filled.AccountBalanceWallet" Href="/accounts">
                     Konta
                 </MudButton>
 
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/loans")"
-                           StartIcon="@Icons.Material.Filled.CreditScore"
-                           Href="/loans">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/loans")"
+                           StartIcon="@Icons.Material.Filled.CreditScore" Href="/loans">
                     Kredyty
                 </MudButton>
 
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/recurring")"
-                           StartIcon="@Icons.Material.Filled.Repeat"
-                           Href="/recurring">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/recurring")"
+                           StartIcon="@Icons.Material.Filled.Repeat" Href="/recurring">
                     Cykliczne
                 </MudButton>
 
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/statistics")"
-                           StartIcon="@Icons.Material.Filled.BarChart"
-                           Href="/statistics">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/statistics")"
+                           StartIcon="@Icons.Material.Filled.BarChart" Href="/statistics">
                     Statystyki
                 </MudButton>
             </div>
 
             @* ── Centered logo (absolute positioning in CSS) ── *@
             <div class="appbar-logo-center">
-                <img src="images/logo.png" alt="logo" class="brand-logo"/>
+                <img src="images/logo.png" alt="logo" class="brand-logo" />
             </div>
 
             @* ── Push right nav to the right edge ── *@
-            <MudSpacer/>
+            <MudSpacer />
 
             @* ── Right nav (hidden on mobile via CSS, no JS needed) ── *@
             <div class="nav-desktop">
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/admin/config")"
-                           StartIcon="@Icons.Material.Filled.AdminPanelSettings"
-                           Href="/admin/config">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/admin/config")"
+                           StartIcon="@Icons.Material.Filled.AdminPanelSettings" Href="/admin/config">
                     Admin
                 </MudButton>
 
-                <MudButton Variant="Variant.Text"
-                           Class="@GetNavClass("/categories")"
-                           StartIcon="@Icons.Material.Filled.Category"
-                           Href="/categories">
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/categories")"
+                           StartIcon="@Icons.Material.Filled.Category" Href="/categories">
                     Kategorie
                 </MudButton>
 
-                <MudMenu Variant="Variant.Text"
-                         Color="Color.Inherit"
-                         Label="Archiwum"
-                         Class="appbar-button"
-                         StartIcon="@Icons.Material.Filled.DateRange"
-                         MaxHeight="400">
+                <MudMenu Variant="Variant.Text" Color="Color.Inherit" Label="Archiwum" Class="appbar-button"
+                         StartIcon="@Icons.Material.Filled.DateRange" MaxHeight="400">
                     @if (_monthGroups.Count == 0)
                     {
                         <MudMenuItem Disabled="true">Brak danych</MudMenuItem>
@@ -143,7 +105,7 @@
 
                             @if (i < _monthGroups.Count - 1)
                             {
-                                <MudDivider/>
+                                <MudDivider />
                             }
                         }
                     }
@@ -151,18 +113,41 @@
             </div>
 
             @* ── Always-visible action button ── *@
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Secondary"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       Class="quick-add-button"
-                       Href="@CurrentMonthHref">
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Add"
+                       Class="quick-add-button" Href="@CurrentMonthHref">
                 Dodaj wydatek
             </MudButton>
 
         </MudAppBar>
 
+        <div class="mobile-sidebar-overlay @(_drawerOpen ? "is-open" : string.Empty)" @onclick="CloseDrawer"></div>
+
+        <aside class="mobile-sidebar @(_drawerOpen ? "is-open" : string.Empty)">
+            <MudStack Class="pa-3" Spacing="1">
+                <MudText Typo="Typo.subtitle2" Class="px-2 pb-1 mobile-side-nav-title">Menu</MudText>
+                <MudNavMenu Dense="true" Class="mobile-nav-menu">
+                    <MudNavLink Class="mobile-nav-link" Href="/" Icon="@Icons.Material.Filled.Dashboard"
+                                Match="NavLinkMatch.All" OnClick="CloseDrawer">Dashboard</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="@CurrentMonthHref"
+                                Icon="@Icons.Material.Filled.CalendarMonth" OnClick="CloseDrawer">Plan</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="/accounts"
+                                Icon="@Icons.Material.Filled.AccountBalanceWallet" OnClick="CloseDrawer">Konta</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="/loans" Icon="@Icons.Material.Filled.CreditScore"
+                                OnClick="CloseDrawer">Kredyty</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="/recurring" Icon="@Icons.Material.Filled.Repeat"
+                                OnClick="CloseDrawer">Cykliczne</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="/statistics" Icon="@Icons.Material.Filled.BarChart"
+                                OnClick="CloseDrawer">Statystyki</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="/categories" Icon="@Icons.Material.Filled.Category"
+                                OnClick="CloseDrawer">Kategorie</MudNavLink>
+                    <MudNavLink Class="mobile-nav-link" Href="/admin/config"
+                                Icon="@Icons.Material.Filled.AdminPanelSettings" OnClick="CloseDrawer">Admin</MudNavLink>
+                </MudNavMenu>
+            </MudStack>
+        </aside>
+
         <MudMainContent Class="app-main-content">
-            <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+            <MudContainer MaxWidth="@(IsPlanPage? MaxWidth.False: MaxWidth.Large)" Class="py-6">
                 @Body
             </MudContainer>
         </MudMainContent>
@@ -179,11 +164,16 @@
 @code {
     private readonly CultureInfo _culture = new("pl-PL");
     private List<YearMonthGroup> _monthGroups = [];
-    private bool _drawerOpen = false;
+    private bool _drawerOpen;
 
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    private void CloseDrawer()
+    {
+        _drawerOpen = false;
     }
     
     private sealed class YearMonthGroup
@@ -209,8 +199,15 @@
         }
     }
 
+    private bool IsPlanPage
+        => NavigationManager.ToBaseRelativePath(NavigationManager.Uri)
+            .StartsWith("plan/", StringComparison.OrdinalIgnoreCase);
+
     protected override async Task OnInitializedAsync()
     {
+        ArchiveCache.CacheChanged += HandleArchiveCacheChanged;
+        NavigationManager.LocationChanged += HandleLocationChanged;
+
         // 1. Serve from cache immediately (no DB call, no waiting).
         if (ArchiveCache.TryGetCache(out var cached))
         {
@@ -229,6 +226,38 @@
             if (_monthGroups.Count == 0)
                 SetFallbackMonthGroup();
         }
+    }
+
+    private void HandleArchiveCacheChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (ArchiveCache.TryGetCache(out var cached))
+            {
+                _monthGroups = BuildMonthGroups(cached);
+            }
+            else
+            {
+                await LoadAndCacheMonthsAsync();
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (!_drawerOpen)
+            return;
+
+        _drawerOpen = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ArchiveCache.CacheChanged -= HandleArchiveCacheChanged;
+        NavigationManager.LocationChanged -= HandleLocationChanged;
     }
 
     /// <summary>
@@ -322,5 +351,4 @@
             ? "appbar-button appbar-button-active"
             : "appbar-button";
     }
-
 }

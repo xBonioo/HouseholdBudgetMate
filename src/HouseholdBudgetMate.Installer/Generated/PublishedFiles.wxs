@@ -13,6 +13,8 @@
           <Directory Id="Dir7DBD56EFDD844A0CCB788342556D43514AFB321C" Name="Layout">
           </Directory>
           <Directory Id="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2" Name="Pages">
+            <Directory Id="DirEE6FE33DDAC616ACF1970938C48B55004FD535DB" Name="PlanPage">
+            </Directory>
           </Directory>
         </Directory>
         <Directory Id="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8" Name="images">
@@ -118,6 +120,15 @@
       </Component>
       <Component Id="CmpC3C868899FE476F81442DA6052847201FC35CF8F" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
         <File Id="FilC3C868899FE476F81442DA6052847201FC35CF8F" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage.razor.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp43D512C4B02B3EA346E57322EDF215CD38137B95" Guid="*" Bitness="always64" Directory="DirEE6FE33DDAC616ACF1970938C48B55004FD535DB">
+        <File Id="Fil43D512C4B02B3EA346E57322EDF215CD38137B95" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage\PlanPage.razor.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp007A9E0CC00282035608BAD618D79F6147155656" Guid="*" Bitness="always64" Directory="DirEE6FE33DDAC616ACF1970938C48B55004FD535DB">
+        <File Id="Fil007A9E0CC00282035608BAD618D79F6147155656" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage\PlanPage.razor.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp26F8D95BC791C5F2453C1CCC6B3009D3C7486E66" Guid="*" Bitness="always64" Directory="DirEE6FE33DDAC616ACF1970938C48B55004FD535DB">
+        <File Id="Fil26F8D95BC791C5F2453C1CCC6B3009D3C7486E66" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\PlanPage\PlanPage.razor.js.gz" KeyPath="yes" />
       </Component>
       <Component Id="CmpA8873C750533DA4984CE233CAC581C95F693B20D" Guid="*" Bitness="always64" Directory="DirB068C0298A6B8F5C02B27B4C9180AC6679C4DFB2">
         <File Id="FilA8873C750533DA4984CE233CAC581C95F693B20D" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\Components\Pages\RecurringPage.razor.js" KeyPath="yes" />

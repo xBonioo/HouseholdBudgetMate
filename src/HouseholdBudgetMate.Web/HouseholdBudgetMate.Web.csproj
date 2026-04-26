@@ -26,16 +26,16 @@
 
     <ItemGroup>
         
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.5">
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.7">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="MudBlazor" Version="9.3.0" />
+        <PackageReference Include="MudBlazor" Version="9.4.0" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
         <PackageReference Include="Serilog.Sinks.PostgreSQL" Version="2.3.0" />
@@ -43,7 +43,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\HouseholdBudgetMate.Abstractions\HouseholdBudgetMate.Abstractions.csproj" />
-        <ProjectReference Include="..\HouseholdBudgetMate.Application\HouseholdBudgetMate.Application.csproj"/>
+        <ProjectReference Include="..\HouseholdBudgetMate.Application\HouseholdBudgetMate.Application.csproj" />
     </ItemGroup>
 
 

@@ -13,6 +13,8 @@ public sealed class ArchiveMonthsCacheService
     private volatile IReadOnlyList<AvailableMonthDto>? _cachedMonths;
     private DateOnly _cacheDate = DateOnly.MinValue;
 
+    public event Action? CacheChanged;
+
     /// <summary>
     /// Returns the semaphore used to serialise concurrent DB loads.
     /// Call <c>WaitAsync</c> before loading from the DB to avoid a cache stampede.
@@ -43,6 +45,7 @@ public sealed class ArchiveMonthsCacheService
     {
         _cachedMonths = months;
         _cacheDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        CacheChanged?.Invoke();
     }
 
     /// <summary>
@@ -53,5 +56,6 @@ public sealed class ArchiveMonthsCacheService
     {
         _cachedMonths = null;
         _cacheDate = DateOnly.MinValue;
+        CacheChanged?.Invoke();
     }
 }

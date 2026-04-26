@@ -1,0 +1,445 @@
+﻿.plan-dashboard-root {
+	--hb-page-bg: linear-gradient(180deg, #f4f7fb 0%, #eef3f8 100%);
+	--hb-border: #d8e1ec;
+	--hb-shadow: 0 6px 18px rgba(13, 37, 63, 0.08);
+	--hb-header-bg: linear-gradient(120deg, #1f2b3f 0%, #2f4a6b 100%);
+	--hb-header-muted: #b9c7d9;
+	--hb-income-accent: #1277a8;
+	--hb-income-accent-soft: #dff2fb;
+	--hb-income-regular: linear-gradient(90deg, #1277a8 0%, #2cb5a0 100%);
+	background: var(--hb-page-bg);
+	border-radius: 14px;
+}
+
+.hb-page-header {
+	padding: 16px 20px;
+	border-radius: 12px;
+	border: 1px solid var(--hb-border);
+}
+
+.hb-page-header-dark {
+	background: var(--hb-header-bg);
+	box-shadow: var(--hb-shadow);
+	border-color: rgba(162, 183, 210, 0.22);
+}
+
+.hb-page-title {
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: #f6fbff;
+}
+
+.hb-page-subtitle {
+	color: var(--hb-header-muted);
+}
+
+.status-chip {
+	font-weight: 600;
+}
+
+.plan-dashboard-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+	gap: 16px;
+	position: relative; /* Dodane dla pozycjonowania absolutnego panelu wpĹ‚ywĂłw */
+}
+
+.plan-left-column,
+.plan-right-column {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	min-width: 0;
+	position: relative;
+}
+
+.plan-left-column {
+	z-index: 2;
+}
+
+.plan-right-column {
+	z-index: 1;
+}
+
+.plan-dashboard-grid.income-overlay-active .plan-left-column {
+	z-index: 7000;
+}
+
+.plan-dashboard-grid.income-overlay-active .plan-right-column {
+	pointer-events: none;
+	filter: saturate(0.88) brightness(0.96);
+	z-index: 1;
+}
+
+.hb-kpi-card,
+.hb-panel {
+	background: #ffffff;
+	border: 1px solid var(--hb-border);
+	border-radius: 12px;
+	box-shadow: var(--hb-shadow);
+}
+
+.plan-dashboard-root ::deep .income-panel-wrapper {
+	position: relative;
+	width: 100%;
+	z-index: 2;
+}
+
+.plan-dashboard-root ::deep .income-panel-wrapper.income-panel-wrapper-expanded {
+	z-index: 6000;
+}
+
+.plan-dashboard-root ::deep .income-panel {
+	transition: width 0.34s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.24s ease, border-color 0.24s ease, transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+	overflow: hidden;
+	width: 100%;
+	position: relative;
+	z-index: 20;
+	will-change: width, transform;
+}
+
+.plan-dashboard-root ::deep .income-panel.income-panel-expanded {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 6200;
+	box-shadow: 0 28px 64px rgba(13, 37, 63, 0.32);
+	border-color: #7baecf;
+	transform: translateX(0);
+	max-height: none;
+	overflow: visible;
+	animation: income-panel-slide-open 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes income-panel-slide-open {
+	0% {
+		opacity: 0.85;
+		transform: translateX(-26px) scale(0.985);
+	}
+	100% {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+.plan-dashboard-root ::deep .income-content-container {
+	opacity: 0;
+	max-height: 0;
+	visibility: hidden;
+	transition: opacity 0.2s ease, max-height 0.3s ease, visibility 0s 0.3s;
+}
+
+.plan-dashboard-root ::deep .income-content-container.expanded {
+	opacity: 1;
+	max-height: 2000px;
+	visibility: visible;
+	transition: opacity 0.4s ease 0.1s, max-height 0.4s ease;
+}
+
+
+.plan-dashboard-root ::deep .income-panel-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(13, 37, 63, 0.16);
+	backdrop-filter: blur(1px);
+	z-index: 6100;
+}
+
+@media (max-width: 1200px) {
+	.plan-dashboard-root ::deep .income-panel-wrapper {
+		z-index: auto;
+	}
+
+	.plan-dashboard-grid.income-overlay-active .plan-left-column {
+		z-index: 2;
+	}
+
+	.plan-dashboard-root ::deep .income-panel.income-panel-expanded {
+		position: relative;
+		width: 100% !important;
+		z-index: 20;
+		box-shadow: 0 10px 40px rgba(13, 37, 63, 0.25);
+		border-color: #a7c9de;
+	}
+
+	.plan-dashboard-root ::deep .income-panel-backdrop {
+		display: none;
+	}
+
+	.plan-dashboard-root ::deep .income-panel-toggle {
+		display: none !important;
+	}
+}
+
+.hb-kpi-card {
+	padding: 14px;
+	height: 100%;
+	min-height: 128px;
+}
+
+.hb-kpi-value {
+	font-size: clamp(0.95rem, 0.72vw + 0.66rem, 1.22rem);
+	font-weight: 700;
+	line-height: 1.2;
+	margin-top: 4px;
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	flex-wrap: nowrap;
+}
+
+.hb-kpi-grid {
+	align-items: stretch;
+}
+
+.hb-kpi-item {
+	display: flex;
+}
+
+.hb-kpi-item > .mud-paper {
+	width: 100%;
+	height: 100%;
+}
+
+.hb-kpi-amount {
+	white-space: nowrap;
+}
+
+.hb-kpi-currency {
+	font-size: 0.72em;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: #567085;
+	white-space: nowrap;
+}
+
+.hb-expense-panel {
+	min-height: 72vh;
+}
+
+.section-title-row {
+	gap: 8px;
+}
+
+.envelope-row {
+	border-left: 4px solid #2a6fb0;
+	background: #f8fbff;
+	border-radius: 8px;
+}
+
+.income-summary-band {
+	border: 1px solid #cfe3ef;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #f7fcff 0%, #edf8ff 100%);
+	padding: 12px;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.income-summary-cell {
+	min-width: 0;
+	padding: 10px;
+	border-radius: 10px;
+	background: #fff;
+	border: 1px solid #e4eef5;
+}
+
+.income-summary-label {
+	color: #4a667a;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.income-summary-value {
+	color: #10354a;
+	font-weight: 700;
+}
+
+.income-share-track {
+	grid-column: 1 / -1;
+	height: 8px;
+	border-radius: 999px;
+	background: linear-gradient(90deg, #f2a96b 0%, #e3746a 100%);
+	overflow: hidden;
+	border: 1px solid rgba(16, 53, 74, 0.09);
+}
+
+.income-share-regular {
+	height: 100%;
+	background: var(--hb-income-regular);
+	transition: width 0.2s ease-in-out;
+}
+
+.income-table-wrap {
+	border: 1px solid #d8e6f0;
+	border-radius: 12px;
+	background: #fff;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+
+.plan-dashboard-root ::deep .plan-table .mud-table-container {
+	padding: 4px 6px;
+	overflow-x: auto;
+}
+
+.plan-dashboard-root ::deep .plan-table.plan-table-income .mud-table-root {
+	min-width: 760px;
+}
+
+.plan-dashboard-root ::deep .plan-table.plan-table-income .income-date-column,
+.plan-dashboard-root ::deep .plan-table.plan-table-income .income-date-cell {
+	white-space: nowrap;
+	min-width: 134px;
+}
+
+.plan-dashboard-root ::deep .plan-table.plan-table-income .income-date-cell:before {
+	white-space: nowrap;
+	min-width: 120px;
+}
+
+.plan-dashboard-root ::deep .plan-table.plan-table-income .income-date-cell .mud-input-slot,
+.plan-dashboard-root ::deep .plan-table.plan-table-income .income-date-cell input {
+	white-space: nowrap;
+}
+
+.plan-dashboard-root ::deep .plan-table .mud-table-head .mud-table-cell {
+	font-weight: 700;
+	color: #305066;
+	background: #f1f8fc;
+}
+
+.plan-dashboard-root ::deep .plan-table .mud-table-body .mud-table-cell {
+	vertical-align: middle;
+	border-bottom: 1px solid #edf3f8;
+}
+
+.plan-dashboard-root ::deep .plan-table.plan-table-line-items .mud-table-body .mud-table-cell {
+	background: #fcfeff;
+}
+
+.income-actions-wrap {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 6px;
+	justify-content: flex-start;
+}
+
+.income-action-icon {
+	border: 1px solid #d9e4ec;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.income-add-action {
+	justify-content: flex-end;
+}
+
+.expense-name-ellipsis {
+	max-width: 280px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.expense-order-column {
+	width: 72px;
+	white-space: nowrap;
+}
+
+.expense-actions-column {
+	white-space: normal;
+}
+
+.expense-actions-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+}
+
+.expense-edit-anchor {
+	height: 0;
+}
+
+@media (max-width: 1400px) {
+	.expense-header-actions {
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+}
+
+@media (max-width: 1200px) {
+	.plan-dashboard-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.hb-expense-panel {
+		min-height: auto;
+	}
+}
+
+@media (max-width: 960px) {
+	.header-main-row {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 12px;
+	}
+
+	.header-actions-wrap {
+		width: 100%;
+		flex-wrap: wrap;
+	}
+
+	.expense-name-ellipsis {
+		max-width: 210px;
+	}
+
+	.income-summary-band {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.income-table-wrap {
+		overflow: visible;
+	}
+
+	.income-table-wrap ::deep .mud-table-cell {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+
+	.income-actions-wrap {
+		justify-content: flex-start;
+	}
+
+	.income-add-action {
+		justify-content: flex-start;
+	}
+}
+
+@media (max-width: 600px) {
+	.plan-dashboard-root {
+		padding: 8px;
+		border-radius: 10px;
+	}
+
+	.hb-page-header {
+		padding: 12px;
+	}
+
+	.hb-kpi-card,
+	.hb-panel {
+		border-radius: 10px;
+	}
+
+	.expense-name-ellipsis {
+		max-width: 140px;
+	}
+}
+
+

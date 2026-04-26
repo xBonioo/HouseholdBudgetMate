@@ -531,6 +531,172 @@ public sealed class ExpenseServiceTests
     }
 
     [Fact]
+    public async Task OpenMonthAsync_Should_Not_Sync_Recurring_Data_For_Existing_MonthPlan()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            context.MonthPlans.Add(new MonthPlan
+            {
+                Year = 2026,
+                Month = 5,
+                IsClosed = true
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        await service.OpenMonthAsync(2026, 5, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlan = await verifyContext.MonthPlans.FirstAsync(x => x.Year == 2026 && x.Month == 5);
+        Assert.False(monthPlan.IsClosed);
+
+        var expensesCount = await verifyContext.Expenses.CountAsync(x => x.MonthPlanId == monthPlan.Id);
+        Assert.Equal(0, expensesCount);
+    }
+
+    [Fact]
+    public async Task CloseMonthAsync_Should_Not_Reopen_Already_Closed_Next_Month_Or_Sync_Recurring_Data()
+    {
+        int categoryId;
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            context.Categories.Add(category);
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+            accountId = account.Id;
+
+            context.MonthPlans.Add(new MonthPlan
+            {
+                Year = 2026,
+                Month = 2,
+                IsClosed = true
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var provider = new StaticDateTimeProvider(DateTime.UtcNow);
+        var incomeService = new IncomeService(factory, provider);
+        var service = new ExpenseService(
+            factory,
+            provider,
+            new RecordingAppEventPublisher(),
+            incomeService,
+            new NoOpLoanService());
+
+        await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        await incomeService.CreateRegularDefinitionAsync(new CreateRegularIncomeDefinitionRequest
+        {
+            Name = "Wyplata",
+            Amount = 5000m,
+            DayOfMonth = 10,
+            AccountId = accountId
+        }, CancellationToken.None);
+
+        await service.CloseMonthAsync(2026, 1, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var nextMonthPlan = await verifyContext.MonthPlans.FirstAsync(x => x.Year == 2026 && x.Month == 2);
+        Assert.True(nextMonthPlan.IsClosed);
+
+        var nextMonthExpenses = await verifyContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == nextMonthPlan.Id)
+            .ToListAsync();
+        Assert.Empty(nextMonthExpenses);
+
+        var nextMonthIncomes = await verifyContext.Incomes
+            .AsNoTracking()
+            .Where(x => x.Year == 2026 && x.Month == 2)
+            .ToListAsync();
+        Assert.Empty(nextMonthIncomes);
+    }
+
+    [Fact]
+    public async Task GetMonthAsync_Should_Not_Sync_Recurring_Data_For_Existing_Open_MonthPlan()
+    {
+        int categoryId;
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            context.Categories.Add(category);
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+            accountId = account.Id;
+
+            context.MonthPlans.Add(new MonthPlan
+            {
+                Year = 2026,
+                Month = 6,
+                IsClosed = false
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var now = DateTime.UtcNow;
+        var provider = new StaticDateTimeProvider(now);
+        var incomeService = new IncomeService(factory, provider);
+        var service = new ExpenseService(
+            factory,
+            provider,
+            new RecordingAppEventPublisher(),
+            incomeService,
+            new NoOpLoanService());
+
+        await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+
+        await incomeService.CreateRegularDefinitionAsync(new CreateRegularIncomeDefinitionRequest
+        {
+            Name = "Wyplata",
+            Amount = 5000m,
+            DayOfMonth = 10,
+            AccountId = accountId
+        }, CancellationToken.None);
+
+        var month = await service.GetMonthAsync(2026, 6, CancellationToken.None);
+        var incomes = await incomeService.GetMonthIncomesAsync(2026, 6, CancellationToken.None);
+
+        Assert.Empty(month.Expenses);
+        Assert.Empty(incomes);
+    }
+
+    [Fact]
     public async Task GetMonthAsync_Should_AutoSync_Recurring_Data_For_Open_Month()
     {
         int categoryId;
@@ -1448,7 +1614,7 @@ public sealed class ExpenseServiceTests
         var summary = await service.GetDashboardSummaryAsync(2026, 2, CancellationToken.None);
 
         Assert.Equal(4, summary.TransactionCount);
-        Assert.Equal(30m, summary.UnplannedSpentTotal);
+        Assert.Equal(80m, summary.UnplannedSpentTotal);
         Assert.Equal(160m, summary.SavedAmountThisMonth);
         Assert.Equal(310m, summary.SavedAmountYearToDate);
         Assert.Equal(550m, summary.AverageMonthlyIncome);
@@ -1457,5 +1623,212 @@ public sealed class ExpenseServiceTests
         Assert.Equal(2, summary.SavingsTimeline.Count);
         Assert.Equal(150m, summary.SavingsTimeline.Single(x => x.Month == 1).SavedAmount);
         Assert.Equal(160m, summary.SavingsTimeline.Single(x => x.Month == 2).SavedAmount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Count_LineItems_Instead_Of_Parent_Expense_When_SupportsLineItems()
+    {
+        int regularCategoryId;
+        int lineItemsCategoryId;
+        int monthPlanId;
+        int supportLineExpenseId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var regularCategory = new Category
+            {
+                Name = "Transport",
+                Color = "#43A047",
+                SupportsLineItems = false
+            };
+
+            var lineItemsCategory = new Category
+            {
+                Name = "Spozywcze",
+                Color = "#2E7D32",
+                SupportsLineItems = true
+            };
+
+            context.Categories.AddRange(regularCategory, lineItemsCategory);
+            await context.SaveChangesAsync();
+
+            regularCategoryId = regularCategory.Id;
+            lineItemsCategoryId = lineItemsCategory.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 3 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+            monthPlanId = monthPlan.Id;
+
+            context.Expenses.AddRange(
+                new Expense
+                {
+                    MonthPlanId = monthPlanId,
+                    Order = 1,
+                    Name = "Paliwo",
+                    CategoryId = regularCategoryId,
+                    PlannedAmount = 120m,
+                    ActualAmount = 120m,
+                    ShowRemainingInUI = true
+                },
+                new Expense
+                {
+                    MonthPlanId = monthPlanId,
+                    Order = 2,
+                    Name = "Zakupy tygodniowe",
+                    CategoryId = lineItemsCategoryId,
+                    PlannedAmount = 300m,
+                    ActualAmount = 0m,
+                    ShowRemainingInUI = true
+                });
+
+            await context.SaveChangesAsync();
+
+            supportLineExpenseId = await context.Expenses
+                .Where(x => x.MonthPlanId == monthPlanId && x.Name == "Zakupy tygodniowe")
+                .Select(x => x.Id)
+                .SingleAsync();
+
+            context.ExpenseLineItems.AddRange(
+                new ExpenseLineItem
+                {
+                    ExpenseId = supportLineExpenseId,
+                    Description = "Sklep 1",
+                    Amount = 55m,
+                    OccurredAt = new DateOnly(2026, 3, 10)
+                },
+                new ExpenseLineItem
+                {
+                    ExpenseId = supportLineExpenseId,
+                    Description = "Sklep 2",
+                    Amount = 75m,
+                    OccurredAt = new DateOnly(2026, 3, 15)
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 3, CancellationToken.None);
+
+        Assert.Equal(3, summary.TransactionCount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Not_Count_Parent_Expense_When_SupportsLineItems_But_No_LineItems()
+    {
+        int regularCategoryId;
+        int lineItemsCategoryId;
+        int monthPlanId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var regularCategory = new Category
+            {
+                Name = "Transport",
+                Color = "#43A047",
+                SupportsLineItems = false
+            };
+
+            var lineItemsCategory = new Category
+            {
+                Name = "Spozywcze",
+                Color = "#2E7D32",
+                SupportsLineItems = true
+            };
+
+            context.Categories.AddRange(regularCategory, lineItemsCategory);
+            await context.SaveChangesAsync();
+
+            regularCategoryId = regularCategory.Id;
+            lineItemsCategoryId = lineItemsCategory.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+            monthPlanId = monthPlan.Id;
+
+            context.Expenses.AddRange(
+                new Expense
+                {
+                    MonthPlanId = monthPlanId,
+                    Order = 1,
+                    Name = "Paliwo",
+                    CategoryId = regularCategoryId,
+                    PlannedAmount = 120m,
+                    ActualAmount = 120m,
+                    ShowRemainingInUI = true
+                },
+                new Expense
+                {
+                    MonthPlanId = monthPlanId,
+                    Order = 2,
+                    Name = "Zakupy tygodniowe",
+                    CategoryId = lineItemsCategoryId,
+                    PlannedAmount = 300m,
+                    ActualAmount = 0m,
+                    ShowRemainingInUI = true
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 4, CancellationToken.None);
+
+        Assert.Equal(1, summary.TransactionCount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Not_Count_Planned_Expense_With_Zero_Actual_When_No_LineItems()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Dom",
+                Color = "#455A64",
+                SupportsLineItems = false
+            };
+
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 5 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            context.Expenses.AddRange(
+                new Expense
+                {
+                    MonthPlanId = monthPlan.Id,
+                    Order = 1,
+                    Name = "Planowany bez realizacji",
+                    CategoryId = categoryId,
+                    PlannedAmount = 200m,
+                    ActualAmount = 0m,
+                    ShowRemainingInUI = true
+                },
+                new Expense
+                {
+                    MonthPlanId = monthPlan.Id,
+                    Order = 2,
+                    Name = "Nieplanowany",
+                    CategoryId = categoryId,
+                    PlannedAmount = 0m,
+                    ActualAmount = 0m,
+                    ShowRemainingInUI = true
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 5, CancellationToken.None);
+
+        Assert.Equal(1, summary.TransactionCount);
     }
 }

@@ -8,6 +8,7 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests
 @using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Application.Kernel.Timing
 @using MudBlazor
 
 @inject IIncomeService IncomeService
@@ -15,6 +16,7 @@
 @inject IAccountService AccountService
 @inject ICategoryService CategoryService
 @inject ILoanService LoanService
+@inject IDateTimeProvider DateTimeProvider
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 
@@ -176,6 +178,14 @@
                                        OnClick="() => DeleteIncomeDefinitionPermanentlyAsync(item.Id)">
                                 Usuń
                             </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       Disabled="@(!item.IsActive)"
+                                       ButtonType="ButtonType.Button"
+                                       OnClick="() => AddRegularIncomeToCurrentMonthAsync(item.Id)">
+                                Dodaj do aktualnego miesiąca
+                            </MudButton>
                         </MudTd>
                     }
                 </RowTemplate>
@@ -220,7 +230,7 @@
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" md="2">
                 <MudNumericField T="decimal"
                                  @bind-Value="_newExpenseDefinition.Amount"
                                  Label="Kwota"
@@ -229,10 +239,10 @@
                                  Culture="_culture"
                                  Immediate="true"/>
             </MudItem>
-            <MudItem xs="12" md="1" Class="d-flex align-center">
+            <MudItem xs="12" md="1" Class="d-flex flex-column align-start">
+                <MudText Typo="Typo.caption"><center>Pozostała Kwota</center></MudText>
                 <MudSwitch @bind-Value="_newExpenseDefinition.ShowRemainingInUI"
-                           Color="Color.Primary"
-                           Label="Pozostałe"/>
+                        Color="Color.Primary"/>
             </MudItem>
             <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
                 <MudButton
@@ -372,6 +382,14 @@
                                        ButtonType="ButtonType.Button"
                                        OnClick="() => DeleteExpenseDefinitionPermanentlyAsync(item.Id)">
                                 Usuń
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       Disabled="@(!item.IsActive)"
+                                       ButtonType="ButtonType.Button"
+                                       OnClick="() => AddRegularExpenseToCurrentMonthAsync(item.Id)">
+                                Dodaj do aktualnego miesiąca
                             </MudButton>
                         </MudTd>
                     }
@@ -647,6 +665,31 @@
         }
     }
 
+    private async Task AddRegularIncomeToCurrentMonthAsync(int definitionId)
+    {
+        try
+        {
+            var today = DateTimeProvider.GetLocalDateOnly();
+            var wasAdded = await IncomeService.AddRegularDefinitionToMonthAsync(
+                definitionId,
+                today.Year,
+                today.Month,
+                CancellationToken.None);
+
+            Snackbar.Add(
+                wasAdded
+                    ? "Dodano cykliczny wpływ do aktualnego miesiąca."
+                    : "Wpływ cykliczny dla aktualnego miesiąca już istnieje.",
+                wasAdded ? Severity.Success : Severity.Info);
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
     private async Task CreateExpenseDefinitionAsync()
     {
         try
@@ -797,6 +840,31 @@
 
             await LoadAsync();
             Snackbar.Add("Usunięto cykliczny wydatek na stałe.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task AddRegularExpenseToCurrentMonthAsync(int definitionId)
+    {
+        try
+        {
+            var today = DateTimeProvider.GetLocalDateOnly();
+            var wasAdded = await ExpenseService.AddRegularExpenseDefinitionToMonthAsync(
+                definitionId,
+                today.Year,
+                today.Month,
+                CancellationToken.None);
+
+            Snackbar.Add(
+                wasAdded
+                    ? "Dodano cykliczny wydatek do aktualnego miesiąca."
+                    : "Wydatek cykliczny dla aktualnego miesiąca już istnieje.",
+                wasAdded ? Severity.Success : Severity.Info);
+
+            await LoadAsync();
         }
         catch (Exception ex)
         {

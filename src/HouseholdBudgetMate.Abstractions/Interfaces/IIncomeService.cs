@@ -28,4 +28,5 @@ public interface IIncomeService
         CancellationToken cancellationToken);
 
     Task SyncRegularIncomesForMonthAsync(int year, int month, CancellationToken cancellationToken);
+    Task<bool> AddRegularDefinitionToMonthAsync(int definitionId, int year, int month, CancellationToken cancellationToken);
 }

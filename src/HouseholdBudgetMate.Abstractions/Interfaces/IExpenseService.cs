@@ -55,4 +55,5 @@ public interface IExpenseService
 
     Task CloseMonthAsync(int year, int month, CancellationToken cancellationToken);
     Task OpenMonthAsync(int year, int month, CancellationToken cancellationToken);
+    Task<bool> AddRegularExpenseDefinitionToMonthAsync(int definitionId, int year, int month, CancellationToken cancellationToken);
 }

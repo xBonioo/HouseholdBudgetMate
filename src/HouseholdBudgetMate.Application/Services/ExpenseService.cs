@@ -261,6 +261,67 @@ public sealed class ExpenseService(
         await loanService.SyncLoanInstallmentsForMonthAsync(year, month, cancellationToken);
     }
 
+    public async Task<bool> AddRegularExpenseDefinitionToMonthAsync(int definitionId, int year, int month,
+        CancellationToken cancellationToken)
+    {
+        if (definitionId <= 0)
+        {
+            throw new BadRequestException("Definition ID must be greater than 0.");
+        }
+
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var monthPlanState = await GetOrCreateMonthPlanStateAsync(dbContext, year, month, cancellationToken);
+        var monthPlan = monthPlanState.MonthPlan;
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
+
+        var definition = await dbContext.RegularExpenseDefinitions
+                             .AsNoTracking()
+                             .FirstOrDefaultAsync(x => x.Id == definitionId, cancellationToken)
+                         ?? throw new NotFoundException("Regular expense definition not found.");
+
+        if (!definition.IsActive)
+        {
+            return false;
+        }
+
+        var existsInMonth = await dbContext.Expenses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.MonthPlanId == monthPlan.Id
+                     && x.RegularExpenseDefinitionId == definitionId,
+                cancellationToken);
+
+        if (existsInMonth)
+        {
+            return false;
+        }
+
+        var nextOrder = await dbContext.Expenses
+            .Where(x => x.MonthPlanId == monthPlan.Id)
+            .Select(x => (int?)x.Order)
+            .MaxAsync(cancellationToken) + 1 ?? 1;
+
+        dbContext.Expenses.Add(new Expense
+        {
+            MonthPlanId = monthPlan.Id,
+            Order = nextOrder,
+            Name = definition.Name,
+            CategoryId = definition.CategoryId,
+            TagId = definition.TagId,
+            RegularExpenseDefinitionId = definition.Id,
+            PlannedAmount = definition.Amount,
+            ActualAmount = 0,
+            ShowRemainingInUI = definition.ShowRemainingInUI
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
     public async Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken)
     {
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));

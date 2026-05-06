@@ -42,4 +42,8 @@ public sealed class NoOpIncomeService : IIncomeService
 
     public Task SyncRegularIncomesForMonthAsync(int year, int month, CancellationToken cancellationToken)
         => Task.CompletedTask;
+
+    public Task<bool> AddRegularDefinitionToMonthAsync(int definitionId, int year, int month,
+        CancellationToken cancellationToken)
+        => Task.FromResult(false);
 }

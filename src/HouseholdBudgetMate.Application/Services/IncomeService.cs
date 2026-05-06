@@ -210,6 +210,63 @@ public sealed class IncomeService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> AddRegularDefinitionToMonthAsync(int definitionId, int year, int month,
+        CancellationToken cancellationToken)
+    {
+        if (definitionId <= 0)
+        {
+            throw new BadRequestException("Definition ID must be greater than 0.");
+        }
+
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureMonthIsOpenAsync(dbContext, year, month, cancellationToken);
+
+        var definition = await dbContext.RegularIncomeDefinitions
+                             .AsNoTracking()
+                             .FirstOrDefaultAsync(x => x.Id == definitionId, cancellationToken)
+                         ?? throw new NotFoundException("Regular income definition not found.");
+
+        if (!definition.IsActive)
+        {
+            return false;
+        }
+
+        var existsInMonth = await dbContext.Incomes
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Year == year
+                     && x.Month == month
+                     && x.IsRegular
+                     && x.RegularIncomeDefinitionId == definitionId,
+                cancellationToken);
+
+        if (existsInMonth)
+        {
+            return false;
+        }
+
+        var day = Math.Min(definition.DayOfMonth, DateTime.DaysInMonth(year, month));
+        dbContext.Incomes.Add(new Income
+        {
+            Year = year,
+            Month = month,
+            Name = definition.Name,
+            Amount = definition.Amount,
+            ExpectedDayOfMonth = new DateOnly(year, month, day),
+            AccountId = definition.AccountId,
+            IsRegular = true,
+            RegularIncomeDefinitionId = definition.Id,
+            IsDeleted = false
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
     public async Task<IReadOnlyList<IncomeDto>> GetMonthIncomesAsync(int year, int month,
         CancellationToken cancellationToken)
     {

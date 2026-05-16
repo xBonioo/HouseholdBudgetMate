@@ -19,7 +19,7 @@ internal sealed class StartupHostingOptions
     {
         var preferredHttpPort = configuration.GetValue<int?>("WebHosting:HttpPort") ?? 5000;
         var preferredHttpsPort = configuration.GetValue<int?>("WebHosting:HttpsPort") ?? 5001;
-        var openBrowserOnStartup = configuration.GetValue<bool?>("WebHosting:OpenBrowserOnStartup") ?? true;
+        var openBrowserOnStartup = configuration.GetValue<bool?>("WebHosting:OpenBrowserOnStartup") ?? false;
 
         var httpPort = FindAvailablePort(preferredHttpPort);
         var httpsPort = FindAvailablePort(preferredHttpsPort, httpPort);

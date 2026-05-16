@@ -370,16 +370,45 @@ public sealed class ExpenseService(
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         var monthPlan = await GetMonthAsync(year, month, cancellationToken);
+        var today = dateTimeProvider.GetLocalDateOnly();
+        var monthRelationToToday = CompareYearMonth(year, month, today.Year, today.Month);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var incomesCount = await dbContext.Incomes
-            .AsNoTracking()
-            .CountAsync(x => x.Year == year && x.Month == month, cancellationToken);
+        var incomesCount = monthRelationToToday switch
+        {
+            < 0 => await dbContext.Incomes
+                .AsNoTracking()
+                .CountAsync(x => x.Year == year && x.Month == month && x.Amount > 0, cancellationToken),
 
-        var savingsTransfersCount = await dbContext.MonthSavingsTransferItems
-            .AsNoTracking()
-            .CountAsync(x => x.MonthPlanId == monthPlan.Id, cancellationToken);
+            > 0 => 0,
+
+            _ => await dbContext.Incomes
+                .AsNoTracking()
+                .CountAsync(
+                    x => x.Year == year
+                         && x.Month == month
+                         && x.Amount > 0
+                         && x.ExpectedDayOfMonth <= today,
+                    cancellationToken)
+        };
+
+        var savingsTransfersCount = monthRelationToToday switch
+        {
+            < 0 => await dbContext.MonthSavingsTransferItems
+                .AsNoTracking()
+                .CountAsync(x => x.MonthPlanId == monthPlan.Id && x.Amount > 0, cancellationToken),
+
+            > 0 => 0,
+
+            _ => await dbContext.MonthSavingsTransferItems
+                .AsNoTracking()
+                .CountAsync(
+                    x => x.MonthPlanId == monthPlan.Id
+                         && x.Amount > 0
+                         && x.TransferDate <= today,
+                    cancellationToken)
+        };
 
         var expensesByMonth = await dbContext.Expenses
             .AsNoTracking()
@@ -472,7 +501,9 @@ public sealed class ExpenseService(
         var averageMonthlySaved = timeline.Sum(x => x.SavedAmount) / monthlyCount;
         var savedAmountThisMonth = timeline.FirstOrDefault(x => x.Month == month)?.SavedAmount ?? 0m;
         var expenseTransactionCount = monthPlan.Expenses
-            .Sum(expense => expense.SupportsLineItems ? expense.LineItems.Count : 1);
+            .Sum(expense => expense.SupportsLineItems
+                ? expense.LineItems.Count(x => x.Amount > 0 && IsDateReachedForCurrentMonth(x.OccurredAt, monthRelationToToday, today))
+                : expense.ActualAmount > 0 ? 1 : 0);
 
         return new DashboardSummaryDto
         {
@@ -488,6 +519,26 @@ public sealed class ExpenseService(
             CategoryRemainingItems = categoryRemaining,
             SavingsTimeline = timeline
         };
+    }
+
+    private static bool IsDateReachedForCurrentMonth(DateOnly date, int monthRelationToToday, DateOnly today)
+    {
+        return monthRelationToToday switch
+        {
+            < 0 => true,
+            > 0 => false,
+            _ => date <= today
+        };
+    }
+
+    private static int CompareYearMonth(int leftYear, int leftMonth, int rightYear, int rightMonth)
+    {
+        if (leftYear != rightYear)
+        {
+            return leftYear.CompareTo(rightYear);
+        }
+
+        return leftMonth.CompareTo(rightMonth);
     }
 
     public async Task<YearStatisticsDto> GetYearStatisticsAsync(int year, CancellationToken cancellationToken)
@@ -985,6 +1036,47 @@ public sealed class ExpenseService(
         return results;
     }
 
+    public async Task<IReadOnlyList<TagUsageCountDto>> GetTagUsageCountsAsync(CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var expenseTagCounts = await dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.TagId.HasValue)
+            .GroupBy(x => x.TagId!.Value)
+            .Select(x => new TagUsageCountDto
+            {
+                TagId = x.Key,
+                UsageCount = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        var lineItemTagCounts = await dbContext.ExpenseLineItems
+            .AsNoTracking()
+            .Where(x => x.TagId.HasValue)
+            .GroupBy(x => x.TagId!.Value)
+            .Select(x => new TagUsageCountDto
+            {
+                TagId = x.Key,
+                UsageCount = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        var merged = expenseTagCounts
+            .Concat(lineItemTagCounts)
+            .GroupBy(x => x.TagId)
+            .Select(x => new TagUsageCountDto
+            {
+                TagId = x.Key,
+                UsageCount = x.Sum(v => v.UsageCount)
+            })
+            .OrderByDescending(x => x.UsageCount)
+            .ThenBy(x => x.TagId)
+            .ToList();
+
+        return merged;
+    }
+
     public async Task<IReadOnlyList<CategoryLifetimeExpenseTotalDto>> GetCategoryLifetimeExpenseTotalsAsync(
         IReadOnlyList<int>? categoryIds,
         CancellationToken cancellationToken)
@@ -1313,9 +1405,9 @@ public sealed class ExpenseService(
                 throw new BadRequestException("Selected tag does not belong to selected category.");
             }
 
-            if (expense.TagId.HasValue && tag.Id != expense.TagId.Value && tag.ParentTagId != expense.TagId.Value)
+            if (expense.TagId.HasValue && tag.ParentTagId != expense.TagId.Value)
             {
-                throw new BadRequestException("Selected line item tag must belong to expense main tag.");
+                throw new BadRequestException("Selected line item tag must be a sub-tag of expense main tag.");
             }
         }
 
@@ -1408,10 +1500,9 @@ public sealed class ExpenseService(
             }
 
             if (lineItem.Expense.TagId.HasValue
-                && tag.Id != lineItem.Expense.TagId.Value
                 && tag.ParentTagId != lineItem.Expense.TagId.Value)
             {
-                throw new BadRequestException("Selected line item tag must belong to expense main tag.");
+                throw new BadRequestException("Selected line item tag must be a sub-tag of expense main tag.");
             }
         }
 

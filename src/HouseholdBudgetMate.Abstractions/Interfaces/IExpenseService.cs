@@ -11,6 +11,7 @@ public interface IExpenseService
     Task<IReadOnlyList<ExpenseHistorySearchResultDto>> SearchExpenseHistoryAsync(
         SearchExpenseHistoryRequest request,
         CancellationToken cancellationToken);
+    Task<IReadOnlyList<TagUsageCountDto>> GetTagUsageCountsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<CategoryLifetimeExpenseTotalDto>> GetCategoryLifetimeExpenseTotalsAsync(
         IReadOnlyList<int>? categoryIds,
         CancellationToken cancellationToken);

@@ -167,6 +167,7 @@ public sealed class AccountService(
         UpsertMonthBalanceValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureMonthIsOpenAsync(dbContext, request.Year, request.Month, cancellationToken);
 
         var accountExists = await dbContext.Accounts.AnyAsync(x => x.Id == request.AccountId, cancellationToken);
         if (!accountExists)
@@ -219,6 +220,8 @@ public sealed class AccountService(
                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                       ?? throw new NotFoundException("Month balance not found.");
 
+        await EnsureMonthIsOpenAsync(dbContext, balance.Year, balance.Month, cancellationToken);
+
         balance.ClosingBalance = request.ClosingBalance;
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -248,5 +251,18 @@ public sealed class AccountService(
         {
             throw new ConflictException("Account name must be unique.");
         }
+    }
+
+    private static async Task EnsureMonthIsOpenAsync(
+        ApplicationDbContext dbContext,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var monthPlan = await dbContext.MonthPlans
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
+
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
     }
 }

@@ -404,7 +404,7 @@ public partial class PlanPage
         }
 
         return
-            $"Uwaga: po dodaniu wydatku kategoria '{selectedCategory.Name}' przekroczy limit koperty ({predictedSpent.ToString("0.00", Culture)} / {limit.ToString("0.00", Culture)}zďż˝).";
+            $"Uwaga: po dodaniu wydatku kategoria '{selectedCategory.Name}' przekroczy limit koperty ({predictedSpent.ToString("0.00", Culture)} / {limit.ToString("0.00", Culture)}zł).";
     }
 
     private static Color GetEnvelopeColor(double usagePercent)

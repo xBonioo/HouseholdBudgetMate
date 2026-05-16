@@ -24,7 +24,7 @@ public static class ExpenseExtensionMapping
             SupportsLineItems = expense.Tag?.SupportsLineItemsOverride ?? expense.Category.SupportsLineItems,
             ShowRemainingInUI = expense.ShowRemainingInUI,
             LineItems = expense.LineItems
-                .OrderByDescending(li => li.OccurredAt)
+                .OrderByDescending(li => li.OccurredAt.DayNumber)
                 .ThenBy(li => li.Id)
                 .Select(MapLineItemToDto)
                 .ToList()

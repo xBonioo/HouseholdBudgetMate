@@ -122,7 +122,13 @@
                 </MudStack>
             </MudStack>
         </MudStack>
-        <MudTable Items="_accounts.Where(x => !x.IsArchived).OrderBy(x => x.Order)" Dense="true" Hover="true"
+        @if (IsSelectedMonthClosed())
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2 mb-2">
+                Wybrany miesiąc jest zamknięty. Możesz tylko podejrzeć zapisane salda.
+            </MudAlert>
+        }
+        <MudTable Items="GetAccountsForSelectedMonth()" Dense="true" Hover="true"
                   Class="mt-2">
             <HeaderContent>
                 <MudTh>Konto</MudTh>
@@ -130,21 +136,28 @@
                 <MudTh>Saldo dla wybranego miesiąca</MudTh>
             </HeaderContent>
             <NoRecordsContent>
-                <MudText Typo="Typo.body2" Class="pa-3 hb-muted">Brak aktywnych kont.</MudText>
+                <MudText Typo="Typo.body2" Class="pa-3 hb-muted">@(IsSelectedMonthClosed() ? "Brak sald dla kont w wybranym zamkniętym miesiącu." : "Brak aktywnych kont.")</MudText>
             </NoRecordsContent>
             <RowTemplate Context="account">
                 <MudTd>@account.Name</MudTd>
                 <MudTd>@account.Type.GetDisplayName()</MudTd>
                 <MudTd>
-                    <MudTextField T="string" Value="GetSelectedMonthAmountInput(account.Id)"
-                                  ValueChanged="(value) => SetSelectedMonthAmountInputAsync(account.Id, value)"
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense"/>
+                    @if (IsSelectedMonthClosed())
+                    {
+                        <MudText Typo="Typo.body2">@GetSelectedMonthAmount(account.Id).ToString("0.00", _culture)</MudText>
+                    }
+                    else
+                    {
+                        <MudTextField T="string" Value="GetSelectedMonthAmountInput(account.Id)"
+                                      ValueChanged="(value) => SetSelectedMonthAmountInputAsync(account.Id, value)"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"/>
+                    }
                 </MudTd>
             </RowTemplate>
         </MudTable>
         <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAllSelectedMonthBalancesAsync">Zapisz
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="IsSelectedMonthClosed()" OnClick="SaveAllSelectedMonthBalancesAsync">Zapisz
                 wszystkie
             </MudButton>
         </MudStack>
@@ -636,15 +649,14 @@
 
     private decimal GetActiveNonSavingsTotalForSelectedMonth()
     {
-        return _accounts
-            .Where(x => !x.IsArchived && x.Type != AccountType.Savings)
+        return GetAccountsForSelectedMonth()
+            .Where(x => x.Type != AccountType.Savings)
             .Sum(x => GetSelectedMonthAmount(x.Id));
     }
 
     private decimal GetActiveTotalForSelectedMonth()
     {
-        return _accounts
-            .Where(x => !x.IsArchived)
+        return GetAccountsForSelectedMonth()
             .Sum(x => GetSelectedMonthAmount(x.Id));
     }
 
@@ -659,6 +671,22 @@
     {
         var plan = _availablePlanMonths.FirstOrDefault(x => x.Year == _selectedYear && x.Month == _selectedMonth);
         return plan?.IsClosed ?? false;
+    }
+
+    private IReadOnlyList<AccountDto> GetAccountsForSelectedMonth()
+    {
+        if (IsSelectedMonthClosed())
+        {
+            return _accounts
+                .Where(x => x.MonthBalances.Any(b => b.Year == _selectedYear && b.Month == _selectedMonth))
+                .OrderBy(x => x.Order)
+                .ToList();
+        }
+
+        return _accounts
+            .Where(x => !x.IsArchived)
+            .OrderBy(x => x.Order)
+            .ToList();
     }
 
     private readonly record struct MonthOption(int Value, string Label);

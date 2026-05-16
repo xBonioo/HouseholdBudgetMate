@@ -37,6 +37,7 @@ public partial class PlanPage : ComponentBase
     private List<CategoryDto> _categories = [];
     private List<AccountDto> _accounts = [];
     private List<IncomeDto> _incomes = [];
+    private Dictionary<int, int> _tagUsageCountByTagId = [];
 
     private LiveBalanceDto _liveBalance = new();
     private DashboardSummaryDto _dashboardSummary = new();

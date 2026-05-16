@@ -27,6 +27,8 @@ public partial class PlanPage : IAsyncDisposable
         try
         {
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+            _tagUsageCountByTagId = (await ExpenseService.GetTagUsageCountsAsync(CancellationToken.None))
+                .ToDictionary(x => x.TagId, x => x.UsageCount);
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
             _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
             _dashboardSummary = await ExpenseService.GetDashboardSummaryAsync(Year, Month, CancellationToken.None);

@@ -34,9 +34,13 @@ public partial class PlanPage
 
     private IReadOnlyList<TagDto> GetSelectableRootTags(int categoryId, int? selectedTagId)
     {
-        var rootTags = GetSelectableTags(categoryId, selectedTagId)
+        var categoryTags = GetSelectableTags(categoryId, selectedTagId);
+        var descendantTagIdsByRoot = BuildDescendantTagIdsByRoot(categoryTags);
+
+        var rootTags = categoryTags
             .Where(x => !x.ParentTagId.HasValue)
-            .OrderBy(x => x.Name)
+            .OrderByDescending(x => GetRootTagUsageCount(x.Id, descendantTagIdsByRoot))
+            .ThenBy(x => x.Name)
             .ToList();
 
         if (selectedTagId.HasValue && rootTags.All(x => x.Id != selectedTagId.Value))
@@ -67,7 +71,8 @@ public partial class PlanPage
 
         var subTags = GetSelectableTags(categoryId, selectedTagId)
             .Where(x => x.ParentTagId == rootTagId.Value)
-            .OrderBy(x => x.Name)
+            .OrderByDescending(x => GetTagUsageCount(x.Id))
+            .ThenBy(x => x.Name)
             .ToList();
 
         if (selectedTagId.HasValue && subTags.All(x => x.Id != selectedTagId.Value))
@@ -260,21 +265,92 @@ public partial class PlanPage
         }
 
         var scopedTags = allTags
-            .Where(x => x.Id == expenseMainTagId.Value || x.ParentTagId == expenseMainTagId.Value)
-            .OrderBy(x => x.ParentTagId.HasValue ? 1 : 0)
+            .Where(x => x.ParentTagId == expenseMainTagId.Value)
+            .OrderByDescending(x => GetTagUsageCount(x.Id))
             .ThenBy(x => x.Name)
             .ToList();
 
         if (selectedTagId.HasValue && scopedTags.All(x => x.Id != selectedTagId.Value))
         {
             var selected = allTags.FirstOrDefault(x => x.Id == selectedTagId.Value);
-            if (selected is not null)
+            if (selected is not null && selected.ParentTagId == expenseMainTagId.Value)
             {
                 scopedTags.Add(selected);
             }
         }
 
         return scopedTags;
+    }
+
+    private int GetTagUsageCount(int tagId)
+    {
+        return _tagUsageCountByTagId.GetValueOrDefault(tagId, 0);
+    }
+
+    private int GetRootTagUsageCount(int rootTagId, IReadOnlyDictionary<int, IReadOnlyCollection<int>> descendantTagIdsByRoot)
+    {
+        var usageCount = GetTagUsageCount(rootTagId);
+
+        if (!descendantTagIdsByRoot.TryGetValue(rootTagId, out var descendants))
+        {
+            return usageCount;
+        }
+
+        foreach (var descendantId in descendants)
+        {
+            usageCount += GetTagUsageCount(descendantId);
+        }
+
+        return usageCount;
+    }
+
+    private static IReadOnlyDictionary<int, IReadOnlyCollection<int>> BuildDescendantTagIdsByRoot(IReadOnlyList<TagDto> tags)
+    {
+        var tagsByParentId = tags
+            .Where(x => x.ParentTagId.HasValue)
+            .GroupBy(x => x.ParentTagId!.Value)
+            .ToDictionary(x => x.Key, x => x.Select(v => v.Id).ToList());
+
+        var rootTagIds = tags
+            .Where(x => !x.ParentTagId.HasValue)
+            .Select(x => x.Id)
+            .ToList();
+
+        var descendantsByRoot = new Dictionary<int, IReadOnlyCollection<int>>();
+
+        foreach (var rootTagId in rootTagIds)
+        {
+            var descendants = new List<int>();
+            var pending = new Stack<int>();
+
+            if (tagsByParentId.TryGetValue(rootTagId, out var directChildren))
+            {
+                foreach (var childId in directChildren)
+                {
+                    pending.Push(childId);
+                }
+            }
+
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                descendants.Add(current);
+
+                if (!tagsByParentId.TryGetValue(current, out var children))
+                {
+                    continue;
+                }
+
+                foreach (var childId in children)
+                {
+                    pending.Push(childId);
+                }
+            }
+
+            descendantsByRoot[rootTagId] = descendants;
+        }
+
+        return descendantsByRoot;
     }
 }
 

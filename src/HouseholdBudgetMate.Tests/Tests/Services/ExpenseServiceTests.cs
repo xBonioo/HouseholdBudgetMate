@@ -14,10 +14,10 @@ public sealed class ExpenseServiceTests
 {
     private readonly string _dbName = Guid.NewGuid().ToString();
 
-    private ExpenseService CreateService(RecordingAppEventPublisher? eventPublisher = null)
+    private ExpenseService CreateService(RecordingAppEventPublisher? eventPublisher = null, DateTime? nowUtc = null)
     {
         var factory = TestDbContextFactory.CreateFactory(_dbName);
-        var provider = new StaticDateTimeProvider(DateTime.UtcNow);
+        var provider = new StaticDateTimeProvider(nowUtc ?? DateTime.UtcNow);
         return new ExpenseService(
             factory,
             provider,
@@ -91,6 +91,155 @@ public sealed class ExpenseServiceTests
         await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var monthPlans = await verifyContext.MonthPlans.ToListAsync();
         Assert.Single(monthPlans);
+    }
+
+    [Fact]
+    public async Task GetMonthAsync_Should_Order_LineItems_By_Day_Then_By_Id_When_Same_Day()
+    {
+        int firstLineItemId;
+        int secondLineItemId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Zakupy",
+                Color = "#43A047",
+                SupportsLineItems = true
+            };
+
+            var monthPlan = new MonthPlan
+            {
+                Year = 2026,
+                Month = 4
+            };
+
+            context.Categories.Add(category);
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Paragon",
+                CategoryId = category.Id,
+                PlannedAmount = 100m,
+                ActualAmount = 0m,
+                ShowRemainingInUI = true
+            };
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+
+            var firstLineItem = new ExpenseLineItem
+            {
+                ExpenseId = expense.Id,
+                Description = "Pozycja 1",
+                Amount = 10m,
+                OccurredAt = new DateOnly(2026, 4, 10)
+            };
+
+            var secondLineItem = new ExpenseLineItem
+            {
+                ExpenseId = expense.Id,
+                Description = "Pozycja 2",
+                Amount = 20m,
+                OccurredAt = new DateOnly(2026, 4, 10)
+            };
+
+            context.ExpenseLineItems.Add(firstLineItem);
+            context.ExpenseLineItems.Add(secondLineItem);
+            await context.SaveChangesAsync();
+
+            firstLineItemId = firstLineItem.Id;
+            secondLineItemId = secondLineItem.Id;
+        }
+
+        var service = CreateService();
+        var month = await service.GetMonthAsync(2026, 4, CancellationToken.None);
+
+        var expenseDto = Assert.Single(month.Expenses);
+        Assert.Equal(2, expenseDto.LineItems.Count);
+        Assert.Equal(firstLineItemId, expenseDto.LineItems[0].Id);
+        Assert.Equal(secondLineItemId, expenseDto.LineItems[1].Id);
+    }
+
+    [Fact]
+    public async Task GetTagUsageCountsAsync_Should_Aggregate_Expense_And_LineItem_Tag_Usage()
+    {
+        int rootTagId;
+        int childTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Zakupy",
+                Color = "#43A047",
+                SupportsLineItems = true
+            };
+
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var rootTag = new Tag { Name = "Sklep", CategoryId = category.Id };
+            context.Tags.Add(rootTag);
+            await context.SaveChangesAsync();
+
+            var childTag = new Tag { Name = "Online", CategoryId = category.Id, ParentTagId = rootTag.Id };
+            context.Tags.Add(childTag);
+            await context.SaveChangesAsync();
+
+            rootTagId = rootTag.Id;
+            childTagId = childTag.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expenseWithRootTag = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy stacjonarne",
+                CategoryId = category.Id,
+                TagId = rootTagId,
+                PlannedAmount = 100m,
+                ActualAmount = 90m,
+                ShowRemainingInUI = true
+            };
+
+            var expenseWithChildTag = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy online",
+                CategoryId = category.Id,
+                TagId = childTagId,
+                PlannedAmount = 150m,
+                ActualAmount = 120m,
+                ShowRemainingInUI = true
+            };
+
+            context.Expenses.AddRange(expenseWithRootTag, expenseWithChildTag);
+            await context.SaveChangesAsync();
+
+            context.ExpenseLineItems.Add(new ExpenseLineItem
+            {
+                ExpenseId = expenseWithRootTag.Id,
+                Description = "Pozycja online",
+                Amount = 10m,
+                OccurredAt = new DateOnly(2026, 4, 10),
+                TagId = childTagId
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var usageCounts = await service.GetTagUsageCountsAsync(CancellationToken.None);
+
+        var usageByTagId = usageCounts.ToDictionary(x => x.TagId, x => x.UsageCount);
+        Assert.Equal(1, usageByTagId[rootTagId]);
+        Assert.Equal(2, usageByTagId[childTagId]);
     }
 
     [Fact]
@@ -1829,6 +1978,91 @@ public sealed class ExpenseServiceTests
         var service = CreateService();
         var summary = await service.GetDashboardSummaryAsync(2026, 5, CancellationToken.None);
 
-        Assert.Equal(1, summary.TransactionCount);
+        Assert.Equal(0, summary.TransactionCount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Not_Count_Future_Incomes_And_Transfers_In_Current_Month()
+    {
+        int categoryId;
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Dom",
+                Color = "#455A64",
+                SupportsLineItems = false
+            };
+
+            var account = new Account
+            {
+                Name = "Konto glowne",
+                Type = (int)AccountType.Bank
+            };
+
+            context.Categories.Add(category);
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+            accountId = account.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 6 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Order = 1,
+                Name = "Zaplacony rachunek",
+                CategoryId = categoryId,
+                PlannedAmount = 100m,
+                ActualAmount = 100m,
+                ShowRemainingInUI = true
+            });
+
+            context.Incomes.AddRange(
+                new Income
+                {
+                    Year = 2026,
+                    Month = 6,
+                    Name = "Wyplata przyszla",
+                    Amount = 500m,
+                    AccountId = accountId,
+                    ExpectedDayOfMonth = new DateOnly(2026, 6, 20)
+                },
+                new Income
+                {
+                    Year = 2026,
+                    Month = 6,
+                    Name = "Wyplata juz doszla",
+                    Amount = 700m,
+                    AccountId = accountId,
+                    ExpectedDayOfMonth = new DateOnly(2026, 6, 5)
+                });
+
+            context.MonthSavingsTransferItems.AddRange(
+                new MonthSavingsTransferItem
+                {
+                    MonthPlanId = monthPlan.Id,
+                    Amount = 250m,
+                    TransferDate = new DateOnly(2026, 6, 25)
+                },
+                new MonthSavingsTransferItem
+                {
+                    MonthPlanId = monthPlan.Id,
+                    Amount = 300m,
+                    TransferDate = new DateOnly(2026, 6, 8)
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService(nowUtc: new DateTime(2026, 6, 10, 12, 0, 0, DateTimeKind.Utc));
+        var summary = await service.GetDashboardSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(3, summary.TransactionCount);
     }
 }

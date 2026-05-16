@@ -140,9 +140,50 @@
 <MudPaper Class="pa-4 mt-4 hb-panel">
     <MudText Typo="Typo.h6">Statystyki wydatków per kategoria</MudText>
 
-    @if (_statistics.CategoryStatistics.Count == 0)
+    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
+        Zakres dat jest ograniczony do miesięcy dostępnych w historii aplikacji.
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-3" AlignItems="AlignItems.Center">
+        <MudDatePicker Label="Od"
+                       Date="@GetLifetimeFromDateTime()"
+                       DateChanged="OnLifetimeFromDateChanged"
+                       MinDate="@GetHistoryMinDateTime()"
+                       MaxDate="@GetHistoryMaxDateTime()"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"/>
+
+        <MudDatePicker Label="Do"
+                       Date="@GetLifetimeToDateTime()"
+                       DateChanged="OnLifetimeToDateChanged"
+                       MinDate="@GetHistoryMinDateTime()"
+                       MaxDate="@GetHistoryMaxDateTime()"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"/>
+
+        <MudSelect T="int"
+                   MultiSelection="true"
+                   Label="Kategorie"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense"
+                   SelectedValues="_selectedLifetimeCategoryIds"
+                   SelectedValuesChanged="OnSelectedLifetimeCategoriesChanged">
+            @foreach (var category in _categories.OrderBy(x => x.Name))
+            {
+                <MudSelectItem T="int" Value="@category.Id">@category.Name</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="LoadCategoryRangeStatisticsAsync">
+            Przelicz
+        </MudButton>
+    </MudStack>
+
+    @if (_categoryRangeStatistics.CategoryStatistics.Count == 0)
     {
-        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych kategorii dla wybranego roku.</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych dla wybranego zakresu i kategorii.</MudText>
     }
     else
     {
@@ -153,11 +194,11 @@
                     <th>Kategoria / Tag</th>
                     <th>Suma</th>
                     <th>Średnia miesięczna</th>
-                    <th>Miesięcy z wydatkami</th>
+                    <th>Zakres lat</th>
                 </tr>
                 </thead>
                 <tbody>
-                @foreach (var category in _statistics.CategoryStatistics)
+                @foreach (var category in _categoryRangeStatistics.CategoryStatistics)
                 {
                     var categoryId = category.CategoryId;
                     var isSelected = _selectedCategoryId == categoryId;
@@ -165,7 +206,7 @@
                         <td>@category.CategoryName</td>
                         <td style="white-space: nowrap;">@FormatMoney(category.TotalSpent)</td>
                         <td style="white-space: nowrap;">@FormatMoney(category.AverageMonthlySpent)</td>
-                        <td>@category.MonthsWithExpenses</td>
+                        <td>@GetSelectedRangeYearLabel()</td>
                     </tr>
 
                     @if (isSelected)
@@ -200,7 +241,7 @@
                                     </td>
                                     <td style="white-space: nowrap;">@FormatMoney(tag.TotalSpent)</td>
                                     <td style="white-space: nowrap;">@FormatMoney(tag.AverageMonthlySpent)</td>
-                                    <td>@tag.MonthsWithExpenses</td>
+                                    <td>@GetSelectedRangeYearLabel()</td>
                                 </tr>
                             }
                         }
@@ -209,51 +250,6 @@
                 </tbody>
             </MudSimpleTable>
         </div>
-    }
-</MudPaper>
-
-<MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6">Suma wydatków kategorii w całej historii</MudText>
-
-    <MudStack Row="true" Spacing="2" Class="mt-3" AlignItems="AlignItems.Center">
-        <MudSelect T="int"
-                   MultiSelection="true"
-                   Label="Kategorie"
-                   Variant="Variant.Outlined"
-                   Margin="Margin.Dense"
-                   SelectedValues="_selectedLifetimeCategoryIds"
-                   SelectedValuesChanged="OnSelectedLifetimeCategoriesChanged">
-            @foreach (var category in _categories.OrderBy(x => x.Name))
-            {
-                <MudSelectItem T="int" Value="@category.Id">@category.Name</MudSelectItem>
-            }
-        </MudSelect>
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   OnClick="LoadCategoryLifetimeTotalsAsync">
-            Przelicz
-        </MudButton>
-    </MudStack>
-
-    @if (_categoryLifetimeTotals.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Wybierz kategorie do przeliczenia.</MudText>
-    }
-    else
-    {
-        <MudTable Items="_categoryLifetimeTotals" Dense="true" Hover="true" Class="mt-3">
-            <HeaderContent>
-                <MudTh>Kategoria</MudTh>
-                <MudTh>Suma wydatków</MudTh>
-                <MudTh>Zakres lat</MudTh>
-            </HeaderContent>
-            <RowTemplate Context="item">
-                <MudTd DataLabel="Kategoria">@item.CategoryName</MudTd>
-                <MudTd DataLabel="Suma wydatków" Style="white-space: nowrap;">@FormatMoney(item.TotalSpent)</MudTd>
-                <MudTd DataLabel="Zakres lat">@GetYearRangeLabel(item)</MudTd>
-            </RowTemplate>
-        </MudTable>
     }
 </MudPaper>
 
@@ -384,16 +380,24 @@
     private string _historySearchQuery = string.Empty;
     private readonly HashSet<int> _expandedTagIds = [];
     private HashSet<int> _selectedLifetimeCategoryIds = [];
+    private List<AvailableMonthDto> _availableHistoryMonths = [];
+    private DateOnly? _historyMinDate;
+    private DateOnly? _historyMaxDate;
+    private DateOnly? _lifetimeFromDate;
+    private DateOnly? _lifetimeToDate;
     private List<CategoryDto> _categories = [];
     private List<ExpenseHistorySearchResultDto> _historySearchResults = [];
-    private List<CategoryLifetimeExpenseTotalDto> _categoryLifetimeTotals = [];
+    private CategoryRangeStatisticsDto _categoryRangeStatistics = new();
     private YearStatisticsDto _statistics = new();
 
     protected override async Task OnInitializedAsync()
     {
         _selectedYear = DateTimeProvider.GetLocalDateOnly().Year;
         _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
+        _availableHistoryMonths = (await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None)).ToList();
+        InitializeLifetimeRange();
         await LoadStatisticsAsync();
+        await LoadCategoryRangeStatisticsAsync();
     }
 
     private async Task OnSelectedYearChanged(int year)
@@ -454,7 +458,7 @@
 
     private List<CategoryTagYearStatisticsDto> GetVisibleTagRows(int categoryId)
     {
-        var allRows = _statistics.CategoryTagStatistics
+        var allRows = _categoryRangeStatistics.CategoryTagStatistics
             .Where(x => x.CategoryId == categoryId)
             .ToList();
 
@@ -649,7 +653,7 @@
         _selectedLifetimeCategoryIds = categoryIds?.ToHashSet() ?? [];
     }
 
-    private async Task LoadCategoryLifetimeTotalsAsync()
+    private async Task LoadCategoryRangeStatisticsAsync()
     {
         try
         {
@@ -657,33 +661,109 @@
                 ? null
                 : _selectedLifetimeCategoryIds.ToList();
 
-            if (selectedIds is null)
+            _categoryRangeStatistics = await ExpenseService.GetCategoryRangeStatisticsAsync(
+                selectedIds,
+                _lifetimeFromDate,
+                _lifetimeToDate,
+                CancellationToken.None);
+
+            if (_selectedCategoryId.HasValue
+                && !_categoryRangeStatistics.CategoryStatistics.Any(x => x.CategoryId == _selectedCategoryId.Value))
             {
-                _categoryLifetimeTotals = new List<CategoryLifetimeExpenseTotalDto>();
-            }
-            else
-            {
-                _categoryLifetimeTotals = (await ExpenseService.GetCategoryLifetimeExpenseTotalsAsync(
-                    selectedIds,
-                    CancellationToken.None)).ToList();
+                _selectedCategoryId = null;
+                _expandedTagIds.Clear();
             }
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+            _categoryRangeStatistics = new CategoryRangeStatisticsDto();
         }
     }
 
-    private static string GetYearRangeLabel(CategoryLifetimeExpenseTotalDto item)
+    private void InitializeLifetimeRange()
     {
-        if (!item.FirstYear.HasValue || !item.LastYear.HasValue)
+        if (_availableHistoryMonths.Count == 0)
+        {
+            _historyMinDate = null;
+            _historyMaxDate = null;
+            _lifetimeFromDate = null;
+            _lifetimeToDate = null;
+            return;
+        }
+
+        var first = _availableHistoryMonths
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .First();
+
+        var last = _availableHistoryMonths
+            .OrderByDescending(x => x.Year)
+            .ThenByDescending(x => x.Month)
+            .First();
+
+        _historyMinDate = new DateOnly(first.Year, first.Month, 1);
+        _historyMaxDate = new DateOnly(last.Year, last.Month, 1);
+
+        _lifetimeFromDate ??= _historyMinDate;
+        _lifetimeToDate ??= _historyMaxDate;
+    }
+
+    private DateTime? GetHistoryMinDateTime()
+    {
+        return _historyMinDate?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private DateTime? GetHistoryMaxDateTime()
+    {
+        return _historyMaxDate?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private DateTime? GetLifetimeFromDateTime()
+    {
+        return _lifetimeFromDate?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private DateTime? GetLifetimeToDateTime()
+    {
+        var now = DateTimeProvider.GetLocalDateOnly();
+        return now.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private async Task OnLifetimeFromDateChanged(DateTime? value)
+    {
+        _lifetimeFromDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : _historyMinDate;
+
+        if (_lifetimeToDate.HasValue && _lifetimeFromDate.HasValue && _lifetimeFromDate.Value > _lifetimeToDate.Value)
+        {
+            _lifetimeToDate = _lifetimeFromDate;
+        }
+
+        await LoadCategoryRangeStatisticsAsync();
+    }
+
+    private async Task OnLifetimeToDateChanged(DateTime? value)
+    {
+        _lifetimeToDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : _historyMaxDate;
+
+        if (_lifetimeFromDate.HasValue && _lifetimeToDate.HasValue && _lifetimeToDate.Value < _lifetimeFromDate.Value)
+        {
+            _lifetimeFromDate = _lifetimeToDate;
+        }
+
+        await LoadCategoryRangeStatisticsAsync();
+    }
+
+    private string GetSelectedRangeYearLabel()
+    {
+        if (!_categoryRangeStatistics.FirstYear.HasValue || !_categoryRangeStatistics.LastYear.HasValue)
         {
             return "-";
         }
 
-        return item.FirstYear == item.LastYear
-            ? item.FirstYear.Value.ToString(CultureInfo.InvariantCulture)
-            : $"{item.FirstYear.Value}-{item.LastYear.Value}";
+        return _categoryRangeStatistics.FirstYear == _categoryRangeStatistics.LastYear
+            ? _categoryRangeStatistics.FirstYear.Value.ToString(CultureInfo.InvariantCulture)
+            : $"{_categoryRangeStatistics.FirstYear.Value}-{_categoryRangeStatistics.LastYear.Value}";
     }
 
     private sealed record YearSummaryRow(string Label, decimal Total, decimal MonthlyAverage);

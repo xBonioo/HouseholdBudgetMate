@@ -1619,7 +1619,7 @@ public sealed class ExpenseServiceTests
         }
 
         var service = CreateService();
-        var result = await service.GetCategoryLifetimeExpenseTotalsAsync([homeCategoryId], CancellationToken.None);
+        var result = await service.GetCategoryLifetimeExpenseTotalsAsync([homeCategoryId], null, null, CancellationToken.None);
 
         var homeTotal = Assert.Single(result);
         Assert.Equal(homeCategoryId, homeTotal.CategoryId);

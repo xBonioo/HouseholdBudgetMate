@@ -1036,6 +1036,264 @@ public sealed class ExpenseService(
         return results;
     }
 
+    public async Task<CategoryRangeStatisticsDto> GetCategoryRangeStatisticsAsync(
+        IReadOnlyList<int>? categoryIds,
+        DateOnly? fromDate,
+        DateOnly? toDate,
+        CancellationToken cancellationToken)
+    {
+        if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+        {
+            throw new BadRequestException("Date range is invalid.");
+        }
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var minMonthPlan = await dbContext.MonthPlans
+            .AsNoTracking()
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .Select(x => new { x.Year, x.Month })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var maxMonthPlan = await dbContext.MonthPlans
+            .AsNoTracking()
+            .OrderByDescending(x => x.Year)
+            .ThenByDescending(x => x.Month)
+            .Select(x => new { x.Year, x.Month })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (minMonthPlan is null || maxMonthPlan is null)
+        {
+            return new CategoryRangeStatisticsDto();
+        }
+
+        var rangeFrom = fromDate ?? new DateOnly(minMonthPlan.Year, minMonthPlan.Month, 1);
+        var rangeTo = toDate ?? new DateOnly(maxMonthPlan.Year, maxMonthPlan.Month, 1);
+
+        if (rangeFrom > rangeTo)
+        {
+            throw new BadRequestException("Date range is invalid.");
+        }
+
+        var rangeMonthCount = ((rangeTo.Year - rangeFrom.Year) * 12) + rangeTo.Month - rangeFrom.Month + 1;
+        rangeMonthCount = Math.Max(1, rangeMonthCount);
+
+        var monthRange = Enumerable
+            .Range(0, rangeMonthCount)
+            .Select(offset => rangeFrom.AddMonths(offset))
+            .ToList();
+
+        var expenseQuery = dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlan.Year > rangeFrom.Year
+                        || (x.MonthPlan.Year == rangeFrom.Year && x.MonthPlan.Month >= rangeFrom.Month))
+            .Where(x => x.MonthPlan.Year < rangeTo.Year
+                        || (x.MonthPlan.Year == rangeTo.Year && x.MonthPlan.Month <= rangeTo.Month));
+
+        if (categoryIds is { Count: > 0 })
+        {
+            expenseQuery = expenseQuery.Where(x => categoryIds.Contains(x.CategoryId));
+        }
+
+        var expenseRows = await expenseQuery
+            .Select(x => new
+            {
+                x.Id,
+                x.CategoryId,
+                CategoryName = x.Category.Name,
+                Year = x.MonthPlan.Year,
+                Month = x.MonthPlan.Month,
+                x.TagId,
+                x.ActualAmount
+            })
+            .ToListAsync(cancellationToken);
+
+        var expenseLineItemQuery = dbContext.ExpenseLineItems
+            .AsNoTracking()
+            .Where(x => x.Expense.MonthPlan.Year > rangeFrom.Year
+                        || (x.Expense.MonthPlan.Year == rangeFrom.Year && x.Expense.MonthPlan.Month >= rangeFrom.Month))
+            .Where(x => x.Expense.MonthPlan.Year < rangeTo.Year
+                        || (x.Expense.MonthPlan.Year == rangeTo.Year && x.Expense.MonthPlan.Month <= rangeTo.Month));
+
+        if (categoryIds is { Count: > 0 })
+        {
+            expenseLineItemQuery = expenseLineItemQuery.Where(x => categoryIds.Contains(x.Expense.CategoryId));
+        }
+
+        var expenseLineItemRows = await expenseLineItemQuery
+            .Select(x => new
+            {
+                x.ExpenseId,
+                CategoryId = x.Expense.CategoryId,
+                Year = x.Expense.MonthPlan.Year,
+                Month = x.Expense.MonthPlan.Month,
+                ExpenseTagId = x.Expense.TagId,
+                x.TagId,
+                x.Amount
+            })
+            .ToListAsync(cancellationToken);
+
+        var categoryStatistics = expenseRows
+            .GroupBy(x => new { x.CategoryId, x.CategoryName })
+            .Select(group =>
+            {
+                var total = group.Sum(x => x.ActualAmount);
+                var monthsWithExpenses = group
+                    .GroupBy(x => new { x.Year, x.Month })
+                    .Count(x => x.Sum(v => v.ActualAmount) > 0);
+
+                return new CategoryYearStatisticsDto
+                {
+                    CategoryId = group.Key.CategoryId,
+                    CategoryName = group.Key.CategoryName,
+                    TotalSpent = total,
+                    AverageMonthlySpent = total / rangeMonthCount,
+                    MonthsWithExpenses = monthsWithExpenses
+                };
+            })
+            .OrderByDescending(x => x.TotalSpent)
+            .ThenBy(x => x.CategoryName)
+            .ToList();
+
+        var categoryIdSet = categoryStatistics.Select(x => x.CategoryId).ToHashSet();
+        var tags = await dbContext.Tags
+            .AsNoTracking()
+            .Where(x => categoryIdSet.Contains(x.CategoryId))
+            .Select(x => new TagSnapshot(x.Id, x.CategoryId, x.ParentTagId, x.Name))
+            .ToListAsync(cancellationToken);
+
+        var tagsByCategory = tags
+            .GroupBy(x => x.CategoryId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        var expenseIdsWithLineItems = expenseLineItemRows
+            .Select(x => x.ExpenseId)
+            .Distinct()
+            .ToHashSet();
+
+        var expenseRowsWithoutLineItems = expenseRows
+            .Where(x => !expenseIdsWithLineItems.Contains(x.Id))
+            .ToList();
+
+        var directTagMonthValues = new Dictionary<(int TagId, int Year, int Month), decimal>();
+
+        foreach (var lineItem in expenseLineItemRows)
+        {
+            var effectiveTagId = lineItem.TagId ?? lineItem.ExpenseTagId;
+            if (!effectiveTagId.HasValue)
+            {
+                continue;
+            }
+
+            var key = (effectiveTagId.Value, lineItem.Year, lineItem.Month);
+            directTagMonthValues[key] = directTagMonthValues.GetValueOrDefault(key, 0m) + lineItem.Amount;
+        }
+
+        foreach (var expense in expenseRowsWithoutLineItems.Where(x => x.TagId.HasValue))
+        {
+            var key = (expense.TagId!.Value, expense.Year, expense.Month);
+            directTagMonthValues[key] = directTagMonthValues.GetValueOrDefault(key, 0m) + expense.ActualAmount;
+        }
+
+        var monthKeysInRange = monthRange
+            .Select(x => (x.Year, x.Month))
+            .ToList();
+
+        var categoryTagStatistics = new List<CategoryTagYearStatisticsDto>();
+        foreach (var category in categoryStatistics)
+        {
+            tagsByCategory.TryGetValue(category.CategoryId, out var categoryTags);
+            categoryTags ??= [];
+
+            var descendantsByTag = categoryTags
+                .ToDictionary(
+                    x => x.Id,
+                    x => GetDescendants(categoryTags, x.Id));
+
+            foreach (var tag in categoryTags)
+            {
+                var descendants = descendantsByTag[tag.Id];
+                var subtreeTagIds = new HashSet<int>(descendants) { tag.Id };
+
+                var monthlySpent = monthKeysInRange
+                    .Select(monthKey => subtreeTagIds.Sum(tagId => directTagMonthValues.GetValueOrDefault((tagId, monthKey.Year, monthKey.Month), 0m)))
+                    .ToList();
+
+                var total = monthlySpent.Sum();
+                var hasChildren = descendants.Count > 0;
+
+                categoryTagStatistics.Add(new CategoryTagYearStatisticsDto
+                {
+                    CategoryId = category.CategoryId,
+                    TagId = tag.Id,
+                    ParentTagId = tag.ParentTagId,
+                    TagName = tag.Name,
+                    Depth = CalculateTagDepth(categoryTags, tag.Id),
+                    HasChildren = hasChildren,
+                    TotalSpent = total,
+                    AverageMonthlySpent = total / rangeMonthCount,
+                    MonthsWithExpenses = monthlySpent.Count(x => x > 0)
+                });
+            }
+
+            var untaggedMonthlySpent = monthKeysInRange
+                .Select(monthKey =>
+                {
+                    var lineItemsWithoutTag = expenseLineItemRows
+                        .Where(x => x.CategoryId == category.CategoryId
+                                    && x.Year == monthKey.Year
+                                    && x.Month == monthKey.Month
+                                    && !x.TagId.HasValue
+                                    && !x.ExpenseTagId.HasValue)
+                        .Sum(x => x.Amount);
+
+                    var expensesWithoutLineItemsAndTag = expenseRowsWithoutLineItems
+                        .Where(x => x.CategoryId == category.CategoryId
+                                    && x.Year == monthKey.Year
+                                    && x.Month == monthKey.Month
+                                    && !x.TagId.HasValue)
+                        .Sum(x => x.ActualAmount);
+
+                    return lineItemsWithoutTag + expensesWithoutLineItemsAndTag;
+                })
+                .ToList();
+
+            if (untaggedMonthlySpent.Any(x => x > 0))
+            {
+                var untaggedTotal = untaggedMonthlySpent.Sum();
+                categoryTagStatistics.Add(new CategoryTagYearStatisticsDto
+                {
+                    CategoryId = category.CategoryId,
+                    TagId = null,
+                    ParentTagId = null,
+                    TagName = "(Bez tagu)",
+                    Depth = 0,
+                    HasChildren = false,
+                    TotalSpent = untaggedTotal,
+                    AverageMonthlySpent = untaggedTotal / rangeMonthCount,
+                    MonthsWithExpenses = untaggedMonthlySpent.Count(x => x > 0)
+                });
+            }
+        }
+
+        categoryTagStatistics = categoryTagStatistics
+            .OrderBy(x => x.CategoryId)
+            .ThenBy(x => x.Depth)
+            .ThenByDescending(x => x.TotalSpent)
+            .ThenBy(x => x.TagName)
+            .ToList();
+
+        return new CategoryRangeStatisticsDto
+        {
+            CategoryStatistics = categoryStatistics,
+            CategoryTagStatistics = categoryTagStatistics,
+            RangeMonthCount = rangeMonthCount,
+            FirstYear = rangeFrom.Year,
+            LastYear = rangeTo.Year
+        };
+    }
+
     public async Task<IReadOnlyList<TagUsageCountDto>> GetTagUsageCountsAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -1079,11 +1337,37 @@ public sealed class ExpenseService(
 
     public async Task<IReadOnlyList<CategoryLifetimeExpenseTotalDto>> GetCategoryLifetimeExpenseTotalsAsync(
         IReadOnlyList<int>? categoryIds,
+        DateOnly? fromDate,
+        DateOnly? toDate,
         CancellationToken cancellationToken)
     {
+        if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+        {
+            throw new BadRequestException("Date range is invalid.");
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var query = dbContext.Expenses.AsNoTracking();
+
+        if (fromDate.HasValue)
+        {
+            var fromYear = fromDate.Value.Year;
+            var fromMonth = fromDate.Value.Month;
+
+            query = query.Where(x => x.MonthPlan.Year > fromYear
+                                     || (x.MonthPlan.Year == fromYear && x.MonthPlan.Month >= fromMonth));
+        }
+
+        if (toDate.HasValue)
+        {
+            var toYear = toDate.Value.Year;
+            var toMonth = toDate.Value.Month;
+
+            query = query.Where(x => x.MonthPlan.Year < toYear
+                                     || (x.MonthPlan.Year == toYear && x.MonthPlan.Month <= toMonth));
+        }
+
         if (categoryIds is { Count: > 0 })
         {
             query = query.Where(x => categoryIds.Contains(x.CategoryId));

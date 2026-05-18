@@ -11,6 +11,7 @@ using HouseholdBudgetMate.Web.Middleware;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Services;
+using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Web.Services;
 using HouseholdBudgetMate.Web.Setup;
@@ -75,21 +76,24 @@ if (string.IsNullOrWhiteSpace(connectionString))
     connectionString = "Host=localhost;Port=5432;Database=placeholder;Username=placeholder;Password=placeholder";
 }
 
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-{
-    options.ConfigureWarnings(w => w.Ignore(RelationalEventId.MultipleCollectionIncludeWarning));
-    options.UseNpgsql(
-        connectionString,
-        npgsqlOptions =>
-        {
-            npgsqlOptions.MigrationsAssembly("HouseholdBudgetMate.Migrations");
-            npgsqlOptions.EnableRetryOnFailure(
-                5,
-                TimeSpan.FromSeconds(30),
-                null);
-            npgsqlOptions.CommandTimeout(60);
-        });
-});
+builder.Services.AddDbContextFactory<ApplicationDbContext>(
+    (serviceProvider, options) =>
+    {
+        options.ConfigureWarnings(w => w.Ignore(RelationalEventId.MultipleCollectionIncludeWarning));
+        options.UseNpgsql(
+            connectionString,
+            npgsqlOptions =>
+            {
+                npgsqlOptions.MigrationsAssembly("HouseholdBudgetMate.Migrations");
+                npgsqlOptions.EnableRetryOnFailure(
+                    5,
+                    TimeSpan.FromSeconds(30),
+                    null);
+                npgsqlOptions.CommandTimeout(60);
+            });
+        options.UseApplicationServiceProvider(serviceProvider);
+    },
+    ServiceLifetime.Scoped);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -102,8 +106,9 @@ builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions
 });
 
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<ArchiveMonthsCacheService>();
+builder.Services.AddScoped<ArchiveMonthsCacheService>();
 builder.Services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
+builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 
@@ -133,7 +138,9 @@ builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IIncomeService, IncomeService>();
 builder.Services.AddScoped<ILoanService, LoanService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAdminConfigurationService, AdminConfigurationService>();
+builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 
 builder.Services.AddScoped<IAppEventPublisher, LoggingAppEventPublisher>();
 builder.Services.AddScoped<CoreDataSeedService>();

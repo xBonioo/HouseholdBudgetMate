@@ -1,55 +1,257 @@
-﻿@page "/admin/config"
+@page "/admin/config"
+@using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Users.Requests
+@using HouseholdBudgetMate.Abstractions.Enums
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Domain.Entities
+@using HouseholdBudgetMate.Web.Services
 @using HouseholdBudgetMate.Web.Setup
 @using MudBlazor
 
 @inject IAdminConfigurationService AdminConfigurationService
+@inject IUserService UserService
+@inject IUserSessionService UserSessionService
 @inject RuntimeConfigurationState RuntimeConfigurationState
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
 
-<PageTitle>Admin - Config</PageTitle>
+<PageTitle>Administracja</PageTitle>
 
-<MudPaper Class="pa-6">
-    <MudText Typo="Typo.h5">Admin - config.json</MudText>
-    <MudText Typo="Typo.body2" Class="mt-1 mb-2">
-        Tu możesz edytować surowy plik konfiguracji. Zła konfiguracja może uniemożliwić start aplikacji.
-    </MudText>
-    <MudText Typo="Typo.caption" Class="mb-4 d-block">Sciezka: @RuntimeConfigurationState.ConfigFilePath</MudText>
+@if (!IsAdminSession)
+{
+    <MudPaper Class="pa-4 hb-panel">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+            Nie masz uprawnień do ustawień administracyjnych.
+        </MudAlert>
+    </MudPaper>
+}
+else
+{
+    <MudStack Spacing="0">
+        <MudPaper Class="hb-page-header">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4">Administracja</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Zarządzaj użytkownikami, dostępem do budżetu, uprawnieniami administratora i połączeniem z bazą.
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mt-1">Ścieżka konfiguracji: @RuntimeConfigurationState.ConfigFilePath</MudText>
+                </MudStack>
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled">
+                    Zalogowano jako @UserSessionService.CurrentUser?.Username
+                </MudChip>
+            </MudStack>
 
-    @if (!string.IsNullOrWhiteSpace(_statusMessage))
-    {
-        <MudAlert Severity="@_statusSeverity" Dense="true" Class="mb-4">@_statusMessage</MudAlert>
-    }
+            @if (!string.IsNullOrWhiteSpace(_statusMessage))
+            {
+                <MudAlert Severity="@_statusSeverity" Dense="true" Class="mt-4">@_statusMessage</MudAlert>
+            }
+        </MudPaper>
 
-    <MudTextField T="string"
-                  Label="config.json"
-                  Variant="Variant.Outlined"
-                  FullWidth="true"
-                  Lines="18"
-                  @bind-Value="_json"/>
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.h6">Użytkownicy</MudText>
+                        <MudText Typo="Typo.body2" Class="hb-muted">
+                            Nowi użytkownicy są standardowi. Uprawnienia administratora trzeba nadać ręcznie.
+                        </MudText>
+                    </MudStack>
+                    <MudChip T="int" Color="Color.Secondary" Variant="Variant.Outlined">Użytkownicy: @_users.Count</MudChip>
+                </MudStack>
 
-    <MudStack Row="true" Spacing="2" Class="mt-4">
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Default"
-                   OnClick="LoadAsync"
-                   Disabled="_isBusy">
-            Odśwież
-        </MudButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   OnClick="SaveAsync"
-                   Disabled="_isBusy">
-            @(_isBusy ? "Zapisywanie..." : "Zapisz")
-        </MudButton>
+                <MudPaper Class="pa-4 hb-panel" Elevation="0">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Dodaj użytkownika</MudText>
+                    <ActionForm OnSubmit="CreateUserAsync">
+                    <MudGrid>
+                        <MudItem xs="12" md="3">
+                            <MudTextField T="string" Label="Nazwa użytkownika" @bind-Value="_newUsername" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                        </MudItem>
+                        <MudItem xs="12" md="2">
+                            <PinKeypadInput Label="PIN" @bind-Value="_newUserPin"/>
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudSelect T="HouseholdMode" Label="Tryb budżetu" @bind-Value="_newUserMode" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                <MudSelectItem Value="HouseholdMode.SeparateBudget">Osobny budżet</MudSelectItem>
+                                <MudSelectItem Value="HouseholdMode.SharedBudget">Wspólny budżet</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudSelect T="string" Label="Wspólny z" @bind-Value="_newUserBudgetOwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(_newUserMode == HouseholdMode.SeparateBudget)">
+                                @foreach (var user in _users)
+                                {
+                                    <MudSelectItem Value="@user.Id">@user.Username</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="1" Class="d-flex align-center">
+                            <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="_isBusy">
+                                Dodaj
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                    </ActionForm>
+                </MudPaper>
+
+                <MudGrid>
+                    @foreach (var user in _users)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4 hb-panel user-admin-card" Elevation="0">
+                                <ActionForm OnSubmit="() => SaveUserAsync(user.Id)">
+                                <MudStack Spacing="2">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Wrap="Wrap.NoWrap">
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.subtitle1">@user.Username</MudText>
+                                            <MudText Typo="Typo.caption" Class="hb-muted">@user.Id</MudText>
+                                        </MudStack>
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Justify="Justify.FlexEnd">
+                                            @if (user.IsAdmin)
+                                            {
+                                                <MudChip T="string" Color="Color.Error" Size="Size.Small">Administrator</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Color="Color.Default" Size="Size.Small">Standardowy</MudChip>
+                                            }
+
+                                            @if (user.IsDefaultAdmin)
+                                            {
+                                                <MudChip T="string" Color="Color.Primary" Size="Size.Small">Główny</MudChip>
+                                            }
+                                        </MudStack>
+                                    </MudStack>
+
+                                    <MudGrid>
+                                        <MudItem xs="12" sm="6">
+                                            <MudSelect T="HouseholdMode"
+                                                       Label="Tryb budżetu"
+                                                       Value="@_userModes[user.Id]"
+                                                       ValueChanged="mode => _userModes[user.Id] = mode"
+                                                       Variant="Variant.Outlined"
+                                                       Margin="Margin.Dense">
+                                                <MudSelectItem Value="HouseholdMode.SeparateBudget">Osobny budżet</MudSelectItem>
+                                                <MudSelectItem Value="HouseholdMode.SharedBudget">Wspólny budżet</MudSelectItem>
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudSelect T="string"
+                                                       Label="Właściciel budżetu"
+                                                       Value="@_userOwners[user.Id]"
+                                                       ValueChanged="ownerId => _userOwners[user.Id] = ownerId"
+                                                       Variant="Variant.Outlined"
+                                                       Margin="Margin.Dense"
+                                                       Disabled="@(_userModes[user.Id] == HouseholdMode.SeparateBudget)">
+                                                @foreach (var owner in _users)
+                                                {
+                                                    <MudSelectItem Value="@owner.Id">@owner.Username</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudSwitch T="bool"
+                                                       Label="Uprawnienia administratora"
+                                                       Color="Color.Error"
+                                                       Value="@_userAdmins[user.Id]"
+                                                       ValueChanged="value => _userAdmins[user.Id] = value"
+                                                       Disabled="@user.IsDefaultAdmin"/>
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6" Class="d-flex align-center">
+                                            @if (user.IsDefaultAdmin)
+                                            {
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary">Konto główne nie używa PIN-u.</MudText>
+                                            }
+                                            else
+                                            {
+                                                <MudButton FullWidth="true" Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Dialpad" ButtonType="ButtonType.Button" OnClick="() => ChangePinAsync(user.Id)" Disabled="_isBusy">
+                                                    Zmień PIN
+                                                </MudButton>
+                                            }
+                                        </MudItem>
+                                    </MudGrid>
+
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" ButtonType="ButtonType.Submit" Disabled="_isBusy">
+                                        Zapisz użytkownika
+                                    </MudButton>
+                                </MudStack>
+                                </ActionForm>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            <MudText Typo="Typo.h6">Połączenie z bazą danych</MudText>
+            <MudText Typo="Typo.body2" Class="hb-muted mt-1">
+                Użyj tej sekcji, gdy zmienisz hasło PostgreSQL albo przenosisz bazę. Aplikacja sprawdzi połączenie i wykona migracje przed zapisem.
+            </MudText>
+            <ActionForm OnSubmit="SaveDatabaseAsync">
+            <MudGrid Class="mt-3">
+                <MudItem xs="12" md="3">
+                    <MudTextField T="string" Label="Host" @bind-Value="_dbHost" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField T="int" Label="Port" @bind-Value="_dbPort" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="65535"/>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudTextField T="string" Label="Login" @bind-Value="_dbUsername" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField T="string"
+                                  Label="Hasło PostgreSQL"
+                                  @bind-Value="_dbPassword"
+                                  InputType="@(_showDbPassword ? InputType.Text : InputType.Password)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_showDbPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="ToggleDatabasePasswordVisibility"/>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudTextField T="string" Label="Baza danych" @bind-Value="_dbName" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                </MudItem>
+            </MudGrid>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" ButtonType="ButtonType.Submit" Disabled="_isBusy">
+                Sprawdź i zapisz połączenie
+            </MudButton>
+            </ActionForm>
+        </MudPaper>
     </MudStack>
-</MudPaper>
+}
 
 @code {
-    private string _json = string.Empty;
     private bool _isBusy;
     private string? _statusMessage;
     private Severity _statusSeverity = Severity.Info;
+    private List<UserDto> _users = [];
+    private readonly Dictionary<string, HouseholdMode> _userModes = [];
+    private readonly Dictionary<string, string> _userOwners = [];
+    private readonly Dictionary<string, bool> _userAdmins = [];
+
+    private string _newUsername = string.Empty;
+    private string _newUserPin = string.Empty;
+    private HouseholdMode _newUserMode = HouseholdMode.SeparateBudget;
+    private string _newUserBudgetOwnerId = User.DefaultUserId;
+
+    private string _dbHost = "localhost";
+    private int _dbPort = 5432;
+    private string _dbUsername = "postgres";
+    private string _dbPassword = string.Empty;
+    private string _dbName = "household_budget_mate";
+    private bool _showDbPassword;
+
+    private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
 
     protected override async Task OnInitializedAsync()
     {
+        if (!IsAdminSession)
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
         await LoadAsync();
     }
 
@@ -60,12 +262,12 @@
 
         try
         {
-            _json = await AdminConfigurationService.ReadConfigurationJsonAsync(CancellationToken.None);
+            await LoadUsersAsync();
+            LoadDatabaseFields();
         }
         catch (Exception ex)
         {
-            _statusMessage = $"Nie można odczytać config.json: {ex.Message}";
-            _statusSeverity = Severity.Error;
+            ShowError($"Nie można wczytać danych administracyjnych: {ex.Message}");
         }
         finally
         {
@@ -73,29 +275,178 @@
         }
     }
 
-    private async Task SaveAsync()
+    private async Task LoadUsersAsync()
+    {
+        _users = (await UserService.GetUsersAsync(CancellationToken.None)).ToList();
+        _userModes.Clear();
+        _userOwners.Clear();
+        _userAdmins.Clear();
+
+        foreach (var user in _users)
+        {
+            _userModes[user.Id] = user.HouseholdMode;
+            _userOwners[user.Id] = user.BudgetOwnerUserId;
+            _userAdmins[user.Id] = user.IsAdmin;
+        }
+
+        _newUserBudgetOwnerId = _users.FirstOrDefault()?.Id ?? User.DefaultUserId;
+    }
+
+    private void LoadDatabaseFields()
+    {
+        var database = RuntimeConfigurationState.GetDatabaseConfiguration();
+        if (database is null)
+        {
+            return;
+        }
+
+        _dbHost = database.Host;
+        _dbPort = database.Port;
+        _dbUsername = database.Username;
+        _dbPassword = database.Password;
+        _dbName = database.Database;
+    }
+
+    private async Task CreateUserAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            await UserService.CreateUserAsync(
+                new CreateUserRequest
+                {
+                    Username = _newUsername,
+                    Pin = _newUserPin,
+                    HouseholdMode = _newUserMode,
+                    BudgetOwnerUserId = _newUserBudgetOwnerId
+                },
+                CancellationToken.None);
+
+            _newUsername = string.Empty;
+            _newUserPin = string.Empty;
+            _newUserMode = HouseholdMode.SeparateBudget;
+            await LoadUsersAsync();
+            ShowSuccess("Użytkownik dodany.");
+        });
+    }
+
+    private async Task SaveUserAsync(string userId)
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            await UserService.UpdateUserBudgetModeAsync(
+                new UpdateUserBudgetModeRequest
+                {
+                    UserId = userId,
+                    HouseholdMode = _userModes[userId],
+                    BudgetOwnerUserId = _userOwners[userId]
+                },
+                CancellationToken.None);
+
+            await UserService.UpdateUserAdminRoleAsync(
+                new UpdateUserAdminRoleRequest
+                {
+                    UserId = userId,
+                    IsAdmin = _userAdmins[userId]
+                },
+                CancellationToken.None);
+
+            await LoadUsersAsync();
+            ShowSuccess("Użytkownik zapisany.");
+        });
+    }
+
+    private async Task ChangePinAsync(string userId)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Label"] = "Nowy PIN"
+        };
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PinKeypadDialog>("Zmień PIN", parameters, options);
+        var result = await dialog.Result;
+        if (result is not { Canceled: false } || result.Data is not string pin)
+        {
+            return;
+        }
+
+        await RunAdminActionAsync(async () =>
+        {
+            await UserService.UpdateUserPinAsync(
+                new UpdateUserPinRequest
+                {
+                    UserId = userId,
+                    Pin = pin
+                },
+                CancellationToken.None);
+
+            ShowSuccess("PIN zmieniony.");
+        });
+    }
+
+    private async Task SaveDatabaseAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            var result = await AdminConfigurationService.SaveDatabaseConfigurationAsync(
+                new RuntimeDatabaseConfiguration
+                {
+                    Host = _dbHost.Trim(),
+                    Port = _dbPort,
+                    Username = _dbUsername.Trim(),
+                    Password = _dbPassword,
+                    Database = _dbName.Trim()
+                },
+                CancellationToken.None);
+
+            if (!result.IsSuccess)
+            {
+                ShowError(result.ErrorMessage);
+                return;
+            }
+
+            ShowSuccess("Połączenie z bazą zapisane.");
+        });
+    }
+
+    private async Task RunAdminActionAsync(Func<Task> action)
     {
         _isBusy = true;
         _statusMessage = null;
 
         try
         {
-            var result = await AdminConfigurationService.SaveConfigurationJsonAsync(_json, CancellationToken.None);
-            if (!result.IsSuccess)
-            {
-                _statusMessage = result.ErrorMessage;
-                _statusSeverity = Severity.Error;
-                return;
-            }
-
-            _statusMessage = "Konfiguracja zapisana. W razie zmian hostingu zrestartuj aplikacje.";
-            _statusSeverity = Severity.Success;
-            _json = await AdminConfigurationService.ReadConfigurationJsonAsync(CancellationToken.None);
+            await action();
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
         }
         finally
         {
             _isBusy = false;
         }
     }
-}
 
+    private void ToggleDatabasePasswordVisibility()
+    {
+        _showDbPassword = !_showDbPassword;
+    }
+
+    private void ShowSuccess(string message)
+    {
+        _statusMessage = message;
+        _statusSeverity = Severity.Success;
+    }
+
+    private void ShowError(string message)
+    {
+        _statusMessage = message;
+        _statusSeverity = Severity.Error;
+    }
+}

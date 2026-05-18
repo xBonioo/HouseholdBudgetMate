@@ -105,3 +105,8 @@
 .categories-page-root ::deep .tag-create-name {
     min-width: 220px;
 }
+
+.categories-page-root ::deep .categories-page {
+    max-width: none;
+    margin: 0;
+}

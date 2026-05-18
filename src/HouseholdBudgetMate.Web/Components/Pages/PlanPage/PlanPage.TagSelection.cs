@@ -4,6 +4,24 @@ namespace HouseholdBudgetMate.Web.Components.Pages.PlanPage;
 
 public partial class PlanPage
 {
+    private string GetCategorySelectText(int categoryId)
+    {
+        return _categories.FirstOrDefault(x => x.Id == categoryId)?.Name ?? string.Empty;
+    }
+
+    private string GetTagSelectText(int? tagId)
+    {
+        if (!tagId.HasValue)
+        {
+            return string.Empty;
+        }
+
+        return _categories
+            .SelectMany(x => x.Tags)
+            .FirstOrDefault(x => x.Id == tagId.Value)
+            ?.Name ?? string.Empty;
+    }
+
     private IReadOnlyList<TagDto> GetSelectableTags(int categoryId, int? selectedTagId)
     {
         var tags = _categories.FirstOrDefault(x => x.Id == categoryId)?.Tags

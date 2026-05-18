@@ -1,0 +1,39 @@
+@using Microsoft.AspNetCore.Components.Web
+
+<form class="@GetCssClass()" @onsubmit="HandleSubmitAsync" @onsubmit:preventDefault="true" @onsubmit:stopPropagation="true">
+    @ChildContent
+</form>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private bool _isSubmitting;
+
+    private string GetCssClass()
+    {
+        return string.IsNullOrWhiteSpace(Class)
+            ? "hb-action-form"
+            : $"hb-action-form {Class}";
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        if (_isSubmitting || !OnSubmit.HasDelegate)
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            await OnSubmit.InvokeAsync();
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

@@ -17,7 +17,7 @@ namespace HouseholdBudgetMate.Migrations.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -53,9 +53,16 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Order");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Accounts");
                 });
@@ -83,10 +90,17 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<int>("Year")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("AccountId", "Year", "Month")
                         .IsUnique();
@@ -188,6 +202,11 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
@@ -198,6 +217,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.HasIndex("RegularExpenseDefinitionId");
 
                     b.HasIndex("TagId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("MonthPlanId", "Order");
 
@@ -238,11 +259,18 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ExpenseId");
 
                     b.HasIndex("TagId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("ExpenseLineItems");
                 });
@@ -290,6 +318,11 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<int>("Year")
                         .HasColumnType("integer");
 
@@ -298,6 +331,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.HasIndex("AccountId");
 
                     b.HasIndex("RegularIncomeDefinitionId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("Year", "Month");
 
@@ -356,6 +391,11 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<int?>("WiborPeriodType")
                         .HasColumnType("integer");
 
@@ -366,6 +406,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.HasIndex("LoanType");
 
                     b.HasIndex("TagId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Loans");
                 });
@@ -555,12 +597,19 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<int>("Year")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Year", "Month")
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "Year", "Month")
                         .IsUnique();
 
                     b.ToTable("MonthPlans");
@@ -589,11 +638,18 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MonthPlanId");
 
                     b.HasIndex("TransferDate");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("MonthSavingsTransferItems");
                 });
@@ -635,6 +691,11 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
@@ -644,6 +705,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.HasIndex("Order");
 
                     b.HasIndex("TagId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("RegularExpenseDefinitions");
                 });
@@ -679,11 +742,18 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
 
                     b.HasIndex("IsActive");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("RegularIncomeDefinitions");
                 });
@@ -731,12 +801,70 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.ToTable("Tags");
                 });
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.User", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("BudgetOwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("HouseholdMode")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsAdmin")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BudgetOwnerUserId");
+
+                    b.HasIndex("Username")
+                        .IsUnique();
+
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Account", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.AccountMonthBalance", b =>
                 {
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
                         .WithMany("MonthBalances")
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Account");
@@ -771,6 +899,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Category");
 
                     b.Navigation("LoanInstallment");
@@ -795,6 +929,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Expense");
 
                     b.Navigation("Tag");
@@ -813,6 +953,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasForeignKey("RegularIncomeDefinitionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Account");
 
                     b.Navigation("RegularIncomeDefinition");
@@ -824,6 +970,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .WithMany()
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Tag");
                 });
@@ -861,12 +1013,27 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Navigation("Loan");
                 });
 
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthPlan", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthSavingsTransferItem", b =>
                 {
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.MonthPlan", "MonthPlan")
                         .WithMany("SavingsTransfers")
                         .HasForeignKey("MonthPlanId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("MonthPlan");
@@ -885,6 +1052,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Category");
 
                     b.Navigation("Tag");
@@ -895,6 +1068,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
                         .WithMany()
                         .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -917,6 +1096,17 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Navigation("Category");
 
                     b.Navigation("ParentTag");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.User", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", "BudgetOwnerUser")
+                        .WithMany("SharedBudgetUsers")
+                        .HasForeignKey("BudgetOwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BudgetOwnerUser");
                 });
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Account", b =>
@@ -958,6 +1148,11 @@ namespace HouseholdBudgetMate.Migrations.Migrations
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Tag", b =>
                 {
                     b.Navigation("ChildTags");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.User", b =>
+                {
+                    b.Navigation("SharedBudgetUsers");
                 });
 #pragma warning restore 612, 618
         }

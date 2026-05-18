@@ -40,6 +40,7 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         return exception switch
         {
             BadRequestException => StatusCodes.Status400BadRequest,
+            ForbiddenException => StatusCodes.Status403Forbidden,
             ImportException => StatusCodes.Status422UnprocessableEntity,
             NotFoundException => StatusCodes.Status404NotFound,
             ArgumentNullException => StatusCodes.Status400BadRequest,

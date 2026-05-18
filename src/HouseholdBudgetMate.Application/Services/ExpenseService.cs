@@ -290,7 +290,8 @@ public sealed class ExpenseService(
             .IgnoreQueryFilters()
             .AsNoTracking()
             .AnyAsync(
-                x => x.MonthPlanId == monthPlan.Id
+                x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                     && x.MonthPlanId == monthPlan.Id
                      && x.RegularExpenseDefinitionId == definitionId,
                 cancellationToken);
 
@@ -920,6 +921,11 @@ public sealed class ExpenseService(
         SearchExpenseHistoryRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.FromDate.HasValue && request.ToDate.HasValue && request.FromDate.Value > request.ToDate.Value)
+        {
+            throw new BadRequestException("Zakres dat jest nieprawidłowy.");
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var tags = await dbContext.Tags
@@ -932,9 +938,27 @@ public sealed class ExpenseService(
         var hasQuery = !string.IsNullOrWhiteSpace(normalizedQuery);
         var maxResults = request.MaxResults <= 0 ? 200 : Math.Min(request.MaxResults, 1000);
 
-        var expenseRows = await dbContext.Expenses
+        var expenseQuery = dbContext.Expenses
             .AsNoTracking()
-            .Where(x => !request.CategoryId.HasValue || x.CategoryId == request.CategoryId.Value)
+            .Where(x => !request.CategoryId.HasValue || x.CategoryId == request.CategoryId.Value);
+
+        if (request.FromDate.HasValue)
+        {
+            var fromDate = request.FromDate.Value;
+            expenseQuery = expenseQuery
+                .Where(x => x.MonthPlan.Year > fromDate.Year
+                            || (x.MonthPlan.Year == fromDate.Year && x.MonthPlan.Month >= fromDate.Month));
+        }
+
+        if (request.ToDate.HasValue)
+        {
+            var toDate = request.ToDate.Value;
+            expenseQuery = expenseQuery
+                .Where(x => x.MonthPlan.Year < toDate.Year
+                            || (x.MonthPlan.Year == toDate.Year && x.MonthPlan.Month <= toDate.Month));
+        }
+
+        var expenseRows = await expenseQuery
             .OrderByDescending(x => x.MonthPlan.Year)
             .ThenByDescending(x => x.MonthPlan.Month)
             .ThenByDescending(x => x.Id)
@@ -1596,7 +1620,9 @@ public sealed class ExpenseService(
         var existingRegularDefinitionIdsInTarget = await dbContext.Expenses
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(x => x.MonthPlanId == targetMonthPlan.Id && x.RegularExpenseDefinitionId.HasValue)
+            .Where(x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                        && x.MonthPlanId == targetMonthPlan.Id
+                        && x.RegularExpenseDefinitionId.HasValue)
             .Select(x => x.RegularExpenseDefinitionId!.Value)
             .ToListAsync(cancellationToken);
 
@@ -2294,7 +2320,9 @@ public sealed class ExpenseService(
         var existingDefinitionIds = await dbContext.Expenses
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(x => x.MonthPlanId == monthPlan.Id && x.RegularExpenseDefinitionId.HasValue)
+            .Where(x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                        && x.MonthPlanId == monthPlan.Id
+                        && x.RegularExpenseDefinitionId.HasValue)
             .Select(x => x.RegularExpenseDefinitionId!.Value)
             .ToListAsync(cancellationToken);
 

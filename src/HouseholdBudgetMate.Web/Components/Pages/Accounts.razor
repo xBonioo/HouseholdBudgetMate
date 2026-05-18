@@ -19,7 +19,7 @@
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
 
-<div class="accounts-drag pa-4">
+<div class="accounts-drag">
     @if (!string.IsNullOrWhiteSpace(_loadError))
     {
         <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Filled">
@@ -30,10 +30,10 @@
     <MudPaper Class="hb-page-header">
         <MudText Typo="Typo.h4">Stan kont na koniec miesiąca</MudText>
         <MudText Typo="Typo.body2" Class="hb-muted">
-            Kolejność kont ustawisz strzałkami. Salda edytujesz szybko dla wybranego miesiąca.
+            Salda edytujesz szybko dla wybranego miesiąca.
         </MudText>
     </MudPaper>
-    <MudGrid>
+    <MudGrid Class="mt-4">
         <MudItem xs="12" md="4">
             <MudPaper Class="hb-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Liczba kont</MudText>
@@ -65,8 +65,9 @@
             </MudPaper>
         </MudItem>
     </MudGrid>
-    <MudPaper Class="pa-4 hb-panel">
+    <MudPaper Class="pa-4 mt-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Nowe konto</MudText>
+        <ActionForm OnSubmit="CreateAccountAsync">
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudTextField @bind-Value="_createModel.Name" Label="Nazwa" Variant="Variant.Outlined"/>
@@ -85,12 +86,13 @@
                               Variant="Variant.Outlined"/>
             </MudItem>
             <MudItem xs="12" md="2" Class="d-flex align-center">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAccountAsync">Dodaj konto
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Dodaj konto
                 </MudButton>
             </MudItem>
         </MudGrid>
+        </ActionForm>
     </MudPaper>
-    <MudPaper Class="pa-4 hb-panel">
+    <MudPaper Class="pa-4 mt-4 hb-panel">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
             <MudText Typo="Typo.h6">Salda miesięczne</MudText>
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
@@ -128,6 +130,7 @@
                 Wybrany miesiąc jest zamknięty. Możesz tylko podejrzeć zapisane salda.
             </MudAlert>
         }
+        <ActionForm OnSubmit="SaveAllSelectedMonthBalancesAsync">
         <MudTable Items="GetAccountsForSelectedMonth()" Dense="true" Hover="true"
                   Class="mt-2">
             <HeaderContent>
@@ -157,16 +160,17 @@
             </RowTemplate>
         </MudTable>
         <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="IsSelectedMonthClosed()" OnClick="SaveAllSelectedMonthBalancesAsync">Zapisz
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="IsSelectedMonthClosed()" ButtonType="ButtonType.Submit">Zapisz
                 wszystkie
             </MudButton>
         </MudStack>
+        </ActionForm>
     </MudPaper>
-    <MudPaper Class="pa-4 hb-panel">
+    <MudPaper Class="pa-4 mt-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Konta</MudText>
         <MudTable Items="_accounts.OrderBy(x => x.Order).ToList()" Dense="true" Hover="true">
             <HeaderContent>
-                <MudTh>Kolejność</MudTh>
+                <MudTh Class="account-order-cell">Kolejność</MudTh>
                 <MudTh>Nazwa</MudTh>
                 <MudTh>Typ</MudTh>
                 <MudTh>Saldo</MudTh>
@@ -177,15 +181,17 @@
                 <MudText Typo="Typo.body2" Class="pa-3 hb-muted">Brak kont do wyświetlenia.</MudText>
             </NoRecordsContent>
             <RowTemplate Context="account">
-                <MudTd>
+                <MudTd Class="account-order-cell">
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudText Typo="Typo.caption">@account.Order</MudText>
                         <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
                                        Size="Size.Small"
+                                       Class="manual-order-action"
                                        Disabled="@IsFirstAccount(account.Id)"
                                        OnClick="() => MoveAccountAsync(account.Id, -1)"/>
                         <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
                                        Size="Size.Small"
+                                       Class="manual-order-action"
                                        Disabled="@IsLastAccount(account.Id)"
                                        OnClick="() => MoveAccountAsync(account.Id, 1)"/>
                     </MudStack>
@@ -193,6 +199,7 @@
 
                 @if (_editModel?.Id == account.Id)
                 {
+                    <ActionForm OnSubmit="SaveEditAsync">
                     <MudTd>
                         <MudTextField @bind-Value="_editModel.Name" Margin="Margin.Dense" Variant="Variant.Outlined"/>
                     </MudTd>
@@ -212,9 +219,10 @@
                         </MudChip>
                     </MudTd>
                     <MudTd>
-                        <MudButton Size="Size.Small" OnClick="SaveEditAsync">Zapisz</MudButton>
-                        <MudButton Size="Size.Small" OnClick="CancelEdit">Anuluj</MudButton>
+                        <MudButton Size="Size.Small" ButtonType="ButtonType.Submit">Zapisz</MudButton>
+                        <MudButton Size="Size.Small" ButtonType="ButtonType.Button" OnClick="CancelEdit">Anuluj</MudButton>
                     </MudTd>
+                    </ActionForm>
                 }
                 else
                 {

@@ -5,6 +5,7 @@ namespace HouseholdBudgetMate.Domain.Entities;
 public sealed class ExpenseLineItem : ATimestampable, IEntityId
 {
     public int Id { get; set; }
+    public string UserId { get; set; } = User.DefaultUserId;
     public int ExpenseId { get; set; }
     public string Description { get; set; } = null!;
     public decimal Amount { get; set; }

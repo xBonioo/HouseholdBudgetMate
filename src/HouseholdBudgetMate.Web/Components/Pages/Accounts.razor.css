@@ -1,5 +1,12 @@
 .accounts-drag {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 0;
+}
+
+@media (max-width: 960px) {
+    .accounts-drag ::deep .account-order-cell,
+    .accounts-drag ::deep .manual-order-action {
+        display: none;
+    }
 }

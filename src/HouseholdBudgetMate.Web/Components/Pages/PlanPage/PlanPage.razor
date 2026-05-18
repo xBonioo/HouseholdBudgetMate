@@ -132,6 +132,7 @@
 
 <MudPaper Class="pa-4 hb-panel">
     <MudText Typo="Typo.h6" Class="mb-2">Oszczędności w tym miesiącu</MudText>
+    <ActionForm OnSubmit="CreateSavingsTransferAsync">
     <MudGrid>
         <MudItem xs="12" md="5">
             <MudTextField T="string"
@@ -150,11 +151,12 @@
             <MudButton
                 Variant="Variant.Filled"
                 Color="Color.Primary"
-                OnClick="CreateSavingsTransferAsync">
+                ButtonType="ButtonType.Submit">
                 DODAJ
             </MudButton>
         </MudItem>
     </MudGrid>
+    </ActionForm>
 
     @if (_monthPlan?.SavingsTransfers.Count > 0)
     {
@@ -167,6 +169,7 @@
             <RowTemplate Context="item">
                 @if (_editSavingsTransfer?.Id == item.Id)
                 {
+                    <ActionForm OnSubmit="SaveSavingsTransferEditAsync">
                     <MudTd>
                         <MudTextField T="string"
                                       Value="_editSavingsTransferAmountInput"
@@ -184,16 +187,18 @@
                             Variant="Variant.Filled"
                             Color="Color.Primary"
                             Size="Size.Small"
-                            OnClick="SaveSavingsTransferEditAsync">
+                            ButtonType="ButtonType.Submit">
                             Zapisz
                         </MudButton>
                         <MudButton
                             Variant="Variant.Text"
                             Size="Size.Small"
+                            ButtonType="ButtonType.Button"
                             OnClick="CancelSavingsTransferEdit">
                             Anuluj
                         </MudButton>
                     </MudTd>
+                    </ActionForm>
                 }
                 else
                 {
@@ -243,6 +248,7 @@
         </div>
 
         <div class="income-content-container @(_isIncomePanelExpanded ? "expanded" : "")">
+            <ActionForm OnSubmit="CreateIncomeAsync">
             <MudGrid Class="income-horizontal-content">
                 <MudItem xs="12" md="6" lg="3">
                     <MudTextField
@@ -278,11 +284,12 @@
                     <MudButton
                         Variant="Variant.Filled"
                         Color="Color.Primary"
-                        OnClick="CreateIncomeAsync">
+                        ButtonType="ButtonType.Submit">
                         DODAJ
                     </MudButton>
                 </MudItem>
             </MudGrid>
+            </ActionForm>
 
             @if (_incomes.Count == 0)
             {
@@ -303,6 +310,7 @@
                         <RowTemplate Context="income">
                             @if (!income.IsRegular && _editIncome is not null && _editIncome.Id == income.Id)
                             {
+                                <ActionForm OnSubmit="SaveIncomeEditAsync">
                                 <MudTd DataLabel="Nazwa">
                                     <MudTextField @bind-Value="_editIncome.Name" Variant="Variant.Outlined"/>
                                 </MudTd>
@@ -339,17 +347,19 @@
                                             Variant="Variant.Filled"
                                             Color="Color.Primary"
                                             Size="Size.Small"
-                                            OnClick="SaveIncomeEditAsync">
+                                            ButtonType="ButtonType.Submit">
                                             Zapisz
                                         </MudButton>
                                         <MudButton
                                             Variant="Variant.Text"
                                             Size="Size.Small"
+                                            ButtonType="ButtonType.Button"
                                             OnClick="CancelIncomeEdit">
                                             Anuluj
                                         </MudButton>
                                     </div>
                                 </MudTd>
+                                </ActionForm>
                             }
                             else
                             {
@@ -486,86 +496,112 @@ else
     <RowTemplate Context="expense">
         @if (_editExpense?.Id == expense.Id)
         {
-            <MudTd Class="expense-order-column">
+            var canSelectEditSubTag = CanSelectSubTag(_editExpense.CategoryId, _editExpenseRootTagId);
+            var isEditActualAmountDisabled = _monthPlan?.Expenses.FirstOrDefault(x => x.Id == _editExpense.Id)?.HasLineItems == true
+                                             || SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId);
+
+            <MudTd colspan="8" Class="expense-editor-cell">
                 <div id="@GetExpenseEditAnchorId(expense.Id)" class="expense-edit-anchor"></div>
-                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.caption">@expense.Order</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@IsFirstExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
-                    <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@IsLastExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
-                </MudStack>
-            </MudTd>
-            <MudTd>
-                <MudTextField
-                    @bind-Value="_editExpense.Name"
-                    Variant="Variant.Outlined"/>
-            </MudTd>
-            <MudTd>
-                <MudSelect T="int" Value="_editExpense.CategoryId" ValueChanged="OnEditCategoryChanged" Variant="Variant.Outlined">
-                    @foreach (var category in _categories)
-                    {
-                        <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudTd>
-            <MudTd>
-                <MudStack Spacing="1">
-                    <MudSelect T="int?" Value="_editExpenseRootTagId" ValueChanged="OnEditRootTagChanged" Variant="Variant.Outlined" Label="Tag glowny" Clearable="true">
-                        @foreach (var tag in GetSelectableRootTags(_editExpense.CategoryId, _editExpenseRootTagId))
-                        {
-                            <MudSelectItem T="int?"
-                                           Value="@tag.Id">
-                                @tag.Name
-                            </MudSelectItem>
-                        }
-                    </MudSelect>
-                    @if (CanSelectSubTag(_editExpense.CategoryId, _editExpenseRootTagId))
-                    {
-                        <MudSelect T="int?"
-                                   Value="GetSelectedSubTagIdForEditExpense()"
-                                   ValueChanged="OnEditSubTagChanged"
-                                   Variant="Variant.Outlined"
-                                   Label="Podtag" Clearable="true">
-                            @foreach (var tag in GetSelectableSubTags(_editExpense.CategoryId, _editExpenseRootTagId, _editExpense.TagId))
-                            {
-                                <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    }
-                </MudStack>
-            </MudTd>
-            <MudTd>
-                <MudTextField T="string"
-                              Value="_editExpensePlannedAmountInput"
-                              ValueChanged="SetEditPlannedAmountInputAsync"
-                              Variant="Variant.Outlined"/>
-            </MudTd>
-            <MudTd>
-                <MudTextField T="string"
-                              Value="_editExpenseActualAmountInput"
-                              ValueChanged="SetEditActualAmountInputAsync"
-                              Variant="Variant.Outlined"
-                              Disabled="@(_monthPlan?.Expenses.FirstOrDefault(x => x.Id == _editExpense.Id)?.HasLineItems == true || SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId))"/>
-            </MudTd>
-            <MudTd>@FormatRemaining(_editExpense.ShowRemainingInUI, _editExpense.PlannedAmount - _editExpense.ActualAmount)</MudTd>
-            <MudTd Class="expense-actions-column">
-                <MudStack Row="true" Spacing="1" Wrap="Wrap.NoWrap" AlignItems="AlignItems.Center" Class="expense-actions-row">
-                    <MudSwitch @bind-Value="_editExpense.ShowRemainingInUI" Color="Color.Primary"/>
-                    <MudButton
-                        Variant="Variant.Filled"
-                        Color="Color.Primary"
-                        Size="Size.Small"
-                        ButtonType="ButtonType.Button"
-                        OnClick="SaveEditAsync">
-                        Zapisz
-                    </MudButton>
-                    <MudButton
-                        Variant="Variant.Text"
-                        Size="Size.Small"
-                        ButtonType="ButtonType.Button"
-                        OnClick="CancelEdit">
-                        Anuluj
-                    </MudButton>
-                </MudStack>
+                <ActionForm OnSubmit="SaveEditAsync">
+                    <div class="expense-form-shell expense-edit-shell">
+                        <div class="expense-form-header">
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="expense-form-title">Edycja wydatku</MudText>
+                                <MudText Typo="Typo.caption" Class="hb-muted">Pozycja @expense.Order w planie miesiąca</MudText>
+                            </div>
+                            <div class="expense-order-controls">
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@IsFirstExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@IsLastExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
+                            </div>
+                        </div>
+
+                        <div class="expense-form-grid expense-edit-grid">
+                            <MudTextField
+                                @bind-Value="_editExpense.Name"
+                                Label="Nazwa"
+                                Variant="Variant.Outlined"
+                                Class="expense-field-name"/>
+
+                            <MudSelect T="int" Value="_editExpense.CategoryId" ValueChanged="OnEditCategoryChanged" Label="Kategoria" Variant="Variant.Outlined"
+                                       ToStringFunc="GetCategorySelectText" Class="hb-select-ellipsis">
+                                @foreach (var category in _categories)
+                                {
+                                    <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <div class="@($"expense-tag-grid {(canSelectEditSubTag ? "has-subtag" : "single-tag")}")">
+                                <MudSelect T="int?" Value="_editExpenseRootTagId" ValueChanged="OnEditRootTagChanged" Variant="Variant.Outlined" Label="Tag główny" Clearable="true"
+                                           ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
+                                    @foreach (var tag in GetSelectableRootTags(_editExpense.CategoryId, _editExpenseRootTagId))
+                                    {
+                                        <MudSelectItem T="int?"
+                                                       Value="@tag.Id">
+                                            @tag.Name
+                                        </MudSelectItem>
+                                    }
+                                </MudSelect>
+                                @if (canSelectEditSubTag)
+                                {
+                                    <MudSelect T="int?"
+                                               Value="GetSelectedSubTagIdForEditExpense()"
+                                               ValueChanged="OnEditSubTagChanged"
+                                               Variant="Variant.Outlined"
+                                               Label="Podtag" Clearable="true"
+                                               ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
+                                        @foreach (var tag in GetSelectableSubTags(_editExpense.CategoryId, _editExpenseRootTagId, _editExpense.TagId))
+                                        {
+                                            <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                }
+                            </div>
+
+                            <MudTextField T="string"
+                                          Value="_editExpensePlannedAmountInput"
+                                          ValueChanged="SetEditPlannedAmountInputAsync"
+                                          Label="Planowana"
+                                          Variant="Variant.Outlined"/>
+
+                            <div class="expense-actual-field">
+                                <MudTextField T="string"
+                                              Value="_editExpenseActualAmountInput"
+                                              ValueChanged="SetEditActualAmountInputAsync"
+                                              Label="Realna"
+                                              Variant="Variant.Outlined"
+                                              Disabled="@isEditActualAmountDisabled"/>
+                                @if (isEditActualAmountDisabled)
+                                {
+                                    <MudText Typo="Typo.caption" Class="hb-muted">Kwota realna jest liczona z pozycji.</MudText>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="expense-form-footer">
+                            <div class="expense-form-options">
+                                <MudSwitch @bind-Value="_editExpense.ShowRemainingInUI" Color="Color.Primary" Label="Pokaż pozostało"/>
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">
+                                    Pozostało: @FormatRemaining(_editExpense.ShowRemainingInUI, _editExpense.PlannedAmount - _editExpense.ActualAmount)
+                                </MudChip>
+                            </div>
+                            <div class="expense-form-actions">
+                                <MudButton
+                                    Variant="Variant.Text"
+                                    ButtonType="ButtonType.Button"
+                                    OnClick="CancelEdit">
+                                    Anuluj
+                                </MudButton>
+                                <MudButton
+                                    Variant="Variant.Filled"
+                                    Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Save"
+                                    ButtonType="ButtonType.Submit">
+                                    Zapisz
+                                </MudButton>
+                            </div>
+                        </div>
+                    </div>
+                </ActionForm>
             </MudTd>
         }
         else
@@ -582,8 +618,8 @@ else
                 {
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudText Typo="Typo.caption">@expense.Order</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@IsFirstExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
-                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@IsLastExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@IsFirstExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@IsLastExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
                     </MudStack>
                 }
             </MudTd>
@@ -655,6 +691,7 @@ else
                             <RowTemplate Context="lineItem">
                                 @if (_editLineItem is not null && _editLineItem.Id == lineItem.Id)
                                 {
+                                    <ActionForm OnSubmit="SaveLineItemEditAsync">
                                     <MudTd>
                                         <MudTextField
                                             @bind-Value="_editLineItem.Description"
@@ -678,7 +715,8 @@ else
                                                    @bind-Value="_editLineItem.TagId"
                                                    Variant="Variant.Outlined"
                                                    Clearable="true"
-                                                   Margin="Margin.Dense">
+                                                   Margin="Margin.Dense"
+                                                   ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                                             @foreach (var tag in GetSelectableLineItemTags(
                                                           _editLineItemExpenseId == expense.Id ? expense.CategoryId : 0,
                                                           _editLineItemExpenseId == expense.Id ? expense.TagId : null,
@@ -693,16 +731,18 @@ else
                                             Variant="Variant.Filled"
                                             Color="Color.Primary"
                                             Size="Size.Small"
-                                            OnClick="SaveLineItemEditAsync">
+                                            ButtonType="ButtonType.Submit">
                                             Zapisz
                                         </MudButton>
                                         <MudButton
                                             Variant="Variant.Text"
                                             Size="Size.Small"
+                                            ButtonType="ButtonType.Button"
                                             OnClick="CancelLineItemEdit">
                                             Anuluj
                                         </MudButton>
                                     </MudTd>
+                                    </ActionForm>
                                 }
                                 else
                                 {
@@ -721,6 +761,7 @@ else
 
                     <MudDivider/>
                     @{ var createModel = GetLineItemCreateModel(expense.Id); }
+                    <ActionForm OnSubmit="() => CreateLineItemAsync(expense.Id)">
                     <MudGrid>
                         <MudItem xs="12" md="4">
                             <MudTextField
@@ -748,7 +789,8 @@ else
                                        Label="Tag"
                                        Variant="Variant.Outlined"
                                        Clearable="true"
-                                       Margin="Margin.Dense">
+                                       Margin="Margin.Dense"
+                                       ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                                 @foreach (var tag in GetSelectableLineItemTags(expense.CategoryId, expense.TagId, createModel.TagId))
                                 {
                                     <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
@@ -759,11 +801,12 @@ else
                             <MudButton
                                 Variant="Variant.Outlined"
                                 Color="Color.Primary"
-                                OnClick="() => CreateLineItemAsync(expense.Id)">
+                                ButtonType="ButtonType.Submit">
                                 Dodaj pozycję
                             </MudButton>
                         </MudItem>
                     </MudGrid>
+                    </ActionForm>
                 </MudStack>
             </MudTd>
         }
@@ -784,12 +827,24 @@ else
 
 @if (_isCreateExpenseFormVisible)
 {
-    <MudGrid Class="mt-4">
-        <MudItem xs="12" md="4">
-            <MudTextField @bind-Value="_newExpense.Name" Label="Nazwa" Variant="Variant.Outlined" Required="true"/>
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudSelect T="int" Value="_newExpense.CategoryId" ValueChanged="OnCreateCategoryChanged" Label="Kategoria" Variant="Variant.Outlined">
+    <ActionForm OnSubmit="CreateExpenseAsync">
+    @{
+        var canSelectCreateSubTag = CanSelectSubTag(_newExpense.CategoryId, _newExpenseRootTagId);
+        var isCreateActualAmountDisabled = SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpense.TagId);
+    }
+    <div class="expense-form-shell new-expense-shell">
+        <div class="expense-form-header">
+            <div>
+                <MudText Typo="Typo.subtitle1" Class="expense-form-title">Nowy wydatek</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Uzupełnij podstawowe dane i przypisz kategorię budżetową.</MudText>
+            </div>
+        </div>
+
+        <div class="expense-form-grid new-expense-form-grid">
+            <MudTextField @bind-Value="_newExpense.Name" Label="Nazwa" Variant="Variant.Outlined" Required="true" Class="expense-field-name"/>
+
+            <MudSelect T="int" Value="_newExpense.CategoryId" ValueChanged="OnCreateCategoryChanged" Label="Kategoria" Variant="Variant.Outlined"
+                       ToStringFunc="GetCategorySelectText" Class="hb-select-ellipsis">
                 @foreach (var category in _categories)
                 {
                     <MudSelectItem
@@ -798,69 +853,77 @@ else
                     </MudSelectItem>
                 }
             </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudSelect T="int?" Value="_newExpenseRootTagId" ValueChanged="OnCreateRootTagChanged" Label="Tag glowny" Variant="Variant.Outlined" Clearable="true">
-                @foreach (var tag in GetSelectableRootTags(_newExpense.CategoryId, _newExpenseRootTagId))
-                {
-                    <MudSelectItem T="int?"
-                                   Value="@tag.Id">
-                        @tag.Name
-                    </MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        @if (CanSelectSubTag(_newExpense.CategoryId, _newExpenseRootTagId))
-        {
-            <MudItem xs="12" md="2">
-                <MudSelect T="int?"
-                           Value="GetSelectedSubTagIdForCreateExpense()"
-                           ValueChanged="OnCreateSubTagChanged"
-                           Label="Podtag"
-                           Variant="Variant.Outlined"
-                           Clearable="true">
-                    @foreach (var tag in GetSelectableSubTags(_newExpense.CategoryId, _newExpenseRootTagId, _newExpense.TagId))
+
+            <div class="@($"expense-tag-grid {(canSelectCreateSubTag ? "has-subtag" : "single-tag")}")">
+                <MudSelect T="int?" Value="_newExpenseRootTagId" ValueChanged="OnCreateRootTagChanged" Label="Tag główny" Variant="Variant.Outlined" Clearable="true"
+                           ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
+                    @foreach (var tag in GetSelectableRootTags(_newExpense.CategoryId, _newExpenseRootTagId))
                     {
-                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                        <MudSelectItem T="int?"
+                                       Value="@tag.Id">
+                            @tag.Name
+                        </MudSelectItem>
                     }
                 </MudSelect>
-            </MudItem>
-        }
-        <MudItem xs="12" md="2">
+                @if (canSelectCreateSubTag)
+                {
+                    <MudSelect T="int?"
+                               Value="GetSelectedSubTagIdForCreateExpense()"
+                               ValueChanged="OnCreateSubTagChanged"
+                               Label="Podtag"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
+                        @foreach (var tag in GetSelectableSubTags(_newExpense.CategoryId, _newExpenseRootTagId, _newExpense.TagId))
+                        {
+                            <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+            </div>
+
             <MudTextField T="string"
                           Value="_newExpensePlannedAmountInput"
                           ValueChanged="SetNewPlannedAmountInputAsync"
                           Label="Planowana"
                           Variant="Variant.Outlined"/>
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudTextField T="string"
-                          Value="_newExpenseActualAmountInput"
-                          ValueChanged="SetNewActualAmountInputAsync"
-                          Label="Realna" Variant="Variant.Outlined"
-                          Disabled="@SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpense.TagId)"/>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudSwitch
-                @bind-Value="_newExpense.ShowRemainingInUI"
-                Color="Color.Primary" Label="Pokaż pozostało"/>
-        </MudItem>
-        <MudItem xs="12" md="9" Class="d-flex justify-end align-center">
-            <MudButton
-                Variant="Variant.Filled"
-                Color="Color.Primary"
-                StartIcon="@Icons.Material.Filled.Add"
-                OnClick="CreateExpenseAsync">
-                Dodaj wydatek
-            </MudButton>
-        </MudItem>
+
+            <div class="expense-actual-field">
+                <MudTextField T="string"
+                              Value="_newExpenseActualAmountInput"
+                              ValueChanged="SetNewActualAmountInputAsync"
+                              Label="Realna" Variant="Variant.Outlined"
+                              Disabled="@isCreateActualAmountDisabled"/>
+                @if (isCreateActualAmountDisabled)
+                {
+                    <MudText Typo="Typo.caption" Class="hb-muted">Kwota realna będzie liczona z pozycji.</MudText>
+                }
+            </div>
+        </div>
+
         @if (CreateExpenseEnvelopeWarning is not null)
         {
-            <MudItem xs="12">
-                <MudAlert Severity="Severity.Warning" Dense="true">@CreateExpenseEnvelopeWarning</MudAlert>
-            </MudItem>
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">@CreateExpenseEnvelopeWarning</MudAlert>
         }
-    </MudGrid>
+
+        <div class="expense-form-footer">
+            <div class="expense-form-options">
+                <MudSwitch
+                    @bind-Value="_newExpense.ShowRemainingInUI"
+                    Color="Color.Primary" Label="Pokaż pozostało"/>
+            </div>
+            <div class="expense-form-actions">
+                <MudButton
+                    Variant="Variant.Filled"
+                    Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.Add"
+                    ButtonType="ButtonType.Submit">
+                    Dodaj wydatek
+                </MudButton>
+            </div>
+        </div>
+    </div>
+    </ActionForm>
 }
 </MudPaper>
 </section>

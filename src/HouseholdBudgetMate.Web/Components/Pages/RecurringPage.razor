@@ -26,7 +26,7 @@
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
 
-<MudStack Spacing="3" Class="pa-4">
+<MudStack Spacing="0">
     <MudPaper Class="hb-page-header">
         <MudText Typo="Typo.h4">Cykliczne operacje</MudText>
         <MudText Typo="Typo.body2" Class="hb-muted">
@@ -34,11 +34,12 @@
         </MudText>
     </MudPaper>
 
-    <MudPaper Class="pa-4 hb-panel">
+    <MudPaper Class="pa-4 mt-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wpływy</MudText>
         <MudChip T="string" Color="Color.Primary" Class="mb-3">
             Suma aktywnych wpływów: @RecurringIncomesTotal.ToString("0.00", _culture) zł
         </MudChip>
+        <ActionForm OnSubmit="CreateIncomeDefinitionAsync">
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudTextField
@@ -79,11 +80,11 @@
                 <MudButton
                     Variant="Variant.Filled"
                     Color="Color.Primary"
-                    ButtonType="ButtonType.Button"
-                    OnClick="CreateIncomeDefinitionAsync">Dodaj
+                    ButtonType="ButtonType.Submit">Dodaj
                 </MudButton>
             </MudItem>
         </MudGrid>
+        </ActionForm>
 
         @if (_incomeDefinitions.Count == 0)
         {
@@ -103,6 +104,7 @@
                 <RowTemplate Context="item">
                     @if (_editIncomeDefinition?.Id == item.Id)
                     {
+                        <ActionForm OnSubmit="SaveIncomeEditAsync">
                         <MudTd>
                             <MudTextField
                                 @bind-Value="_editIncomeDefinition.Name" Variant="Variant.Outlined"/>
@@ -139,8 +141,7 @@
                                 Variant="Variant.Filled"
                                 Color="Color.Primary"
                                 Size="Size.Small"
-                                ButtonType="ButtonType.Button"
-                                OnClick="SaveIncomeEditAsync">Zapisz
+                                ButtonType="ButtonType.Submit">Zapisz
                             </MudButton>
                             <MudButton
                                 Variant="Variant.Text"
@@ -149,6 +150,7 @@
                                 OnClick="CancelIncomeEdit">Anuluj
                             </MudButton>
                         </MudTd>
+                        </ActionForm>
                     }
                     else
                     {
@@ -193,11 +195,12 @@
         }
     </MudPaper>
 
-    <MudPaper Class="pa-4 hb-panel">
+    <MudPaper Class="pa-4 mt-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Cykliczne wydatki</MudText>
         <MudChip T="string" Color="Color.Warning" Class="mb-3">
             Suma aktywnych wydatków: @RecurringExpensesTotal.ToString("0.00", _culture) zł
         </MudChip>
+        <ActionForm OnSubmit="CreateExpenseDefinitionAsync">
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudTextField
@@ -248,10 +251,11 @@
                 <MudButton
                     Variant="Variant.Filled"
                     Color="Color.Primary"
-                    OnClick="CreateExpenseDefinitionAsync">Dodaj
+                    ButtonType="ButtonType.Submit">Dodaj
                 </MudButton>
             </MudItem>
         </MudGrid>
+        </ActionForm>
 
         @if (_expenseDefinitions.Count == 0)
         {
@@ -273,6 +277,7 @@
                 <RowTemplate Context="item">
                     @if (_editExpenseDefinition?.Id == item.Id)
                     {
+                        <ActionForm OnSubmit="SaveExpenseEditAsync">
                         <MudTd>
                             <div id="@GetExpenseDefinitionEditAnchorId(item.Id)" class="expense-edit-anchor"></div>
                             @item.Order
@@ -322,8 +327,7 @@
                                 Variant="Variant.Filled"
                                 Color="Color.Primary"
                                 Size="Size.Small"
-                                ButtonType="ButtonType.Button"
-                                OnClick="SaveExpenseEditAsync">Zapisz
+                                ButtonType="ButtonType.Submit">Zapisz
                             </MudButton>
                             <MudButton
                                 Variant="Variant.Text"
@@ -332,6 +336,7 @@
                                 OnClick="CancelExpenseEdit">Anuluj
                             </MudButton>
                         </MudTd>
+                        </ActionForm>
                     }
                     else
                     {
@@ -398,7 +403,7 @@
         }
     </MudPaper>
 
-    <MudPaper Class="pa-4 hb-panel">
+    <MudPaper Class="pa-4 mt-4 hb-panel">
         <MudText Typo="Typo.h6" Class="mb-2">Raty kredytów</MudText>
         <MudText Typo="Typo.body2" Class="hb-muted">Rate i zmianę WIBOR zarządzasz na stronie Kredyty. Tutaj widzisz podgląd cyklicznych rat.</MudText>
 

@@ -1,0 +1,143 @@
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1">@Label</MudText>
+            <MudTextField T="string"
+                          Value="@_pin"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          ReadOnly="true"/>
+
+            <div class="pin-dialog-keypad">
+                @foreach (var digit in Digits)
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               Class="pin-dialog-key"
+                               Disabled="@IsDigitDisabled"
+                               OnClick="() => AppendDigit(digit)">
+                        @digit
+                    </MudButton>
+                }
+
+                <MudTooltip Text="Usuń ostatnią cyfrę">
+                    <MudIconButton Icon="@Icons.Material.Filled.Backspace"
+                                   Color="Color.Default"
+                                   Variant="Variant.Outlined"
+                                   Class="pin-dialog-key pin-dialog-key-icon"
+                                   Disabled="@string.IsNullOrEmpty(_pin)"
+                                   OnClick="Backspace"/>
+                </MudTooltip>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           Class="pin-dialog-key"
+                           Disabled="@IsDigitDisabled"
+                           OnClick="@(() => AppendDigit('0'))">
+                    0
+                </MudButton>
+
+                <MudTooltip Text="Wyczyść PIN">
+                    <MudIconButton Icon="@Icons.Material.Filled.Clear"
+                                   Color="Color.Default"
+                                   Variant="Variant.Outlined"
+                                   Class="pin-dialog-key pin-dialog-key-icon"
+                                   Disabled="@string.IsNullOrEmpty(_pin)"
+                                   OnClick="Clear"/>
+                </MudTooltip>
+            </div>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Anuluj</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(_pin.Length < MinLength)"
+                   OnClick="Submit">
+            Zatwierdź
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .pin-dialog-keypad {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(64px, 1fr));
+        gap: 8px;
+        width: min(100%, 260px);
+        margin: 0 auto;
+    }
+
+    .pin-dialog-key {
+        min-width: 64px;
+        height: 54px;
+        font-size: 1.1rem;
+    }
+
+    .pin-dialog-key-icon {
+        width: 100%;
+    }
+</style>
+
+@code {
+    private static readonly char[] Digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public string Label { get; set; } = "Wpisz PIN";
+    [Parameter] public int MinLength { get; set; } = 4;
+    [Parameter] public int MaxLength { get; set; } = 8;
+
+    private string _pin = string.Empty;
+    private bool IsDigitDisabled => _pin.Length >= MaxLength;
+
+    protected override void OnInitialized()
+    {
+        _pin = NormalizePin(Value);
+    }
+
+    private void AppendDigit(char digit)
+    {
+        if (!IsDigitDisabled)
+        {
+            _pin += digit;
+        }
+    }
+
+    private void Backspace()
+    {
+        if (!string.IsNullOrEmpty(_pin))
+        {
+            _pin = _pin[..^1];
+        }
+    }
+
+    private void Clear()
+    {
+        _pin = string.Empty;
+    }
+
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok(_pin));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private string NormalizePin(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return new string(value.Where(char.IsDigit).Take(MaxLength).ToArray());
+    }
+}

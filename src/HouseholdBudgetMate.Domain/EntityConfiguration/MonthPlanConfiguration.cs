@@ -27,7 +27,7 @@ public sealed class MonthPlanConfiguration : IEntityTypeConfiguration<MonthPlan>
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
 
-        builder.HasIndex(x => new { x.Year, x.Month })
+        builder.HasIndex(x => new { x.UserId, x.Year, x.Month })
             .IsUnique();
     }
 }

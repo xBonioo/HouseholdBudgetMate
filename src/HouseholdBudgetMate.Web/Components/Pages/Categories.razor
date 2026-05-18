@@ -15,7 +15,7 @@
 </MudOverlay>
 
 <div class="categories-page-root">
-    <MudStack Spacing="3" Class="categories-page pa-4">
+    <MudStack Spacing="0" Class="categories-page">
         <MudPaper Class="categories-header hb-page-header">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                 <MudStack Spacing="0">
@@ -32,7 +32,8 @@
             </MudStack>
         </MudPaper>
 
-        <MudPaper Class="pa-4 hb-panel">
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            <ActionForm OnSubmit="CreateCategoryAsync">
             <MudGrid>
                 <MudItem xs="12" md="3">
                     <MudTextField
@@ -64,7 +65,7 @@
                         Variant="Variant.Filled"
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
-                        OnClick="CreateCategoryAsync">
+                        ButtonType="ButtonType.Submit">
                         Dodaj
                     </MudButton>
                 </MudItem>
@@ -83,23 +84,25 @@
                         AdornmentIcon="@Icons.Material.Filled.Search"/>
                 </MudItem>
             </MudGrid>
+            </ActionForm>
         </MudPaper>
 
         @if (FilteredCategories.Count == 0)
         {
-            <MudPaper Class="pa-6 hb-panel mt-3">
+            <MudPaper Class="pa-4 mt-4 hb-panel">
                 <MudText Typo="Typo.subtitle1">Brak wyników</MudText>
                 <MudText Typo="Typo.body2" Class="hb-muted">Zmień filtr lub dodaj pierwsza kategorie.</MudText>
             </MudPaper>
         }
         else
         {
-            <MudStack Spacing="2" Class="mt-3">
+            <MudStack Spacing="2" Class="mt-4">
                 @foreach (var category in FilteredCategories)
                 {
                     <MudPaper Class="pa-4 hb-panel category-card">
                         @if (_editCategory is not null && _editCategory.Id == category.Id)
                         {
+                            <ActionForm OnSubmit="SaveCategoryEditAsync">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center"
                                       Wrap="Wrap.NoWrap" Class="category-row">
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center"
@@ -127,13 +130,14 @@
 
                                 <MudStack Row="true" Spacing="1" Class="category-row-actions">
                                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                               OnClick="SaveCategoryEditAsync">Zapisz
+                                               ButtonType="ButtonType.Submit">Zapisz
                                     </MudButton>
-                                    <MudButton Variant="Variant.Text" OnClick="CancelCategoryEdit">Anuluj</MudButton>
+                                    <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="CancelCategoryEdit">Anuluj</MudButton>
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
                                                    OnClick="() => DeleteCategoryAsync(category)"/>
                                 </MudStack>
                             </MudStack>
+                            </ActionForm>
                         }
                         else
                         {
@@ -190,9 +194,11 @@
                                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
                                                 @if (_editTag is not null && _editTag.Id == rootTag.Id)
                                                 {
+                                                    <ActionForm OnSubmit="SaveTagEditAsync">
                                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-inline-main">
                                                         <MudTextField @bind-Value="_editTag.Name" Label="Edytuj tag" Variant="Variant.Outlined" Margin="Margin.Dense"/>
-                                                        <MudSelect T="int?" @bind-Value="_editTag.ParentTagId" Label="Tag główny" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                                        <MudSelect T="int?" @bind-Value="_editTag.ParentTagId" Label="Tag główny" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                   ToStringFunc="GetParentTagSelectText" Class="hb-select-ellipsis">
                                                             <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
                                                             @foreach (var rootTagOption in GetRootTagOptions(category.Id, _editTag.Id))
                                                             {
@@ -204,9 +210,10 @@
                                                             <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
                                                             <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
                                                         </MudSelect>
-                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTagEditAsync">Zapisz</MudButton>
-                                                        <MudButton Variant="Variant.Text" OnClick="CancelTagEdit">Anuluj</MudButton>
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Zapisz</MudButton>
+                                                        <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="CancelTagEdit">Anuluj</MudButton>
                                                     </MudStack>
+                                                    </ActionForm>
                                                 }
                                                 else
                                                 {
@@ -234,9 +241,11 @@
                                                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
                                                             @if (_editTag is not null && _editTag.Id == childTag.Id)
                                                             {
+                                                                <ActionForm OnSubmit="SaveTagEditAsync">
                                                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Class="tag-inline-main">
                                                                     <MudTextField @bind-Value="_editTag.Name" Label="Edytuj tag" Variant="Variant.Outlined" Margin="Margin.Dense"/>
-                                                                    <MudSelect T="int?" @bind-Value="_editTag.ParentTagId" Label="Tag główny" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                                                    <MudSelect T="int?" @bind-Value="_editTag.ParentTagId" Label="Tag główny" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                               ToStringFunc="GetParentTagSelectText" Class="hb-select-ellipsis">
                                                                         <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
                                                                         @foreach (var rootTagOption in GetRootTagOptions(category.Id, _editTag.Id))
                                                                         {
@@ -248,9 +257,10 @@
                                                                         <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
                                                                         <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
                                                                     </MudSelect>
-                                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTagEditAsync">Zapisz</MudButton>
-                                                                    <MudButton Variant="Variant.Text" OnClick="CancelTagEdit">Anuluj</MudButton>
+                                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Zapisz</MudButton>
+                                                                    <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="CancelTagEdit">Anuluj</MudButton>
                                                                 </MudStack>
+                                                                </ActionForm>
                                                             }
                                                             else
                                                             {
@@ -274,6 +284,7 @@
                                     }
                                 }
 
+                                <ActionForm OnSubmit="() => CreateTagAsync(category.Id)">
                                 <MudStack Row="true" Spacing="2"
                                           AlignItems="AlignItems.Center"
                                           Wrap="Wrap.NoWrap"
@@ -288,7 +299,9 @@
                                                @bind-Value="GetTagCreateModel(category.Id).ParentTagId"
                                                Label="Tag główny"
                                                Variant="Variant.Outlined"
-                                               Margin="Margin.Dense">
+                                               Margin="Margin.Dense"
+                                               ToStringFunc="GetParentTagSelectText"
+                                               Class="hb-select-ellipsis">
                                         <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
                                         @foreach (var rootTag in GetRootTagOptions(category.Id, null))
                                         {
@@ -307,9 +320,10 @@
                                     <MudButton
                                         Variant="Variant.Outlined"
                                         Color="Color.Primary"
-                                        OnClick="() => CreateTagAsync(category.Id)">Dodaj tag
+                                        ButtonType="ButtonType.Submit">Dodaj tag
                                     </MudButton>
                                 </MudStack>
+                                </ActionForm>
                             </MudStack>
                         }
                     </MudPaper>
@@ -344,6 +358,19 @@
         .Where(IsCategoryMatch)
         .OrderBy(x => x.Name)
         .ToList();
+
+    private string GetParentTagSelectText(int? tagId)
+    {
+        if (!tagId.HasValue)
+        {
+            return "Brak";
+        }
+
+        return _categories
+            .SelectMany(x => x.Tags)
+            .FirstOrDefault(x => x.Id == tagId.Value)
+            ?.Name ?? string.Empty;
+    }
 
     protected override async Task OnInitializedAsync()
     {

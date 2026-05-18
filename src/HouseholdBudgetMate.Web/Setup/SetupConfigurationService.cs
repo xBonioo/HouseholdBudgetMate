@@ -1,4 +1,9 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using HouseholdBudgetMate.Application.Security;
+using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Domain.Infrastructure;
+using HouseholdBudgetMate.Migrations;
+using Microsoft.EntityFrameworkCore;
 
 namespace HouseholdBudgetMate.Web.Setup;
 
@@ -25,21 +30,21 @@ public sealed class SetupConfigurationService(
         try
         {
             await databaseMigrationOrchestrator.ValidateConnectionAndMigrateAsync(runtimeDatabaseConfiguration, cancellationToken);
+            await EnsureInitialUserAsync(runtimeDatabaseConfiguration, inputModel, cancellationToken);
         }
         catch (Exception ex)
         {
-            return SetupResult.Failed($"Nie mozna połączyć się z bazą lub wykonać migracji: {ex.Message}");
+            return SetupResult.Failed($"Nie można połączyć się z bazą lub wykonać migracji: {ex.Message}");
         }
 
         var runtimeAppConfiguration = new RuntimeConfigurationState.RuntimeAppConfiguration
         {
-            Database = runtimeDatabaseConfiguration
+            Database = runtimeDatabaseConfiguration,
+            HouseholdMode = inputModel.HouseholdMode,
+            SharedWithUserIds = ParseSharedWithUserIds(inputModel.SharedWithUserIds)
         };
 
-        var json = JsonSerializer.Serialize(runtimeAppConfiguration, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+        var json = JsonSerializer.Serialize(runtimeAppConfiguration, RuntimeConfigurationState.JsonOptions);
 
         try
         {
@@ -53,11 +58,81 @@ public sealed class SetupConfigurationService(
         }
         catch (Exception ex)
         {
-            return SetupResult.Failed($"Nie mozna zapisac pliku config.json: {ex.Message}");
+            return SetupResult.Failed($"Nie można zapisać pliku config.json: {ex.Message}");
         }
 
         runtimeConfigurationState.ReloadFromDisk();
+        runtimeConfigurationState.SetHouseholdMode(inputModel.HouseholdMode);
+        runtimeConfigurationState.SetSharedWithUserIds(runtimeAppConfiguration.SharedWithUserIds);
         return SetupResult.Success();
+    }
+
+    private static IReadOnlyList<string> ParseSharedWithUserIds(string input)
+    {
+        return RuntimeConfigurationState.NormalizeUserIds(
+            input.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    private static async Task EnsureInitialUserAsync(
+        RuntimeDatabaseConfiguration runtimeDatabaseConfiguration,
+        SetupInputModel inputModel,
+        CancellationToken cancellationToken)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(
+                runtimeDatabaseConfiguration.ToConnectionString(),
+                npgsqlOptions => npgsqlOptions.MigrationsAssembly("HouseholdBudgetMate.Migrations"))
+            .Options;
+
+        await using var dbContext = new ApplicationDbContext(
+            options,
+            new CurrentUserContext
+            {
+                UserId = User.DefaultUserId,
+                BudgetOwnerUserId = User.DefaultUserId
+            });
+
+        var defaultAdmin = await dbContext.Users
+            .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);
+        if (defaultAdmin is null)
+        {
+            dbContext.Users.Add(new User
+            {
+                Id = User.DefaultUserId,
+                Username = "Admin",
+                PasswordHash = string.Empty,
+                HouseholdMode = (int)inputModel.HouseholdMode,
+                BudgetOwnerUserId = User.DefaultUserId,
+                IsAdmin = true
+            });
+        }
+        else
+        {
+            defaultAdmin.PasswordHash = string.Empty;
+            defaultAdmin.BudgetOwnerUserId = User.DefaultUserId;
+            defaultAdmin.IsAdmin = true;
+        }
+
+        var username = inputModel.AppUsername.Trim();
+        var existingAppUser = await dbContext.Users
+            .FirstOrDefaultAsync(x => x.Username.ToUpper() == username.ToUpper(), cancellationToken);
+        if (existingAppUser is null)
+        {
+            var appUserId = Guid.NewGuid().ToString("N");
+            dbContext.Users.Add(new User
+            {
+                Id = appUserId,
+                Username = username,
+                PasswordHash = PinHasher.Hash(inputModel.AppPin),
+                HouseholdMode = (int)inputModel.HouseholdMode,
+                BudgetOwnerUserId = inputModel.HouseholdMode == HouseholdBudgetMate.Abstractions.Enums.HouseholdMode.SharedBudget
+                    ? User.DefaultUserId
+                    : appUserId,
+                IsAdmin = false
+            });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

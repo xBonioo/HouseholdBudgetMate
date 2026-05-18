@@ -181,7 +181,11 @@ public sealed class IncomeService(
         var existingDefinitionIds = await dbContext.Incomes
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(x => x.Year == year && x.Month == month && x.IsRegular && x.RegularIncomeDefinitionId.HasValue)
+            .Where(x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                        && x.Year == year
+                        && x.Month == month
+                        && x.IsRegular
+                        && x.RegularIncomeDefinitionId.HasValue)
             .Select(x => x.RegularIncomeDefinitionId!.Value)
             .ToListAsync(cancellationToken);
 
@@ -237,7 +241,8 @@ public sealed class IncomeService(
             .IgnoreQueryFilters()
             .AsNoTracking()
             .AnyAsync(
-                x => x.Year == year
+                x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                     && x.Year == year
                      && x.Month == month
                      && x.IsRegular
                      && x.RegularIncomeDefinitionId == definitionId,

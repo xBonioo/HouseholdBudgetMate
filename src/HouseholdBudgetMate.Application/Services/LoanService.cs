@@ -479,7 +479,10 @@ public sealed class LoanService(
         var deletedExpenseInstallmentIds = await dbContext.Expenses
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(x => x.MonthPlanId == monthPlan.Id && x.LoanInstallmentId.HasValue && x.IsDeleted)
+            .Where(x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                        && x.MonthPlanId == monthPlan.Id
+                        && x.LoanInstallmentId.HasValue
+                        && x.IsDeleted)
             .Select(x => x.LoanInstallmentId!.Value)
             .ToListAsync(cancellationToken);
 

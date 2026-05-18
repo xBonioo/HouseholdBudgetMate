@@ -367,10 +367,116 @@
 	height: 0;
 }
 
+.expense-editor-cell {
+	background: #f7fbff !important;
+	padding: 12px !important;
+}
+
+.expense-form-shell {
+	border: 1px solid #cfe0ed;
+	border-radius: 8px;
+	background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
+	padding: 14px;
+	box-shadow: 0 8px 22px rgba(13, 37, 63, 0.08);
+}
+
+.new-expense-shell {
+	margin-top: 16px;
+}
+
+.expense-edit-shell {
+	border-left: 4px solid #2a6fb0;
+}
+
+.expense-form-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.expense-form-title {
+	font-weight: 700;
+	color: #17384f;
+}
+
+.expense-order-controls {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.expense-form-grid {
+	display: grid;
+	grid-template-columns: minmax(180px, 1.35fr) minmax(160px, 0.9fr) minmax(260px, 1.45fr) minmax(132px, 0.7fr) minmax(132px, 0.7fr);
+	gap: 12px;
+	align-items: start;
+	min-width: 0;
+}
+
+.expense-form-grid > *,
+.expense-tag-grid > * {
+	min-width: 0;
+}
+
+.expense-tag-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 12px;
+	min-width: 0;
+}
+
+.expense-actual-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.expense-form-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid #e1ebf3;
+}
+
+.expense-form-options,
+.expense-form-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.expense-form-actions {
+	justify-content: flex-end;
+}
+
 @media (max-width: 1400px) {
 	.expense-header-actions {
 		flex-wrap: wrap;
 		justify-content: flex-end;
+	}
+}
+
+@media (min-width: 720px) {
+	.expense-tag-grid.has-subtag {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 1500px) {
+	.expense-form-grid {
+		grid-template-columns: repeat(2, minmax(180px, 1fr));
+	}
+
+	.expense-tag-grid {
+		grid-column: 1 / -1;
 	}
 }
 
@@ -420,6 +526,25 @@
 	.income-add-action {
 		justify-content: flex-start;
 	}
+
+	.expense-form-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.expense-form-footer {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.expense-form-actions {
+		justify-content: flex-start;
+	}
+
+	.plan-dashboard-root ::deep .expense-order-controls,
+	.plan-dashboard-root ::deep .expense-order-column,
+	.plan-dashboard-root ::deep .manual-order-action {
+		display: none !important;
+	}
 }
 
 @media (max-width: 600px) {
@@ -439,6 +564,15 @@
 
 	.expense-name-ellipsis {
 		max-width: 140px;
+	}
+
+	.expense-form-shell {
+		padding: 12px;
+	}
+
+	.expense-form-actions,
+	.expense-form-actions .mud-button-root {
+		width: 100%;
 	}
 }
 

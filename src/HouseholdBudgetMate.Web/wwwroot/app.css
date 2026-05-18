@@ -65,6 +65,42 @@ h1:focus {
     color: #6b7280;
 }
 
+.hb-action-form {
+    display: contents;
+}
+
+.hb-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.hb-select-ellipsis,
+.hb-select-ellipsis .mud-input-control,
+.hb-select-ellipsis .mud-input,
+.hb-select-ellipsis .mud-input-slot,
+.hb-select-ellipsis .mud-select-input {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.hb-select-ellipsis .mud-input-slot,
+.hb-select-ellipsis .mud-select-input {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hb-select-ellipsis .mud-input-slot {
+    display: block;
+}
+
 .hb-danger-row {
     background-color: rgba(239, 68, 68, 0.08);
 }
@@ -85,6 +121,11 @@ h1:focus {
 
     .brand-logo {
         height: 28px;
+    }
+
+    .plan-table-expenses .expense-order-column,
+    .plan-table-expenses .manual-order-action {
+        display: none !important;
     }
 }
 

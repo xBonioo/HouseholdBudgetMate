@@ -108,6 +108,7 @@ public sealed class CoreDataSeedService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         if (!dbContext.Database.CanConnect()) return;
+        await EnsureCurrentUserAsync(dbContext, cancellationToken);
         if (dbContext.Accounts.Any()) return;
 
         await SeedDefaultCategoriesAsync(dbContext, cancellationToken);
@@ -125,6 +126,7 @@ public sealed class CoreDataSeedService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         if (!await dbContext.Database.CanConnectAsync(cancellationToken)) return;
+        await EnsureCurrentUserAsync(dbContext, cancellationToken);
 
         var exists = await dbContext.MonthPlans
             .AnyAsync(x => x.Year == now.Year && x.Month == now.Month, cancellationToken);
@@ -175,6 +177,28 @@ public sealed class CoreDataSeedService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Default categories seeded.");
+    }
+
+    private static async Task EnsureCurrentUserAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.Users
+            .AnyAsync(x => x.Id == dbContext.CurrentUserId, cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        dbContext.Users.Add(new User
+        {
+            Id = dbContext.CurrentUserId,
+            Username = dbContext.CurrentUserId,
+            PasswordHash = string.Empty,
+            IsAdmin = dbContext.CurrentUserId == User.DefaultUserId
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task SeedDefaultTagsAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)

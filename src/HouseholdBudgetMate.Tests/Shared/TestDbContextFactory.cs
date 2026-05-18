@@ -1,5 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
+using Microsoft.EntityFrameworkCore;
 
 namespace HouseholdBudgetMate.Tests.Shared;
 
@@ -9,7 +11,7 @@ public static class TestDbContextFactory
     {
         var name = dbName ?? Guid.NewGuid().ToString();
         var options = BuildOptions(name);
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, CreateCurrentUserContext());
     }
 
     public static ApplicationDbContext CreateDbContext(out IDbContextFactory<ApplicationDbContext> factory, string? dbName = null)
@@ -17,7 +19,7 @@ public static class TestDbContextFactory
         var name = dbName ?? Guid.NewGuid().ToString();
         var options = BuildOptions(name);
         factory = new InMemoryDbContextFactory(options);
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, CreateCurrentUserContext());
     }
 
     public static IDbContextFactory<ApplicationDbContext> CreateFactory(string? dbName = null)
@@ -40,10 +42,19 @@ public static class TestDbContextFactory
             .Options;
     }
 
+    private static CurrentUserContext CreateCurrentUserContext()
+    {
+        return new CurrentUserContext
+        {
+            UserId = User.DefaultUserId,
+            BudgetOwnerUserId = User.DefaultUserId
+        };
+    }
+
     private sealed class InMemoryDbContextFactory(DbContextOptions<ApplicationDbContext> options)
         : IDbContextFactory<ApplicationDbContext>
     {
-        public ApplicationDbContext CreateDbContext() => new(options);
+        public ApplicationDbContext CreateDbContext() => new(options, CreateCurrentUserContext());
 
         public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
         {

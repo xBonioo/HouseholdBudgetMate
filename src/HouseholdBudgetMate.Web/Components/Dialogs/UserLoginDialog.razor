@@ -1,0 +1,127 @@
+@using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto
+@using HouseholdBudgetMate.Web.Services
+@using MudBlazor
+
+@inject IUserSessionService UserSessionService
+
+<MudDialog>
+    <DialogContent>
+        <ActionForm OnSubmit="SignInIfEnabledAsync">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h6">Wybierz użytkownika</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Wybierz profil, a aplikacja pokaże właściwy budżet.
+            </MudText>
+
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <MudSelect T="string"
+                       Label="Użytkownik"
+                       Value="_selectedUserId"
+                       ValueChanged="SelectUser"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense">
+                @foreach (var user in _users)
+                {
+                    <MudSelectItem Value="@user.Id">@GetUserLabel(user)</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (SelectedUser?.HasPin == true)
+            {
+                <PinKeypadInput Label="PIN" @bind-Value="_pin" Required="true"/>
+            }
+            else if (SelectedUser?.IsDefaultAdmin == true)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Domyślny administrator nie wymaga PIN-u.
+                </MudAlert>
+            }
+        </MudStack>
+        <button type="submit" class="hb-visually-hidden" aria-hidden="true" tabindex="-1"></button>
+        </ActionForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@IsSignInDisabled"
+                   OnClick="SignInAsync">
+            Wejdź
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private IReadOnlyList<UserDto> _users = [];
+    private string? _selectedUserId;
+    private string _pin = string.Empty;
+    private string? _errorMessage;
+    private bool _isBusy;
+
+    private UserDto? SelectedUser => _users.FirstOrDefault(x => x.Id == _selectedUserId);
+
+    private bool IsSignInDisabled
+        => _isBusy
+           || SelectedUser is null
+           || (SelectedUser.HasPin && _pin.Length < 4);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _users = await UserSessionService.GetUsersAsync(CancellationToken.None);
+        _selectedUserId = _users.FirstOrDefault(x => !x.IsDefaultAdmin)?.Id
+                          ?? _users.FirstOrDefault()?.Id;
+    }
+
+    private void SelectUser(string? userId)
+    {
+        _selectedUserId = userId;
+        _pin = string.Empty;
+        _errorMessage = null;
+    }
+
+    private Task SignInIfEnabledAsync()
+    {
+        return IsSignInDisabled
+            ? Task.CompletedTask
+            : SignInAsync();
+    }
+
+    private async Task SignInAsync()
+    {
+        if (SelectedUser is null)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await UserSessionService.SignInAsync(SelectedUser.Id, _pin, CancellationToken.None);
+            if (!result.IsSuccess)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            MudDialog.Close(DialogResult.Ok(result.User));
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private static string GetUserLabel(UserDto user)
+    {
+        return user.IsDefaultAdmin
+            ? $"{user.Username} (administrator)"
+            : user.Username;
+    }
+}

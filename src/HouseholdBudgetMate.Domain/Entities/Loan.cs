@@ -5,6 +5,7 @@ namespace HouseholdBudgetMate.Domain.Entities;
 public sealed class Loan : ATimestampable, IEntityId
 {
     public int Id { get; set; }
+    public string UserId { get; set; } = User.DefaultUserId;
     public string Name { get; set; } = null!;
     public int LoanType { get; set; }
     public int InterestMode { get; set; }

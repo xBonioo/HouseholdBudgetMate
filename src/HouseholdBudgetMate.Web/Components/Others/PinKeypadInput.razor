@@ -1,0 +1,55 @@
+@using System.Linq.Expressions
+@using HouseholdBudgetMate.Web.Components.Dialogs
+@using MudBlazor
+
+@inject IDialogService DialogService
+
+<MudTextField T="string"
+              Label="@Label"
+              Value="@Value"
+              For="@For"
+              InputType="InputType.Password"
+              Variant="@Variant"
+              Margin="@Margin"
+              Required="@Required"
+              ReadOnly="true"
+              Class="@Class"
+              Adornment="Adornment.End"
+              AdornmentIcon="@Icons.Material.Filled.Dialpad"
+              @onclick="OpenDialogAsync"/>
+
+@code {
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public Expression<Func<string>>? For { get; set; }
+    [Parameter] public string Label { get; set; } = "PIN";
+    [Parameter] public bool Required { get; set; }
+    [Parameter] public int MaxLength { get; set; } = 8;
+    [Parameter] public Variant Variant { get; set; } = Variant.Outlined;
+    [Parameter] public Margin Margin { get; set; } = Margin.Dense;
+    [Parameter] public string? Class { get; set; }
+
+    private async Task OpenDialogAsync()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Value"] = Value,
+            ["Label"] = Label,
+            ["MaxLength"] = MaxLength
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PinKeypadDialog>("PIN", parameters, options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false } && result.Data is string pin)
+        {
+            await ValueChanged.InvokeAsync(pin);
+        }
+    }
+}

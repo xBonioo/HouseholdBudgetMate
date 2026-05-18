@@ -1,5 +1,6 @@
-﻿@page "/setup"
+@page "/setup"
 @layout SetupLayout
+@using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Web.Setup
 @using MudBlazor
 
@@ -7,61 +8,44 @@
 @inject RuntimeConfigurationState RuntimeConfigurationState
 @inject NavigationManager NavigationManager
 
-<MudPaper Class="pa-6">
-    <MudText Typo="Typo.h5">Pierwsza konfiguracja aplikacji</MudText>
+<MudPaper Class="pa-4 hb-panel">
+    <MudText Typo="Typo.h4">Pierwsza konfiguracja aplikacji</MudText>
     <MudText Typo="Typo.body2" Class="mt-1 mb-4">
-        Uzupełnij dane połączenia z PostgreSQL. Plik `config.json` zostanie zapisany w @RuntimeConfigurationState.ConfigFilePath.
+        Uzupełnij dane połączenia z PostgreSQL. Plik config.json zostanie zapisany w @RuntimeConfigurationState.ConfigFilePath.
     </MudText>
 
     <EditForm Model="_model" OnValidSubmit="SaveAsync">
         <DataAnnotationsValidator/>
 
         <MudStack Spacing="2">
-            <MudTextField T="string" 
-                          Label="Host"
-                          @bind-Value="_model.Host"
-                          For="@(() => _model.Host)" 
-                          Required="true"/>
-            <MudNumericField T="int" 
-                             Label="Port" 
-                             @bind-Value="_model.Port" 
-                             For="@(() => _model.Port)" 
-                             Min="1"
-                             Max="65535"
-                             Required="true"/>
-            <MudTextField T="string" 
-                          Label="Login"
-                          @bind-Value="_model.Username" 
-                          For="@(() => _model.Username)"
-                          Required="true"/>
-            <MudTextField T="string" 
-                          Label="Haslo" 
-                          @bind-Value="_model.Password"
-                          For="@(() => _model.Password)"
-                          InputType="InputType.Password"
-                          Required="true"/>
-            <MudTextField T="string" 
-                          Label="Nazwa bazy"
-                          @bind-Value="_model.Database"
-                          For="@(() => _model.Database)" 
-                          Required="true"/>
+            <MudTextField T="string" Label="Host" @bind-Value="_model.Host" For="@(() => _model.Host)" Required="true"/>
+            <MudNumericField T="int" Label="Port" @bind-Value="_model.Port" For="@(() => _model.Port)" Min="1" Max="65535" Required="true"/>
+            <MudTextField T="string" Label="Login" @bind-Value="_model.Username" For="@(() => _model.Username)" Required="true"/>
+            <MudTextField T="string" Label="Hasło" @bind-Value="_model.Password" For="@(() => _model.Password)" InputType="InputType.Password" Required="true"/>
+            <MudTextField T="string" Label="Nazwa bazy" @bind-Value="_model.Database" For="@(() => _model.Database)" Required="true"/>
+            <MudDivider Class="my-2"/>
+            <MudText Typo="Typo.subtitle2">Pierwszy użytkownik aplikacji</MudText>
+            <MudTextField T="string" Label="Nazwa użytkownika" @bind-Value="_model.AppUsername" For="@(() => _model.AppUsername)" Required="true"/>
+            <PinKeypadInput Label="PIN do aplikacji" @bind-Value="_model.AppPin" For="@(() => _model.AppPin)" Required="true"/>
+            <MudSwitch T="bool" Value="IsSharedBudgetMode" ValueChanged="SetSharedBudgetMode" Color="Color.Primary" Label="Wspólny budżet domowy"/>
+            <MudTextField T="string"
+                          Label="Udostępnij użytkownikom"
+                          @bind-Value="_model.SharedWithUserIds"
+                          Placeholder="np. spouse-user, parent-user"/>
 
             @if (!string.IsNullOrWhiteSpace(_errorMessage))
             {
                 <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
             }
 
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       ButtonType="ButtonType.Submit"
-                       Disabled="_isSaving">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="_isSaving">
                 @(_isSaving ? "Łączenie i migracja..." : "Zapisz i uruchom")
             </MudButton>
         </MudStack>
     </EditForm>
 
     <MudDivider Class="my-4"/>
-    <MudText Typo="Typo.caption">Scieżka pliku konfiguracji: @RuntimeConfigurationState.ConfigFilePath</MudText>
+    <MudText Typo="Typo.caption">Ścieżka pliku konfiguracji: @RuntimeConfigurationState.ConfigFilePath</MudText>
 </MudPaper>
 
 @if (_isSaving)
@@ -69,7 +53,7 @@
     <div class="setup-loading-backdrop">
         <MudPaper Class="pa-6 setup-loading-panel" Elevation="4">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large"/>
                 <MudText Typo="Typo.subtitle1">Trwa łączenie z bazą i wykonywanie migracji...</MudText>
                 <MudText Typo="Typo.body2">To może potrwać chwilę, nie zamykaj aplikacji.</MudText>
             </MudStack>
@@ -98,6 +82,8 @@
     private readonly SetupInputModel _model = new();
     private bool _isSaving;
     private string? _errorMessage;
+
+    private bool IsSharedBudgetMode => _model.HouseholdMode == HouseholdMode.SharedBudget;
 
     protected override void OnInitialized()
     {
@@ -128,5 +114,11 @@
             _isSaving = false;
         }
     }
-}
 
+    private void SetSharedBudgetMode(bool isShared)
+    {
+        _model.HouseholdMode = isShared
+            ? HouseholdMode.SharedBudget
+            : HouseholdMode.SeparateBudget;
+    }
+}

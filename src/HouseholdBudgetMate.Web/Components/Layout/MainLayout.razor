@@ -12,6 +12,8 @@
 @inject IDateTimeProvider DateTimeProvider
 @inject IExpenseService ExpenseService
 @inject ArchiveMonthsCacheService ArchiveCache
+@inject IUserSessionService UserSessionService
+@inject IDialogService DialogService
 
 @* Required *@
 <MudThemeProvider Theme="@AppTheme.Default" />
@@ -23,8 +25,21 @@
 @* Needed for snackbars *@
 <MudSnackbarProvider />
 
-<div class="layout-root">
-    <MudLayout>
+@if (!_sessionReady)
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="py-12">
+        <MudPaper Class="pa-6" Elevation="0">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large"/>
+                <MudText Typo="Typo.subtitle1">Przygotowuję profil użytkownika...</MudText>
+            </MudStack>
+        </MudPaper>
+    </MudContainer>
+}
+else
+{
+    <div class="layout-root">
+        <MudLayout>
         <MudAppBar Elevation="0" Dense="true" Class="app-shell-bar">
             
             <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
@@ -73,10 +88,20 @@
 
             @* ── Right nav (hidden on mobile via CSS, no JS needed) ── *@
             <div class="nav-desktop">
-                <MudButton Variant="Variant.Text" Class="@GetNavClass("/admin/config")"
-                           StartIcon="@Icons.Material.Filled.AdminPanelSettings" Href="/admin/config">
-                    Admin
+                <MudButton Variant="Variant.Text"
+                           Class="appbar-button"
+                           StartIcon="@Icons.Material.Filled.Person"
+                           OnClick="SwitchUserAsync">
+                    @CurrentUserLabel
                 </MudButton>
+
+                @if (IsAdminSession)
+                {
+                    <MudButton Variant="Variant.Text" Class="@GetNavClass("/admin/config")"
+                               StartIcon="@Icons.Material.Filled.AdminPanelSettings" Href="/admin/config">
+                        Admin
+                    </MudButton>
+                }
 
                 <MudButton Variant="Variant.Text" Class="@GetNavClass("/categories")"
                            StartIcon="@Icons.Material.Filled.Category" Href="/categories">
@@ -140,8 +165,14 @@
                                 OnClick="CloseDrawer">Statystyki</MudNavLink>
                     <MudNavLink Class="mobile-nav-link" Href="/categories" Icon="@Icons.Material.Filled.Category"
                                 OnClick="CloseDrawer">Kategorie</MudNavLink>
-                    <MudNavLink Class="mobile-nav-link" Href="/admin/config"
-                                Icon="@Icons.Material.Filled.AdminPanelSettings" OnClick="CloseDrawer">Admin</MudNavLink>
+                    @if (IsAdminSession)
+                    {
+                        <MudNavLink Class="mobile-nav-link" Href="/admin/config"
+                                    Icon="@Icons.Material.Filled.AdminPanelSettings" OnClick="CloseDrawer">Administracja</MudNavLink>
+                    }
+                    <MudNavLink Class="mobile-nav-link" Icon="@Icons.Material.Filled.Person" OnClick="SwitchUserFromMobileAsync">
+                        @CurrentUserLabel
+                    </MudNavLink>
                 </MudNavMenu>
             </MudStack>
         </aside>
@@ -151,8 +182,9 @@
                 @Body
             </MudContainer>
         </MudMainContent>
-    </MudLayout>
-</div>
+        </MudLayout>
+    </div>
+}
 
 <div id="blazor-error-ui" data-nosnippet
      style="background-color:#c62828;color:white;padding:12px 16px;border-radius:4px;">
@@ -165,6 +197,11 @@
     private readonly CultureInfo _culture = new("pl-PL");
     private List<YearMonthGroup> _monthGroups = [];
     private bool _drawerOpen;
+    private bool _sessionReady;
+    private bool _sessionInitializationStarted;
+
+    private string CurrentUserLabel => UserSessionService.CurrentUser?.Username ?? "Użytkownik";
+    private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
 
     private void ToggleDrawer()
     {
@@ -203,21 +240,39 @@
         => NavigationManager.ToBaseRelativePath(NavigationManager.Uri)
             .StartsWith("plan/", StringComparison.OrdinalIgnoreCase);
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         ArchiveCache.CacheChanged += HandleArchiveCacheChanged;
         NavigationManager.LocationChanged += HandleLocationChanged;
+    }
 
-        // 1. Serve from cache immediately (no DB call, no waiting).
-        if (ArchiveCache.TryGetCache(out var cached))
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _sessionInitializationStarted)
         {
-            _monthGroups = BuildMonthGroups(cached);
             return;
         }
 
-        // 2. Cache is stale — load from DB with a short timeout so we never block the layout.
+        _sessionInitializationStarted = true;
+        await EnsureUserSessionAsync();
+    }
+
+    private async Task EnsureUserSessionAsync()
+    {
         try
         {
+            var restored = await UserSessionService.TryRestoreFromCookieAsync(CancellationToken.None);
+            if (!restored)
+            {
+                await OpenUserLoginDialogAsync();
+            }
+
+            _sessionReady = UserSessionService.CurrentUser is not null;
+            if (!_sessionReady)
+            {
+                return;
+            }
+
             await LoadAndCacheMonthsAsync();
         }
         catch
@@ -226,6 +281,56 @@
             if (_monthGroups.Count == 0)
                 SetFallbackMonthGroup();
         }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenUserLoginDialogAsync()
+    {
+        while (UserSessionService.CurrentUser is null)
+        {
+            var options = new DialogOptions
+            {
+                CloseButton = false,
+                MaxWidth = MaxWidth.Small,
+                FullWidth = true
+            };
+
+            var dialog = await DialogService.ShowAsync<UserLoginDialog>("Logowanie", options);
+            var result = await dialog.Result;
+            if (result is { Canceled: false })
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task SwitchUserAsync()
+    {
+        _sessionReady = false;
+        _monthGroups = [];
+        ArchiveCache.Invalidate();
+        await InvokeAsync(StateHasChanged);
+
+        await UserSessionService.SignOutAsync();
+        await OpenUserLoginDialogAsync();
+
+        _sessionReady = UserSessionService.CurrentUser is not null;
+        if (_sessionReady)
+        {
+            await LoadAndCacheMonthsAsync();
+            NavigationManager.NavigateTo("/");
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SwitchUserFromMobileAsync()
+    {
+        CloseDrawer();
+        await SwitchUserAsync();
     }
 
     private void HandleArchiveCacheChanged()

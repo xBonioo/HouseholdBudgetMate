@@ -1,5 +1,5 @@
 Aplikacja do zarządzania budżetem - Household Budget Mate
-- self-hosted
+- hosted on my server at home (deploy na serwer)
 - działa w LAN
 - .NET 10
 - mobile przez przeglądarkę

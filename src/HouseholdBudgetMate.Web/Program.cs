@@ -184,7 +184,7 @@ try
 
     if (startupHostingOptions is not null)
     {
-        var startupMessage = $"Aplikacja uruchamia sie pod adresami: http://localhost:{startupHostingOptions.HttpPort} oraz {startupHostingOptions.HttpsUrl}";
+        var startupMessage = $"Aplikacja uruchamia sie pod adresami: {string.Join(", ", startupHostingOptions.GetStartupUrls())}";
         Console.WriteLine(startupMessage);
         app.Logger.LogInformation(startupMessage);
     }

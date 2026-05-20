@@ -1,5 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -12,29 +13,34 @@ internal sealed class StartupHostingOptions
     public required int HttpPort { get; init; }
     public required int HttpsPort { get; init; }
     public required string HttpsUrl { get; init; }
+    public required bool EnableLanAccess { get; init; }
     public required bool OpenBrowserOnStartup { get; init; }
     public required X509Certificate2 HttpsCertificate { get; init; }
+    public required IReadOnlyList<IPAddress> LanAddresses { get; init; }
 
     public static StartupHostingOptions Create(IConfiguration configuration, string appDataDirectory)
     {
         var preferredHttpPort = configuration.GetValue<int?>("WebHosting:HttpPort") ?? 5000;
         var preferredHttpsPort = configuration.GetValue<int?>("WebHosting:HttpsPort") ?? 5001;
+        var enableLanAccess = configuration.GetValue<bool?>("WebHosting:EnableLanAccess") ?? false;
         var openBrowserOnStartup = configuration.GetValue<bool?>("WebHosting:OpenBrowserOnStartup") ?? false;
+        var lanAddresses = enableLanAccess ? GetActivePrivateIpv4Addresses() : [];
 
-        var httpPort = FindAvailablePort(preferredHttpPort);
-        var httpsPort = FindAvailablePort(preferredHttpsPort, httpPort);
+        var httpPort = FindAvailablePort(preferredHttpPort, lanAddresses);
+        var httpsPort = FindAvailablePort(preferredHttpsPort, lanAddresses, httpPort);
         var certPath = Path.Combine(appDataDirectory, "certs", "localhost.pfx");
-        var certificate = LoadOrCreateCertificate(certPath);
+        var certificate = LoadOrCreateCertificate(certPath, lanAddresses);
         TryTrustCertificate(certificate);
-        
 
         return new StartupHostingOptions
         {
             HttpPort = httpPort,
             HttpsPort = httpsPort,
             HttpsUrl = $"https://localhost:{httpsPort}",
+            EnableLanAccess = enableLanAccess,
             OpenBrowserOnStartup = openBrowserOnStartup,
-            HttpsCertificate = certificate
+            HttpsCertificate = certificate,
+            LanAddresses = lanAddresses
         };
     }
 
@@ -42,6 +48,39 @@ internal sealed class StartupHostingOptions
     {
         kestrel.ListenLocalhost(HttpPort);
         kestrel.ListenLocalhost(HttpsPort, listen => listen.UseHttps(HttpsCertificate));
+
+        if (!EnableLanAccess)
+        {
+            return;
+        }
+
+        foreach (var lanAddress in LanAddresses)
+        {
+            kestrel.Listen(lanAddress, HttpPort);
+            kestrel.Listen(lanAddress, HttpsPort, listen => listen.UseHttps(HttpsCertificate));
+        }
+    }
+
+    public IReadOnlyList<string> GetStartupUrls()
+    {
+        var urls = new List<string>
+        {
+            $"http://localhost:{HttpPort}",
+            HttpsUrl
+        };
+
+        if (!EnableLanAccess)
+        {
+            return urls;
+        }
+
+        foreach (var lanAddress in LanAddresses)
+        {
+            urls.Add($"http://{lanAddress}:{HttpPort}");
+            urls.Add($"https://{lanAddress}:{HttpsPort}");
+        }
+
+        return urls;
     }
 
     public void OpenBrowserIfEnabled(ILogger logger)
@@ -65,14 +104,19 @@ internal sealed class StartupHostingOptions
         }
     }
 
-    private static bool IsPortFree(int port)
+    private static bool IsPortFree(int port, IReadOnlyCollection<IPAddress> lanAddresses)
     {
-        TcpListener? listener = null;
+        var listeners = new List<TcpListener>();
 
         try
         {
-            listener = new TcpListener(IPAddress.Loopback, port);
-            listener.Start();
+            foreach (var address in new[] { IPAddress.Loopback }.Concat(lanAddresses))
+            {
+                var listener = new TcpListener(address, port);
+                listener.Start();
+                listeners.Add(listener);
+            }
+
             return true;
         }
         catch
@@ -81,13 +125,16 @@ internal sealed class StartupHostingOptions
         }
         finally
         {
-            listener?.Stop();
+            foreach (var listener in listeners)
+            {
+                listener.Stop();
+            }
         }
     }
 
-    private static int FindAvailablePort(int preferredPort, params int[] blockedPorts)
+    private static int FindAvailablePort(int preferredPort, IReadOnlyCollection<IPAddress> lanAddresses, params int[] blockedPorts)
     {
-        if (!blockedPorts.Contains(preferredPort) && IsPortFree(preferredPort))
+        if (!blockedPorts.Contains(preferredPort) && IsPortFree(preferredPort, lanAddresses))
         {
             return preferredPort;
         }
@@ -99,7 +146,7 @@ internal sealed class StartupHostingOptions
                 continue;
             }
 
-            if (IsPortFree(port))
+            if (IsPortFree(port, lanAddresses))
             {
                 return port;
             }
@@ -112,7 +159,31 @@ internal sealed class StartupHostingOptions
         return portNumber;
     }
 
-    private static X509Certificate2 LoadOrCreateCertificate(string certificatePath)
+    private static IReadOnlyList<IPAddress> GetActivePrivateIpv4Addresses()
+    {
+        return NetworkInterface.GetAllNetworkInterfaces()
+            .Where(x => x.OperationalStatus == OperationalStatus.Up)
+            .Where(x => x.NetworkInterfaceType is not NetworkInterfaceType.Loopback and not NetworkInterfaceType.Tunnel)
+            .SelectMany(x => x.GetIPProperties().UnicastAddresses)
+            .Select(x => x.Address)
+            .Where(x => x.AddressFamily == AddressFamily.InterNetwork)
+            .Where(x => !IPAddress.IsLoopback(x))
+            .Where(IsPrivateIpv4Address)
+            .Distinct()
+            .OrderBy(x => x.ToString())
+            .ToList();
+    }
+
+    private static bool IsPrivateIpv4Address(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+
+        return bytes[0] == 10
+               || bytes[0] == 192 && bytes[1] == 168
+               || bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31;
+    }
+
+    private static X509Certificate2 LoadOrCreateCertificate(string certificatePath, IReadOnlyList<IPAddress> lanAddresses)
     {
         const string certificatePassword = "HouseholdBudgetMateLocalDev";
         const X509KeyStorageFlags keyStorageFlags = X509KeyStorageFlags.UserKeySet
@@ -127,7 +198,13 @@ internal sealed class StartupHostingOptions
         {
             try
             {
-                return X509CertificateLoader.LoadPkcs12FromFile(certificatePath, certificatePassword, keyStorageFlags);
+                var existing = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, certificatePassword, keyStorageFlags);
+                if (CertificateMatchesCurrentHostNames(existing, lanAddresses))
+                {
+                    return existing;
+                }
+
+                existing.Dispose();
             }
             catch
             {
@@ -145,8 +222,15 @@ internal sealed class StartupHostingOptions
 
         var sanBuilder = new SubjectAlternativeNameBuilder();
         sanBuilder.AddDnsName("localhost");
+        sanBuilder.AddDnsName(Environment.MachineName);
+        sanBuilder.AddDnsName($"{Environment.MachineName}.local");
         sanBuilder.AddIpAddress(IPAddress.Loopback);
         sanBuilder.AddIpAddress(IPAddress.IPv6Loopback);
+        foreach (var lanAddress in lanAddresses)
+        {
+            sanBuilder.AddIpAddress(lanAddress);
+        }
+
         request.CertificateExtensions.Add(sanBuilder.Build());
 
         using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(3));
@@ -155,7 +239,22 @@ internal sealed class StartupHostingOptions
 
         return X509CertificateLoader.LoadPkcs12(pfxBytes, certificatePassword, keyStorageFlags);
     }
-    
+
+    private static bool CertificateMatchesCurrentHostNames(X509Certificate2 certificate, IReadOnlyList<IPAddress> lanAddresses)
+    {
+        var subjectAlternativeName = certificate.Extensions
+            .FirstOrDefault(x => x.Oid?.Value == "2.5.29.17")
+            ?.Format(multiLine: false);
+
+        if (string.IsNullOrWhiteSpace(subjectAlternativeName)
+            || !subjectAlternativeName.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return lanAddresses.All(address => subjectAlternativeName.Contains(address.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
+
     private static void TryTrustCertificate(X509Certificate2 certificate)
     {
         try

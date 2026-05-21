@@ -1,0 +1,17 @@
+.git
+.github
+.agents
+context
+docs
+files
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/*.user
+**/*.suo
+**/TestResults
+Dockerfile
+docker-compose.yml
+render.yaml
+README.md

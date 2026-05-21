@@ -1,0 +1,33 @@
+services:
+  - type: web
+    runtime: docker
+    name: household-budget-mate-web
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: HOUSEHOLDBUDGETMATE_CONTAINER
+        value: "true"
+      - key: HOUSEHOLDBUDGETMATE_DATA_DIR
+        value: /var/lib/householdbudgetmate
+      - key: Application__MigrateDatabaseOnStart
+        value: "true"
+      - key: Application__SeedDataToDatabase
+        value: "false"
+      - key: WebHosting__EnableLanAccess
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: household-budget-mate-db
+          property: connectionString
+
+databases:
+  - name: household-budget-mate-db
+    region: frankfurt
+    plan: free
+    databaseName: household_budget_mate
+    user: household_budget_mate

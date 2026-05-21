@@ -6,6 +6,7 @@ internal static class WritableAppDataPathResolver
     {
         var candidateRoots = new[]
         {
+            Environment.GetEnvironmentVariable("HOUSEHOLDBUDGETMATE_DATA_DIR"),
             Environment.GetEnvironmentVariable("LOCALAPPDATA"),
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),

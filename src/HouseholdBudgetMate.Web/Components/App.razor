@@ -20,8 +20,6 @@
 <body>
 <Routes @rendermode="InteractiveServer"/>
 <ReconnectModal/>
-<script src="@Assets["_framework/blazor.web.js"]"></script>
-<script src="_content/MudBlazor/MudBlazor.min.js"></script>
 <script>
     window.householdBudgetMate = window.householdBudgetMate || {};
     window.householdBudgetMate.cookies = {
@@ -56,6 +54,8 @@
         document.body.removeChild(link);
     };
 </script>
+<script src="@Assets["_framework/blazor.web.js"]"></script>
+<script src="_content/MudBlazor/MudBlazor.min.js"></script>
 </body>
 
 </html>

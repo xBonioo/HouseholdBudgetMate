@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.FileProviders;
@@ -20,6 +21,7 @@ using Microsoft.AspNetCore.Localization;
 using MudBlazor.Services;
 
 var executableDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+var applicationBaseDirectory = AppContext.BaseDirectory;
 var appDataDirectory = WritableAppDataPathResolver.Resolve("HouseholdBudgetMate");
 
 var processName = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
@@ -31,6 +33,11 @@ var isPublishedExecutable = string.Equals(processName, "HouseholdBudgetMate.Web"
 
 var hasExplicitUrls = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
                       || args.Any(arg => arg.StartsWith("--urls", StringComparison.OrdinalIgnoreCase));
+var isContainerOrCloud = IsEnabled(Environment.GetEnvironmentVariable("HOUSEHOLDBUDGETMATE_CONTAINER"))
+                         || IsEnabled(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"))
+                         || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("RENDER"))
+                         || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PORT"));
+var containerListenUrl = ResolveContainerListenUrl(hasExplicitUrls);
 
 var legacyConfigPath = Path.Combine(executableDirectory, "config.json");
 var appDataConfigPath = Path.Combine(appDataDirectory, "config.json");
@@ -41,11 +48,18 @@ if (!File.Exists(appDataConfigPath) && File.Exists(legacyConfigPath) && isPublis
     File.Copy(legacyConfigPath, appDataConfigPath, overwrite: false);
 }
 
-var builderOptions = isPublishedExecutable
+var isPublishedRuntime = isPublishedExecutable || isContainerOrCloud;
+var contentRootPath = isPublishedExecutable
+    ? executableDirectory
+    : isContainerOrCloud
+        ? applicationBaseDirectory
+        : null;
+
+var builderOptions = isPublishedRuntime
     ? new WebApplicationOptions
     {
         Args = args,
-        ContentRootPath = executableDirectory
+        ContentRootPath = contentRootPath
     }
     : new WebApplicationOptions
     {
@@ -55,7 +69,11 @@ var builderOptions = isPublishedExecutable
 var builder = WebApplication.CreateBuilder(builderOptions);
 StartupHostingOptions? startupHostingOptions = null;
 
-if (isPublishedExecutable && !hasExplicitUrls)
+if (!string.IsNullOrWhiteSpace(containerListenUrl))
+{
+    builder.WebHost.UseUrls(containerListenUrl);
+}
+else if (isPublishedExecutable && !hasExplicitUrls)
 {
     startupHostingOptions = StartupHostingOptions.Create(builder.Configuration, appDataDirectory);
     builder.WebHost.ConfigureKestrel(startupHostingOptions.ConfigureKestrel);
@@ -64,24 +82,27 @@ if (isPublishedExecutable && !hasExplicitUrls)
 var runtimeConfigurationState = new RuntimeConfigurationState(appDataDirectory);
 builder.Services.AddSingleton(runtimeConfigurationState);
 
-var runtimeConnectionString = runtimeConfigurationState.GetDatabaseConfiguration()?.ToConnectionString();
-var fallbackConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-var connectionString = isPublishedExecutable
-    ? runtimeConnectionString
-    : fallbackConnectionString;
-
-if (string.IsNullOrWhiteSpace(connectionString))
-{
-    // Placeholder enables DI graph startup for /setup when no config exists.
-    connectionString = "Host=localhost;Port=5432;Database=placeholder;Username=placeholder;Password=placeholder";
-}
+var environmentConnectionString = PostgreSqlConnectionStringResolver.Resolve(builder.Configuration);
+var usesRuntimeSetup = isPublishedExecutable
+                       || isContainerOrCloud && string.IsNullOrWhiteSpace(environmentConnectionString);
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(
     (serviceProvider, options) =>
     {
+        var runtimeConfig = serviceProvider.GetRequiredService<RuntimeConfigurationState>();
+        var dbConnectionString = !string.IsNullOrWhiteSpace(environmentConnectionString)
+            ? environmentConnectionString
+            : runtimeConfig.GetDatabaseConfiguration()?.ToConnectionString();
+
+        if (string.IsNullOrWhiteSpace(dbConnectionString))
+        {
+            // Placeholder enables DI graph startup for /setup when no config exists.
+            dbConnectionString = "Host=localhost;Port=5432;Database=placeholder;Username=placeholder;Password=placeholder";
+        }
+
         options.ConfigureWarnings(w => w.Ignore(RelationalEventId.MultipleCollectionIncludeWarning));
         options.UseNpgsql(
-            connectionString,
+            dbConnectionString,
             npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsAssembly("HouseholdBudgetMate.Migrations");
@@ -128,6 +149,12 @@ builder.Services.AddLocalization();
 builder.Services.AddMudServices();
 
 builder.Services.AddControllers();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddSingleton<IStoragePathProvider, WebStoragePathProvider>();
 builder.Services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
@@ -156,17 +183,43 @@ builder.Services.AddSingleton(applicationConfig);
 // builder.WebHost.UseUrls("https://0.0.0.0:5001");
 // builder.WebHost.UseUrls("http://0.0.0.0:5000");
 
+static string? ResolveContainerListenUrl(bool hasExplicitUrls)
+{
+    if (hasExplicitUrls)
+    {
+        return null;
+    }
+
+    var portValue = Environment.GetEnvironmentVariable("PORT");
+    if (!int.TryParse(portValue, CultureInfo.InvariantCulture, out var port) || port <= 0)
+    {
+        return null;
+    }
+
+    return $"http://0.0.0.0:{port}";
+}
+
+static bool IsEnabled(string? value)
+{
+    return bool.TryParse(value, out var enabled) && enabled;
+}
+
 try
 {
     var app = builder.Build();
+
+    if (isContainerOrCloud)
+    {
+        app.UseForwardedHeaders();
+    }
 
     app.UseSerilogRequestLoggingWithThreshold();
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     
-    // Setup redirect is only needed in published (installed) mode.
-    // In development the connection is configured via appsettings.Development.json.
-    if (isPublishedExecutable)
+    // Setup redirect is needed for installed/local-container mode when no DB env var is configured.
+    // Render provides DATABASE_URL, so it skips setup and migrates automatically.
+    if (usesRuntimeSetup)
     {
         app.UseMiddleware<SetupRedirectMiddleware>();
     }
@@ -180,7 +233,10 @@ try
     }
 
     //app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-    app.UseHttpsRedirection();
+    if (!isContainerOrCloud)
+    {
+        app.UseHttpsRedirection();
+    }
 
     if (startupHostingOptions is not null)
     {
@@ -189,36 +245,23 @@ try
         app.Logger.LogInformation(startupMessage);
     }
 
-    if (app.Environment.IsDevelopment() && applicationConfig.MigrateDatabaseOnStart)
+    var hasEnvironmentConnectionString = !string.IsNullOrWhiteSpace(environmentConnectionString);
+    var shouldMigrateDatabase = applicationConfig.MigrateDatabaseOnStart
+                                && (app.Environment.IsDevelopment()
+                                    || hasEnvironmentConnectionString
+                                    || isPublishedExecutable && runtimeConfigurationState.IsConfigured);
+
+    if (shouldMigrateDatabase)
     {
         using var scope = app.Services.CreateScope();
 
         var dbContextFactory = scope.ServiceProvider
             .GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
 
-        await using var dbContext = dbContextFactory.CreateDbContext();
-
         try
         {
-            dbContext.Database.Migrate();
-        }
-        catch (Exception ex)
-        {
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-            logger.LogCritical(ex, "Database migration failed on startup");
-            throw;
-        }
-    }
-    
-    if (isPublishedExecutable && runtimeConfigurationState.IsConfigured && applicationConfig.MigrateDatabaseOnStart)
-    {
-        using var scope = app.Services.CreateScope();
-        
-        var migrationOrchestrator = scope.ServiceProvider.GetRequiredService<IDatabaseMigrationOrchestrator>();
-
-        try
-        {
-            await migrationOrchestrator.MigrateConfiguredDatabaseAsync(CancellationToken.None);
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await dbContext.Database.MigrateAsync();
         }
         catch (Exception ex)
         {
@@ -230,11 +273,10 @@ try
 
     using (var seedScope = app.Services.CreateScope())
     {
-        // In published mode: seed only when the runtime config.json is present.
-        // In dev mode: always attempt seeding (EnsureCurrentMonthPlanAsync has CanConnect protection).
-        var shouldSeed = isPublishedExecutable
-            ? runtimeConfigurationState.IsConfigured && applicationConfig.SeedDataToDatabase
-            : applicationConfig.SeedDataToDatabase;
+        // Env-configured containers do not use /setup, so ensure the root user and current month exist.
+        var shouldSeed = applicationConfig.SeedDataToDatabase
+                         || hasEnvironmentConnectionString
+                         || isPublishedExecutable && runtimeConfigurationState.IsConfigured;
 
         if (shouldSeed)
         {

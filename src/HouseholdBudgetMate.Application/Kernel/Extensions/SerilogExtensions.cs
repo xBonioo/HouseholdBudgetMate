@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using HouseholdBudgetMate.Application.Kernel.Configurations;
 using NpgsqlTypes;
 using Serilog;
 using Serilog.Events;
@@ -20,7 +21,7 @@ public static class SerilogExtensions
         builder.Logging.ClearProviders();
         builder.Logging.SetMinimumLevel(LogLevel.Trace);
 
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        var connectionString = PostgreSqlConnectionStringResolver.Resolve(builder.Configuration);
 
         _applicationType = builder.Configuration["Serilog:Properties:ApplicationType"] ?? "Unknown";
 

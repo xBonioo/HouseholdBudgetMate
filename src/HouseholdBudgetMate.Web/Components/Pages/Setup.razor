@@ -1,5 +1,6 @@
 @page "/setup"
 @layout SetupLayout
+@using Microsoft.AspNetCore.Components.Forms
 @using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Web.Setup
 @using MudBlazor
@@ -14,9 +15,11 @@
         Uzupełnij dane połączenia z PostgreSQL. Plik config.json zostanie zapisany w @RuntimeConfigurationState.ConfigFilePath.
     </MudText>
 
-    <EditForm Model="_model" OnValidSubmit="SaveAsync">
+    <EditForm EditContext="_editContext">
         <DataAnnotationsValidator/>
+    </EditForm>
 
+    <ActionForm OnSubmit="SaveAsync">
         <MudStack Spacing="2">
             <MudTextField T="string" Label="Host" @bind-Value="_model.Host" For="@(() => _model.Host)" Required="true"/>
             <MudNumericField T="int" Label="Port" @bind-Value="_model.Port" For="@(() => _model.Port)" Min="1" Max="65535" Required="true"/>
@@ -27,7 +30,7 @@
             <MudText Typo="Typo.subtitle2">Pierwszy użytkownik aplikacji</MudText>
             <MudTextField T="string" Label="Nazwa użytkownika" @bind-Value="_model.AppUsername" For="@(() => _model.AppUsername)" Required="true"/>
             <PinKeypadInput Label="PIN do aplikacji" @bind-Value="_model.AppPin" For="@(() => _model.AppPin)" Required="true"/>
-            <MudSwitch T="bool" Value="IsSharedBudgetMode" ValueChanged="SetSharedBudgetMode" Color="Color.Primary" Label="Wspólny budżet domowy"/>
+            <MudSwitch T="bool" Value="IsSharedBudgetMode" ValueChanged="SetSharedBudgetMode" Color="Color.Primary" Label="Budżet wspólny"/>
             <MudTextField T="string"
                           Label="Udostępnij użytkownikom"
                           @bind-Value="_model.SharedWithUserIds"
@@ -42,7 +45,7 @@
                 @(_isSaving ? "Łączenie i migracja..." : "Zapisz i uruchom")
             </MudButton>
         </MudStack>
-    </EditForm>
+    </ActionForm>
 
     <MudDivider Class="my-4"/>
     <MudText Typo="Typo.caption">Ścieżka pliku konfiguracji: @RuntimeConfigurationState.ConfigFilePath</MudText>
@@ -80,6 +83,7 @@
 
 @code {
     private readonly SetupInputModel _model = new();
+    private EditContext _editContext = null!;
     private bool _isSaving;
     private string? _errorMessage;
 
@@ -87,6 +91,8 @@
 
     protected override void OnInitialized()
     {
+        _editContext = new EditContext(_model);
+
         if (RuntimeConfigurationState.IsConfigured)
         {
             NavigationManager.NavigateTo("/", forceLoad: true);
@@ -95,6 +101,11 @@
 
     private async Task SaveAsync()
     {
+        if (!_editContext.Validate())
+        {
+            return;
+        }
+
         _isSaving = true;
         _errorMessage = null;
 

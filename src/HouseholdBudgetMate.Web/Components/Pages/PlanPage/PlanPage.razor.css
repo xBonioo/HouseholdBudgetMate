@@ -322,6 +322,32 @@
 	background: #fcfeff;
 }
 
+.line-item-editor-cell {
+	background: #f7fbff !important;
+	padding: 10px !important;
+}
+
+.line-item-edit-grid {
+	display: grid;
+	grid-template-columns: minmax(180px, 1.5fr) minmax(120px, 0.7fr) minmax(150px, 0.8fr) minmax(160px, 1fr) auto;
+	gap: 10px;
+	align-items: start;
+	min-width: 0;
+}
+
+.line-item-edit-grid > * {
+	min-width: 0;
+}
+
+.line-item-edit-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	padding-top: 6px;
+	white-space: nowrap;
+}
+
 .income-actions-wrap {
 	display: flex;
 	flex-wrap: nowrap;
@@ -529,6 +555,15 @@
 
 	.expense-form-grid {
 		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.line-item-edit-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.line-item-edit-actions {
+		justify-content: flex-start;
+		padding-top: 0;
 	}
 
 	.expense-form-footer {

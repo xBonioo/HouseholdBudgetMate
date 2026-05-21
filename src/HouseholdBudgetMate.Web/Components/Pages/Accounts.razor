@@ -114,13 +114,6 @@
                             @GetMonthLabel(month)
                         </MudChip>
                     }
-                    @if (TryGetNextMonthCandidate() is { } nextMonth)
-                    {
-                        <MudChip T="int" Variant="Variant.Outlined" Color="Color.Secondary"
-                                 OnClick="() => AddNextMonthToSelection(nextMonth)">
-                            + @GetMonthLabel(nextMonth)
-                        </MudChip>
-                    }
                 </MudStack>
             </MudStack>
         </MudStack>
@@ -298,10 +291,16 @@
 
             var availablePlanMonths = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
             _availablePlanMonths = availablePlanMonths;
-            _availableYears = availablePlanMonths
+            var knownYears = availablePlanMonths
                 .Select(x => x.Year)
                 .Concat(_accounts.SelectMany(x => x.MonthBalances).Select(x => x.Year))
+                .Append(DateTimeProvider.GetLocalDateOnly().Year)
                 .Distinct()
+                .ToList();
+
+            var minYear = knownYears.Min() - 1;
+            var maxYear = knownYears.Max() + 1;
+            _availableYears = Enumerable.Range(minYear, maxYear - minYear + 1)
                 .OrderByDescending(x => x)
                 .ToList();
 
@@ -613,41 +612,7 @@
 
     private void SyncAvailableMonthsForSelectedYear()
     {
-        _availableMonthsForSelectedYear = _accounts
-            .SelectMany(x => x.MonthBalances)
-            .Where(x => x.Year == _selectedYear)
-            .Select(x => x.Month)
-            .Distinct()
-            .OrderBy(x => x)
-            .ToList();
-
-        if (_availableMonthsForSelectedYear.Count > 0 && !_availableMonthsForSelectedYear.Contains(_selectedMonth))
-        {
-            _selectedMonth = _availableMonthsForSelectedYear[0];
-        }
-    }
-
-    private int? TryGetNextMonthCandidate()
-    {
-        if (_availableMonthsForSelectedYear.Count == 0)
-        {
-            return 1;
-        }
-
-        var maxMonth = _availableMonthsForSelectedYear.Max();
-        return maxMonth < 12 ? maxMonth + 1 : null;
-    }
-
-    private void AddNextMonthToSelection(int month)
-    {
-        if (!_availableMonthsForSelectedYear.Contains(month))
-        {
-            _availableMonthsForSelectedYear.Add(month);
-            _availableMonthsForSelectedYear = _availableMonthsForSelectedYear.OrderBy(x => x).ToList();
-        }
-
-        _selectedMonth = month;
-        SyncSelectedMonthAmounts();
+        _availableMonthsForSelectedYear = Enumerable.Range(1, 12).ToList();
     }
 
     private string GetMonthLabel(int month)

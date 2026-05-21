@@ -691,58 +691,60 @@ else
                             <RowTemplate Context="lineItem">
                                 @if (_editLineItem is not null && _editLineItem.Id == lineItem.Id)
                                 {
-                                    <ActionForm OnSubmit="SaveLineItemEditAsync">
-                                    <MudTd>
-                                        <MudTextField
-                                            @bind-Value="_editLineItem.Description"
-                                            Variant="Variant.Outlined"
-                                            Margin="Margin.Dense"/>
+                                    <MudTd colspan="5" Class="line-item-editor-cell">
+                                        <ActionForm OnSubmit="SaveLineItemEditAsync">
+                                            <div class="line-item-edit-grid">
+                                                <MudTextField
+                                                    @bind-Value="_editLineItem.Description"
+                                                    Label="Opis"
+                                                    Variant="Variant.Outlined"
+                                                    Margin="Margin.Dense"/>
+                                                <MudTextField T="string"
+                                                              Value="_editLineItemAmountInput"
+                                                              ValueChanged="SetEditLineItemAmountInputAsync"
+                                                              Label="Kwota"
+                                                              Variant="Variant.Outlined"
+                                                              Margin="Margin.Dense"/>
+                                                <MudDatePicker
+                                                    Date="@_editLineItemDate.ToDateTime(TimeOnly.MinValue)"
+                                                    DateChanged="(date) => UpdateDateIfProvided(date, value => _editLineItemDate = value, false)"
+                                                    Label="Data"
+                                                    Variant="Variant.Outlined"
+                                                    Margin="Margin.Dense"/>
+                                                <MudSelect T="int?"
+                                                           @bind-Value="_editLineItem.TagId"
+                                                           Label="Tag"
+                                                           Variant="Variant.Outlined"
+                                                           Clearable="true"
+                                                           Margin="Margin.Dense"
+                                                           ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
+                                                    @foreach (var tag in GetSelectableLineItemTags(
+                                                                  _editLineItemExpenseId == expense.Id ? expense.CategoryId : 0,
+                                                                  _editLineItemExpenseId == expense.Id ? expense.TagId : null,
+                                                                  _editLineItem.TagId))
+                                                    {
+                                                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                                                    }
+                                                </MudSelect>
+                                                <div class="line-item-edit-actions">
+                                                    <MudButton
+                                                        Variant="Variant.Filled"
+                                                        Color="Color.Primary"
+                                                        Size="Size.Small"
+                                                        ButtonType="ButtonType.Submit">
+                                                        Zapisz
+                                                    </MudButton>
+                                                    <MudButton
+                                                        Variant="Variant.Text"
+                                                        Size="Size.Small"
+                                                        ButtonType="ButtonType.Button"
+                                                        OnClick="CancelLineItemEdit">
+                                                        Anuluj
+                                                    </MudButton>
+                                                </div>
+                                            </div>
+                                        </ActionForm>
                                     </MudTd>
-                                    <MudTd>
-                                        <MudTextField T="string"
-                                                      Value="_editLineItemAmountInput"
-                                                      ValueChanged="SetEditLineItemAmountInputAsync"
-                                                      Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense"/>
-                                    </MudTd>
-                                    <MudTd>
-                                        <MudDatePicker
-                                            Date="@_editLineItemDate.ToDateTime(TimeOnly.MinValue)"
-                                            DateChanged="(date) => UpdateDateIfProvided(date, value => _editLineItemDate = value, false)" Margin="Margin.Dense"/>
-                                    </MudTd>
-                                    <MudTd>
-                                        <MudSelect T="int?"
-                                                   @bind-Value="_editLineItem.TagId"
-                                                   Variant="Variant.Outlined"
-                                                   Clearable="true"
-                                                   Margin="Margin.Dense"
-                                                   ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
-                                            @foreach (var tag in GetSelectableLineItemTags(
-                                                          _editLineItemExpenseId == expense.Id ? expense.CategoryId : 0,
-                                                          _editLineItemExpenseId == expense.Id ? expense.TagId : null,
-                                                          _editLineItem.TagId))
-                                            {
-                                                <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
-                                            }
-                                        </MudSelect>
-                                    </MudTd>
-                                    <MudTd>
-                                        <MudButton
-                                            Variant="Variant.Filled"
-                                            Color="Color.Primary"
-                                            Size="Size.Small"
-                                            ButtonType="ButtonType.Submit">
-                                            Zapisz
-                                        </MudButton>
-                                        <MudButton
-                                            Variant="Variant.Text"
-                                            Size="Size.Small"
-                                            ButtonType="ButtonType.Button"
-                                            OnClick="CancelLineItemEdit">
-                                            Anuluj
-                                        </MudButton>
-                                    </MudTd>
-                                    </ActionForm>
                                 }
                                 else
                                 {

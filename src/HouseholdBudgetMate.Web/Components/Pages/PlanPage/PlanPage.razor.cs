@@ -120,6 +120,7 @@ public partial class PlanPage : ComponentBase
     #region UI - Income Panel
 
     private bool _isIncomePanelExpanded;
+    private bool _isDesktopIncomePanelMode = true;
     private bool _isIncomePanelToggleVisible = true;
 
     private double _incomePanelExpandedWidthPx;

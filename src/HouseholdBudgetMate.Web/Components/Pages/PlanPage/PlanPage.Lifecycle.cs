@@ -93,12 +93,19 @@ public partial class PlanPage : IAsyncDisposable
     [JSInvokable]
     public Task SetIncomePanelToggleVisibilityAsync(bool isVisible)
     {
-        if (_isIncomePanelToggleVisible == isVisible)
+        if (_isIncomePanelToggleVisible == isVisible && _isDesktopIncomePanelMode == isVisible)
         {
             return Task.CompletedTask;
         }
 
+        _isDesktopIncomePanelMode = isVisible;
         _isIncomePanelToggleVisible = isVisible;
+
+        // Resizing across the desktop/mobile breakpoint should reset the panel
+        // so we never carry horizontal overlay state into mobile accordion mode.
+        _isIncomePanelExpanded = false;
+        _incomePanelExpandedWidthPx = 0;
+
         return InvokeAsync(StateHasChanged);
     }
 

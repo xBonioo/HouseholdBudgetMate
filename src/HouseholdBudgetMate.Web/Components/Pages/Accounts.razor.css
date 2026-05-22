@@ -4,6 +4,16 @@
     gap: 0;
 }
 
+.accounts-drag ::deep .month-balance-add-button {
+    min-height: 32px;
+    border-style: dashed;
+    text-transform: none;
+}
+
+.accounts-drag ::deep .month-balance-add-button .mud-button-label {
+    text-transform: none;
+}
+
 @media (max-width: 960px) {
     .accounts-drag ::deep .account-order-cell,
     .accounts-drag ::deep .manual-order-action {

@@ -7,6 +7,13 @@ namespace HouseholdBudgetMate.Web.Components.Pages.PlanPage;
 
 public partial class PlanPage
 {
+    private Task ToggleIncomePanelMobileAsync()
+    {
+        _isIncomePanelExpanded = !_isIncomePanelExpanded;
+        _incomePanelExpandedWidthPx = 0;
+        return Task.CompletedTask;
+    }
+
     private async Task ToggleIncomePanelExpandedAsync()
     {
         if (_isIncomePanelExpanded)
@@ -17,6 +24,14 @@ public partial class PlanPage
         }
 
         _isIncomePanelExpanded = true;
+
+        if (!_isDesktopIncomePanelMode)
+        {
+            _incomePanelExpandedWidthPx = 0;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         await InvokeAsync(StateHasChanged);
 
         var geometry = await JsRuntime.InvokeAsync<double[]>(
@@ -51,7 +66,7 @@ public partial class PlanPage
 
     private string GetIncomePanelStyle()
     {
-        if (!_isIncomePanelExpanded || _incomePanelExpandedWidthPx <= 0)
+        if (!_isDesktopIncomePanelMode || !_isIncomePanelExpanded || _incomePanelExpandedWidthPx <= 0)
         {
             return string.Empty;
         }
@@ -61,7 +76,7 @@ public partial class PlanPage
 
     private string GetPlanDashboardGridClass()
     {
-        return _isIncomePanelExpanded
+        return _isDesktopIncomePanelMode && _isIncomePanelExpanded
             ? "plan-dashboard-grid income-overlay-active"
             : "plan-dashboard-grid";
     }

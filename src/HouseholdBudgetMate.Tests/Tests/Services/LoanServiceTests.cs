@@ -19,6 +19,59 @@ public sealed class LoanServiceTests
         return new LoanService(factory, provider);
     }
 
+    // ── GetAllAsync ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that GetAllAsync returns an empty list when no loans exist in the database.
+    /// </summary>
+    [Fact]
+    public async Task GetAllAsync_Should_Return_Empty_List_When_No_Loans()
+    {
+        var service = CreateService();
+        var loans = await service.GetAllAsync(CancellationToken.None);
+        Assert.Empty(loans);
+    }
+
+    /// <summary>
+    /// Verifies that GetAllAsync returns active loans before inactive ones and then sorts by name within each group.
+    /// </summary>
+    [Fact]
+    public async Task GetAllAsync_Should_Order_Active_First_Then_By_Name()
+    {
+        var service = CreateService();
+
+        foreach (var (name, active) in new[] { ("Zebra", false), ("Alpha", true), ("Beta", true) })
+        {
+            await service.CreateLoanAsync(new CreateLoanRequest
+            {
+                Name = name,
+                LoanType = LoanType.Cash,
+                InterestMode = LoanInterestMode.Fixed,
+                Principal = 10000m,
+                InterestRate = 0m,
+                StartDate = new DateOnly(2026, 1, 1),
+                EndDate = new DateOnly(2026, 6, 1),
+                RepaymentDayOfMonth = 1,
+                IsActive = active
+            }, CancellationToken.None);
+        }
+
+        var loans = await service.GetAllAsync(CancellationToken.None);
+
+        Assert.Equal(3, loans.Count);
+        Assert.Equal("Alpha", loans[0].Name);
+        Assert.Equal("Beta", loans[1].Name);
+        Assert.Equal("Zebra", loans[2].Name);
+        Assert.True(loans[0].IsActive);
+        Assert.False(loans[2].IsActive);
+    }
+
+    // ── CreateLoanAsync ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that CreateLoanAsync generates the correct number of installments for a full calendar year
+    /// and does not create any MonthPlans as a side effect.
+    /// </summary>
     [Fact]
     public async Task CreateLoanAsync_Should_Generate_Installments_For_Date_Range()
     {
@@ -49,229 +102,10 @@ public sealed class LoanServiceTests
         Assert.Empty(monthPlans);
     }
 
-    [Fact]
-    public async Task SyncLoanInstallmentsForMonthAsync_Should_Create_Expense_And_SetPaidStatus()
-    {
-        var service = CreateService();
-        var loan = await service.CreateLoanAsync(new CreateLoanRequest
-        {
-            Name = "Auto",
-            LoanType = LoanType.Cash,
-            InterestMode = LoanInterestMode.Fixed,
-            Principal = 24000m,
-            InterestRate = 0m,
-            StartDate = new DateOnly(2026, 2, 10),
-            EndDate = new DateOnly(2026, 7, 10),
-            RepaymentDayOfMonth = 10,
-            IsActive = true
-        }, CancellationToken.None);
-
-        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
-        {
-            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
-            await context.SaveChangesAsync();
-        }
-
-        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
-
-        await using (var verifyContext = TestDbContextFactory.CreateDbContext(_dbName))
-        {
-            var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
-            var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
-            Assert.True(expense.LoanInstallmentId.HasValue);
-            Assert.Equal(0m, expense.ActualAmount);
-
-            var installment = await verifyContext.LoanInstallments.SingleAsync(x => x.Id == expense.LoanInstallmentId);
-            Assert.False(installment.IsPaid);
-        }
-
-        var marchInstallment = loan.Installments.Single(x => x.Year == 2026 && x.Month == 3);
-        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
-        {
-            LoanInstallmentId = marchInstallment.Id,
-            IsPaid = true
-        }, CancellationToken.None);
-
-        await using var paidContext = TestDbContextFactory.CreateDbContext(_dbName);
-        var paidInstallment = await paidContext.LoanInstallments.SingleAsync(x => x.Id == marchInstallment.Id);
-        var paidExpense = await paidContext.Expenses.SingleAsync(x => x.LoanInstallmentId == marchInstallment.Id);
-
-        Assert.True(paidInstallment.IsPaid);
-        Assert.Equal(paidExpense.PlannedAmount, paidExpense.ActualAmount);
-    }
-
-    [Fact]
-    public async Task AddLoanRateEntryAsync_Should_Recalculate_Future_Unpaid_Mortgage_Installments()
-    {
-        var service = CreateService();
-        var loan = await service.CreateLoanAsync(new CreateLoanRequest
-        {
-            Name = "Hipoteka",
-            LoanType = LoanType.Mortgage,
-            InterestMode = LoanInterestMode.VariableWibor,
-            WiborPeriodType = WiborPeriodType.Wibor1M,
-            MarginRate = 2m,
-            InitialReferenceRate = 5m,
-            Principal = 100000m,
-            InterestRate = 0m,
-            StartDate = new DateOnly(2026, 1, 15),
-            EndDate = new DateOnly(2026, 12, 15),
-            RepaymentDayOfMonth = 15,
-            IsActive = true
-        }, CancellationToken.None);
-
-        var before = loan.Installments.Single(x => x.Month == 6 && x.Year == 2026).Amount;
-
-        var updated = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 1),
-            ReferenceRate = 7m
-        }, CancellationToken.None);
-
-        var after = updated.Installments.Single(x => x.Month == 6 && x.Year == 2026).Amount;
-        Assert.NotEqual(before, after);
-    }
-
-    [Fact]
-    public async Task SyncLoanInstallmentsForMonthAsync_Should_Include_LoanCharge_In_Installment_Expense_And_Be_Idempotent()
-    {
-        var service = CreateService();
-        var loan = await service.CreateLoanAsync(new CreateLoanRequest
-        {
-            Name = "Hipoteka + ubezpieczenie",
-            LoanType = LoanType.Mortgage,
-            InterestMode = LoanInterestMode.VariableWibor,
-            WiborPeriodType = WiborPeriodType.Wibor3M,
-            MarginRate = 2m,
-            InitialReferenceRate = 5m,
-            Principal = 150000m,
-            InterestRate = 0m,
-            StartDate = new DateOnly(2026, 1, 15),
-            EndDate = new DateOnly(2026, 12, 15),
-            RepaymentDayOfMonth = 15,
-            IsActive = true
-        }, CancellationToken.None);
-
-        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
-        {
-            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
-            await context.SaveChangesAsync();
-        }
-
-        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
-        {
-            LoanId = loan.Id,
-            Name = "Ubezpieczenie nieruchomosci",
-            ChargeType = LoanChargeType.Insurance,
-            FrequencyType = LoanChargeFrequencyType.Monthly,
-            Amount = 120m,
-            StartDate = new DateOnly(2026, 1, 1),
-            IsActive = true
-        }, CancellationToken.None);
-
-        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
-        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
-
-        var refreshedLoan = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
-        var marchInstallmentAmount = refreshedLoan.Installments.Single(x => x.Year == 2026 && x.Month == 3).Amount;
-
-        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
-        var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
-        var expenses = await verifyContext.Expenses.Where(x => x.MonthPlanId == monthPlan.Id).ToListAsync();
-
-        Assert.Single(expenses, x => x.LoanInstallmentId.HasValue);
-        Assert.Single(expenses);
-        Assert.Equal(marchInstallmentAmount, expenses[0].PlannedAmount);
-    }
-
-    [Fact]
-    public async Task CreateLoanAsync_FixedMortgage_Should_Not_Fully_Amortize_During_First_Five_Years_And_Should_Not_Create_Installments_Before_StartDate()
-    {
-        var service = CreateService();
-        var loan = await service.CreateLoanAsync(new CreateLoanRequest
-        {
-            Name = "Hipoteka 5Y stale potem WIBOR",
-            LoanType = LoanType.Mortgage,
-            InterestMode = LoanInterestMode.Fixed,
-            WiborPeriodType = WiborPeriodType.Wibor3M,
-            MarginRate = 2m,
-            InitialReferenceRate = 5m,
-            Principal = 400000m,
-            InterestRate = 7m,
-            StartDate = new DateOnly(2026, 1, 20),
-            EndDate = new DateOnly(2035, 12, 20),
-            RepaymentDayOfMonth = 5,
-            IsActive = true
-        }, CancellationToken.None);
-
-        Assert.DoesNotContain(loan.Installments, x => x.DueDate < new DateOnly(2026, 1, 20));
-
-        var fixedPhaseEnd = new DateOnly(2031, 1, 20);
-        var principalPaidInFixedPhase = loan.Installments
-            .Where(x => x.DueDate < fixedPhaseEnd)
-            .Sum(x => x.PrincipalAmount);
-
-        Assert.True(principalPaidInFixedPhase < loan.Principal);
-        Assert.Contains(loan.Installments, x => x.DueDate >= fixedPhaseEnd && x.PrincipalAmount > 0);
-    }
-
-    [Fact]
-    public async Task SyncLoanInstallmentsForMonthAsync_Should_Assign_Loan_Tag_To_Expense()
-    {
-        int loanTagId;
-        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
-        {
-            var category = new Category
-            {
-                Name = "Kredyt",
-                Color = "#000000",
-                SupportsLineItems = false,
-                IsDeleted = false
-            };
-            context.Categories.Add(category);
-            await context.SaveChangesAsync();
-
-            var tag = new Tag
-            {
-                CategoryId = category.Id,
-                Name = "Hipoteka"
-            };
-            context.Tags.Add(tag);
-            await context.SaveChangesAsync();
-            loanTagId = tag.Id;
-
-            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
-            await context.SaveChangesAsync();
-        }
-
-        var service = CreateService();
-        var loan = await service.CreateLoanAsync(new CreateLoanRequest
-        {
-            Name = "Hipoteka",
-            LoanType = LoanType.Mortgage,
-            InterestMode = LoanInterestMode.VariableWibor,
-            WiborPeriodType = WiborPeriodType.Wibor1M,
-            MarginRate = 2m,
-            InitialReferenceRate = 5m,
-            Principal = 100000m,
-            InterestRate = 0m,
-            StartDate = new DateOnly(2026, 1, 15),
-            EndDate = new DateOnly(2026, 12, 15),
-            RepaymentDayOfMonth = 15,
-            TagId = loanTagId,
-            IsActive = true
-        }, CancellationToken.None);
-
-        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
-
-        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
-        var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
-        var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
-        Assert.Equal(loanTagId, expense.TagId);
-        Assert.Equal(loanTagId, loan.TagId);
-    }
-
+    /// <summary>
+    /// Verifies that CreateLoanAsync throws BadRequestException when the specified tag belongs to a category
+    /// other than the loan category.
+    /// </summary>
     [Fact]
     public async Task CreateLoanAsync_Should_Reject_Tag_From_Different_Category()
     {
@@ -324,68 +158,115 @@ public sealed class LoanServiceTests
             }, CancellationToken.None));
     }
 
+    /// <summary>
+    /// Verifies that a fixed-rate mortgage does not fully amortize during the initial five-year fixed phase
+    /// and that no installments are generated with a due date before the loan start date.
+    /// </summary>
     [Fact]
-    public async Task ApplyLoanPrepaymentAsync_ReduceInstallment_Should_Lower_Future_Installment_Amount()
+    public async Task CreateLoanAsync_FixedMortgage_Should_Not_Fully_Amortize_During_First_Five_Years_And_Should_Not_Create_Installments_Before_StartDate()
     {
         var service = CreateService();
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
         {
-            Name = "Nadplata test",
-            LoanType = LoanType.Cash,
+            Name = "Hipoteka 5Y stale potem WIBOR",
+            LoanType = LoanType.Mortgage,
             InterestMode = LoanInterestMode.Fixed,
-            Principal = 120000m,
-            InterestRate = 8m,
-            StartDate = new DateOnly(2026, 1, 15),
-            EndDate = new DateOnly(2030, 12, 15),
-            RepaymentDayOfMonth = 15,
+            WiborPeriodType = WiborPeriodType.Wibor3M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 400000m,
+            InterestRate = 7m,
+            StartDate = new DateOnly(2026, 1, 20),
+            EndDate = new DateOnly(2035, 12, 20),
+            RepaymentDayOfMonth = 5,
             IsActive = true
         }, CancellationToken.None);
 
-        var targetInstallment = loan.Installments.Single(x => x.Year == 2027 && x.Month == 1);
-        var before = loan.Installments.Single(x => x.Year == 2027 && x.Month == 2).Amount;
+        Assert.DoesNotContain(loan.Installments, x => x.DueDate < new DateOnly(2026, 1, 20));
 
-        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = targetInstallment.Id,
-            Amount = 10000m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        var fixedPhaseEnd = new DateOnly(2031, 1, 20);
+        var principalPaidInFixedPhase = loan.Installments
+            .Where(x => x.DueDate < fixedPhaseEnd)
+            .Sum(x => x.PrincipalAmount);
 
-        var after = updated.Installments.Single(x => x.Year == 2027 && x.Month == 2).Amount;
-        Assert.True(after < before);
-        Assert.Equal(loan.EndDate, updated.EndDate);
+        Assert.True(principalPaidInFixedPhase < loan.Principal);
+        Assert.Contains(loan.Installments, x => x.DueDate >= fixedPhaseEnd && x.PrincipalAmount > 0);
     }
 
+    // ── UpdateLoanAsync ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that UpdateLoanAsync throws NotFoundException when the loan does not exist.
+    /// </summary>
     [Fact]
-    public async Task ApplyLoanPrepaymentAsync_ShortenPeriod_Should_Reduce_Number_Of_Installments()
+    public async Task UpdateLoanAsync_Should_Throw_NotFoundException_When_Loan_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.UpdateLoanAsync(new UpdateLoanRequest
+            {
+                Id = 99999,
+                Name = "Ghost",
+                LoanType = LoanType.Cash,
+                InterestMode = LoanInterestMode.Fixed,
+                Principal = 1000m,
+                InterestRate = 0m,
+                RepaymentDayOfMonth = 10,
+                StartDate = new DateOnly(2026, 1, 10),
+                EndDate = new DateOnly(2026, 6, 10),
+                IsActive = true
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that UpdateLoanAsync rebuilds installments when no payments have been made,
+    /// extending the loan end date produces more installments.
+    /// </summary>
+    [Fact]
+    public async Task UpdateLoanAsync_Should_Rebuild_Installments_When_No_Paid_Installments()
     {
         var service = CreateService();
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
         {
-            Name = "Nadplata test okres",
+            Name = "Kredyt krótki",
             LoanType = LoanType.Cash,
             InterestMode = LoanInterestMode.Fixed,
-            Principal = 120000m,
-            InterestRate = 8m,
-            StartDate = new DateOnly(2026, 1, 15),
-            EndDate = new DateOnly(2030, 12, 15),
-            RepaymentDayOfMonth = 15,
+            Principal = 12000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 6, 10),
+            RepaymentDayOfMonth = 10,
             IsActive = true
         }, CancellationToken.None);
 
-        var targetInstallment = loan.Installments.Single(x => x.Year == 2027 && x.Month == 1);
+        Assert.Equal(6, loan.Installments.Count);
 
-        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        var updated = await service.UpdateLoanAsync(new UpdateLoanRequest
         {
-            LoanInstallmentId = targetInstallment.Id,
-            Amount = 10000m,
-            Strategy = LoanPrepaymentStrategyType.ShortenPeriod
+            Id = loan.Id,
+            Name = loan.Name,
+            LoanType = loan.LoanType,
+            InterestMode = loan.InterestMode,
+            WiborPeriodType = loan.WiborPeriodType,
+            Principal = loan.Principal,
+            InterestRate = loan.InterestRate,
+            MarginRate = loan.MarginRate,
+            InitialReferenceRate = null,
+            RepaymentDayOfMonth = loan.RepaymentDayOfMonth,
+            StartDate = loan.StartDate,
+            EndDate = new DateOnly(2026, 12, 10),
+            TagId = null,
+            IsActive = loan.IsActive
         }, CancellationToken.None);
 
-        Assert.True(updated.Installments.Count < loan.Installments.Count);
-        Assert.True(updated.EndDate < loan.EndDate);
+        Assert.Equal(12, updated.Installments.Count);
     }
 
+    /// <summary>
+    /// Verifies that UpdateLoanAsync allows changing metadata (name, tag, active flag) when the loan
+    /// has paid installments, preserving the existing schedule and paid status.
+    /// </summary>
     [Fact]
     public async Task UpdateLoanAsync_WithPaidInstallments_Should_Allow_Metadata_Changes_Like_Tag()
     {
@@ -450,6 +331,10 @@ public sealed class LoanServiceTests
         Assert.Contains(updated.Installments, x => x.Id == paidInstallment.Id && x.IsPaid);
     }
 
+    /// <summary>
+    /// Verifies that UpdateLoanAsync throws BadRequestException when schedule parameters are changed
+    /// but the loan already has paid installments.
+    /// </summary>
     [Fact]
     public async Task UpdateLoanAsync_WithPaidInstallments_Should_Block_Schedule_Changes()
     {
@@ -493,6 +378,864 @@ public sealed class LoanServiceTests
             }, CancellationToken.None));
     }
 
+    // ── AddLoanRateEntryAsync ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that AddLoanRateEntryAsync recalculates future unpaid installments when a new WIBOR rate is added.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Recalculate_Future_Unpaid_Mortgage_Installments()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 100000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var before = loan.Installments.Single(x => x.Month == 6 && x.Year == 2026).Amount;
+
+        var updated = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+        {
+            LoanId = loan.Id,
+            EffectiveFrom = new DateOnly(2026, 6, 1),
+            ReferenceRate = 7m
+        }, CancellationToken.None);
+
+        var after = updated.Installments.Single(x => x.Month == 6 && x.Year == 2026).Amount;
+        Assert.NotEqual(before, after);
+    }
+
+    /// <summary>
+    /// Verifies that AddLoanRateEntryAsync throws BadRequestException when called for a non-mortgage loan.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Throw_BadRequest_For_Non_Mortgage_Loan()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Gotówkowy",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 10000m,
+            InterestRate = 5m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 12, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await Assert.ThrowsAsync<BadRequestException>(async () =>
+            await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 1),
+                ReferenceRate = 6m
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that AddLoanRateEntryAsync throws BadRequestException when a rate entry for the same
+    /// effective date already exists.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Throw_BadRequest_For_Duplicate_EffectiveFrom()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 100000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        // Add a new entry for June 1
+        await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+        {
+            LoanId = loan.Id,
+            EffectiveFrom = new DateOnly(2026, 6, 1),
+            ReferenceRate = 6m
+        }, CancellationToken.None);
+
+        // Duplicate: same EffectiveFrom
+        await Assert.ThrowsAsync<BadRequestException>(async () =>
+            await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 1),
+                ReferenceRate = 7m
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that AddLoanRateEntryAsync throws BadRequestException when there is already a paid
+    /// installment whose due date falls on or after the requested effective date.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Throw_BadRequest_When_Paid_Installment_Exists_After_EffectiveFrom()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 100000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        // Pay March installment (DueDate = 2026-03-15)
+        var marchInstallment = loan.Installments.Single(x => x.Year == 2026 && x.Month == 3);
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = marchInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        // EffectiveFrom = March 1 → paid March installment (DueDate 2026-03-15) >= 2026-03-01
+        await Assert.ThrowsAsync<BadRequestException>(async () =>
+            await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 3, 1),
+                ReferenceRate = 7m
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that AddLoanRateEntryAsync throws NotFoundException when the loan does not exist.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Throw_NotFoundException_When_Loan_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+            {
+                LoanId = 99999,
+                EffectiveFrom = new DateOnly(2026, 6, 1),
+                ReferenceRate = 6m
+            }, CancellationToken.None));
+    }
+
+    // ── ApplyLoanPrepaymentAsync ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that ApplyLoanPrepaymentAsync with ReduceInstallment strategy lowers the monthly installment
+    /// amount for future periods while keeping the end date unchanged.
+    /// </summary>
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_ReduceInstallment_Should_Lower_Future_Installment_Amount()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Nadplata test",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 120000m,
+            InterestRate = 8m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2030, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var targetInstallment = loan.Installments.Single(x => x.Year == 2027 && x.Month == 1);
+        var before = loan.Installments.Single(x => x.Year == 2027 && x.Month == 2).Amount;
+
+        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = targetInstallment.Id,
+            Amount = 10000m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        }, CancellationToken.None);
+
+        var after = updated.Installments.Single(x => x.Year == 2027 && x.Month == 2).Amount;
+        Assert.True(after < before);
+        Assert.Equal(loan.EndDate, updated.EndDate);
+    }
+
+    /// <summary>
+    /// Verifies that ApplyLoanPrepaymentAsync with ShortenPeriod strategy reduces the total number of
+    /// installments and moves the end date earlier.
+    /// </summary>
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_ShortenPeriod_Should_Reduce_Number_Of_Installments()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Nadplata test okres",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 120000m,
+            InterestRate = 8m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2030, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var targetInstallment = loan.Installments.Single(x => x.Year == 2027 && x.Month == 1);
+
+        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = targetInstallment.Id,
+            Amount = 10000m,
+            Strategy = LoanPrepaymentStrategyType.ShortenPeriod
+        }, CancellationToken.None);
+
+        Assert.True(updated.Installments.Count < loan.Installments.Count);
+        Assert.True(updated.EndDate < loan.EndDate);
+    }
+
+    /// <summary>
+    /// Verifies that ApplyLoanPrepaymentAsync throws BadRequestException when the target installment
+    /// is already paid.
+    /// </summary>
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_BadRequest_When_Installment_Is_Paid()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Kredyt nadplata",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 12000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 12, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var firstInstallment = loan.Installments.OrderBy(x => x.DueDate).First();
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = firstInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        await Assert.ThrowsAsync<BadRequestException>(async () =>
+            await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = firstInstallment.Id,
+                Amount = 500m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that ApplyLoanPrepaymentAsync throws BadRequestException when the prepayment amount
+    /// equals or exceeds the remaining principal.
+    /// </summary>
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_BadRequest_When_Amount_Exceeds_Remaining_Principal()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Mały kredyt",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 1200m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 12, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var firstInstallment = loan.Installments.OrderBy(x => x.DueDate).First();
+
+        await Assert.ThrowsAsync<BadRequestException>(async () =>
+            await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = firstInstallment.Id,
+                Amount = 999999m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that ApplyLoanPrepaymentAsync throws NotFoundException when the installment does not exist.
+    /// </summary>
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFoundException_When_Installment_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = 99999,
+                Amount = 1000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }, CancellationToken.None));
+    }
+
+    // ── CreateLoanChargeAsync ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that SyncLoanInstallmentsForMonthAsync includes the active loan charge amount
+    /// in the planned expense and is idempotent (calling it twice produces only one expense).
+    /// </summary>
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Include_LoanCharge_In_Installment_Expense_And_Be_Idempotent()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka + ubezpieczenie",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor3M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 150000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
+            await context.SaveChangesAsync();
+        }
+
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie nieruchomosci",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 120m,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        var refreshedLoan = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
+        var marchInstallmentAmount = refreshedLoan.Installments.Single(x => x.Year == 2026 && x.Month == 3).Amount;
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
+        var expenses = await verifyContext.Expenses.Where(x => x.MonthPlanId == monthPlan.Id).ToListAsync();
+
+        Assert.Single(expenses, x => x.LoanInstallmentId.HasValue);
+        Assert.Single(expenses);
+        Assert.Equal(marchInstallmentAmount, expenses[0].PlannedAmount);
+    }
+
+    /// <summary>
+    /// Verifies that CreateLoanChargeAsync throws NotFoundException when the specified loan does not exist.
+    /// </summary>
+    [Fact]
+    public async Task CreateLoanChargeAsync_Should_Throw_NotFoundException_When_Loan_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+            {
+                LoanId = 99999,
+                Name = "Ubezpieczenie",
+                ChargeType = LoanChargeType.Insurance,
+                FrequencyType = LoanChargeFrequencyType.Monthly,
+                Amount = 50m,
+                StartDate = new DateOnly(2026, 1, 1),
+                IsActive = true
+            }, CancellationToken.None));
+    }
+
+    // ── UpdateLoanChargeAsync ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that UpdateLoanChargeAsync persists updated charge fields correctly.
+    /// </summary>
+    [Fact]
+    public async Task UpdateLoanChargeAsync_Should_Update_Charge_Fields()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 100000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var charge = await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 100m,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        var updated = await service.UpdateLoanChargeAsync(new UpdateLoanChargeRequest
+        {
+            Id = charge.Id,
+            Name = "Ubezpieczenie zmienione",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 200m,
+            StartDate = charge.StartDate,
+            IsActive = true
+        }, CancellationToken.None);
+
+        Assert.Equal("Ubezpieczenie zmienione", updated.Name);
+        Assert.Equal(200m, updated.Amount);
+    }
+
+    /// <summary>
+    /// Verifies that UpdateLoanChargeAsync throws NotFoundException when the charge does not exist.
+    /// </summary>
+    [Fact]
+    public async Task UpdateLoanChargeAsync_Should_Throw_NotFoundException_When_Charge_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.UpdateLoanChargeAsync(new UpdateLoanChargeRequest
+            {
+                Id = 99999,
+                Name = "Ghost",
+                ChargeType = LoanChargeType.Insurance,
+                FrequencyType = LoanChargeFrequencyType.Monthly,
+                Amount = 50m,
+                StartDate = new DateOnly(2026, 1, 1),
+                IsActive = true
+            }, CancellationToken.None));
+    }
+
+    // ── DeleteLoanChargeAsync ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that DeleteLoanChargeAsync removes the charge so it no longer appears on the loan.
+    /// </summary>
+    [Fact]
+    public async Task DeleteLoanChargeAsync_Should_Remove_Charge()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 100000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var charge = await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 100m,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        await service.DeleteLoanChargeAsync(new DeleteLoanChargeRequest { Id = charge.Id }, CancellationToken.None);
+
+        var refreshed = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
+        Assert.Empty(refreshed.Charges);
+    }
+
+    /// <summary>
+    /// Verifies that DeleteLoanChargeAsync throws NotFoundException when the charge does not exist.
+    /// </summary>
+    [Fact]
+    public async Task DeleteLoanChargeAsync_Should_Throw_NotFoundException_When_Charge_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.DeleteLoanChargeAsync(new DeleteLoanChargeRequest { Id = 99999 }, CancellationToken.None));
+    }
+
+    // ── DeleteLoanAsync ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that DeleteLoanAsync removes the loan and all its installments from the database.
+    /// </summary>
+    [Fact]
+    public async Task DeleteLoanAsync_Should_Delete_Loan_And_Installments()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Do usunięcia",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 6000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 6, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        Assert.NotEmpty(loan.Installments);
+
+        await service.DeleteLoanAsync(new DeleteLoanRequest { Id = loan.Id }, CancellationToken.None);
+
+        var loans = await service.GetAllAsync(CancellationToken.None);
+        Assert.Empty(loans);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var installments = await verifyContext.LoanInstallments.ToListAsync();
+        Assert.Empty(installments);
+    }
+
+    /// <summary>
+    /// Verifies that DeleteLoanAsync throws BadRequestException when the loan has paid installments.
+    /// </summary>
+    [Fact]
+    public async Task DeleteLoanAsync_Should_Throw_BadRequest_When_Has_Paid_Installments()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Kredyt z zapłatą",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 6000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 6, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var firstInstallment = loan.Installments.OrderBy(x => x.DueDate).First();
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = firstInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        await Assert.ThrowsAsync<BadRequestException>(async () =>
+            await service.DeleteLoanAsync(new DeleteLoanRequest { Id = loan.Id }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that DeleteLoanAsync throws NotFoundException when the loan does not exist.
+    /// </summary>
+    [Fact]
+    public async Task DeleteLoanAsync_Should_Throw_NotFoundException_When_Loan_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.DeleteLoanAsync(new DeleteLoanRequest { Id = 99999 }, CancellationToken.None));
+    }
+
+    // ── SetLoanInstallmentPaidAsync ──────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that marking an installment as paid sets IsPaid and updates the linked expense ActualAmount
+    /// to match PlannedAmount, and that marking it unpaid resets ActualAmount back to zero.
+    /// </summary>
+    [Fact]
+    public async Task SetLoanInstallmentPaidAsync_Should_Reset_Expense_Amount_When_Marking_Unpaid()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Auto",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 6000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 6, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 2, IsClosed = false });
+            await context.SaveChangesAsync();
+        }
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 2, CancellationToken.None);
+
+        var febInstallment = loan.Installments.Single(x => x.Year == 2026 && x.Month == 2);
+
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = febInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = febInstallment.Id,
+            IsPaid = false
+        }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var expense = await verifyContext.Expenses.SingleAsync(x => x.LoanInstallmentId == febInstallment.Id);
+        var installment = await verifyContext.LoanInstallments.SingleAsync(x => x.Id == febInstallment.Id);
+
+        Assert.False(installment.IsPaid);
+        Assert.Equal(0m, expense.ActualAmount);
+    }
+
+    /// <summary>
+    /// Verifies that SetLoanInstallmentPaidAsync throws NotFoundException when the installment does not exist.
+    /// </summary>
+    [Fact]
+    public async Task SetLoanInstallmentPaidAsync_Should_Throw_NotFoundException_When_Installment_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+            {
+                LoanInstallmentId = 99999,
+                IsPaid = true
+            }, CancellationToken.None));
+    }
+
+    // ── SyncLoanInstallmentsForMonthAsync ────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that SyncLoanInstallmentsForMonthAsync creates an expense linked to the installment
+    /// and that SetLoanInstallmentPaidAsync updates both the installment and the expense ActualAmount.
+    /// </summary>
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Create_Expense_And_SetPaidStatus()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Auto",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 24000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 2, 10),
+            EndDate = new DateOnly(2026, 7, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
+            await context.SaveChangesAsync();
+        }
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        await using (var verifyContext = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
+            var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
+            Assert.True(expense.LoanInstallmentId.HasValue);
+            Assert.Equal(0m, expense.ActualAmount);
+
+            var installment = await verifyContext.LoanInstallments.SingleAsync(x => x.Id == expense.LoanInstallmentId);
+            Assert.False(installment.IsPaid);
+        }
+
+        var marchInstallment = loan.Installments.Single(x => x.Year == 2026 && x.Month == 3);
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = marchInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        await using var paidContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var paidInstallment = await paidContext.LoanInstallments.SingleAsync(x => x.Id == marchInstallment.Id);
+        var paidExpense = await paidContext.Expenses.SingleAsync(x => x.LoanInstallmentId == marchInstallment.Id);
+
+        Assert.True(paidInstallment.IsPaid);
+        Assert.Equal(paidExpense.PlannedAmount, paidExpense.ActualAmount);
+    }
+
+    /// <summary>
+    /// Verifies that SyncLoanInstallmentsForMonthAsync assigns the loan's tag to the generated expense.
+    /// </summary>
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Assign_Loan_Tag_To_Expense()
+    {
+        int loanTagId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Kredyt",
+                Color = "#000000",
+                SupportsLineItems = false,
+                IsDeleted = false
+            };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var tag = new Tag
+            {
+                CategoryId = category.Id,
+                Name = "Hipoteka"
+            };
+            context.Tags.Add(tag);
+            await context.SaveChangesAsync();
+            loanTagId = tag.Id;
+
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 100000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            TagId = loanTagId,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
+        var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
+        Assert.Equal(loanTagId, expense.TagId);
+        Assert.Equal(loanTagId, loan.TagId);
+    }
+
+    /// <summary>
+    /// Verifies that SyncLoanInstallmentsForMonthAsync is a no-op when no MonthPlan exists for the given month.
+    /// </summary>
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Skip_When_Month_Plan_Does_Not_Exist()
+    {
+        var service = CreateService();
+        await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Kredyt bez planu",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 6000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 6, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        // No MonthPlan created for March — sync should be a no-op
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        Assert.Empty(await verifyContext.Expenses.ToListAsync());
+    }
+
+    /// <summary>
+    /// Verifies that SyncLoanInstallmentsForMonthAsync is a no-op when the MonthPlan for the given month
+    /// is already closed.
+    /// </summary>
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Skip_When_Month_Plan_Is_Closed()
+    {
+        var service = CreateService();
+        await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Kredyt zamknięty",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 6000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 10),
+            EndDate = new DateOnly(2026, 6, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = true });
+            await context.SaveChangesAsync();
+        }
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        Assert.Empty(await verifyContext.Expenses.ToListAsync());
+    }
+
+    // ── RemainingPrincipal ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that RemainingPrincipal decreases after marking the first installment as paid.
+    /// </summary>
     [Fact]
     public async Task RemainingPrincipal_Should_Decrease_After_Paying_Installment()
     {

@@ -219,18 +219,29 @@
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2 section-title-row">
             <MudText Typo="Typo.h6">Wpływy miesiąca</MudText>
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                @if (_isIncomePanelToggleVisible)
-                {
-                    <MudButton Variant="Variant.Text" Color="Color.Primary" Class="income-panel-toggle"
-                               EndIcon="@(_isIncomePanelExpanded ? Icons.Material.Filled.ChevronLeft : Icons.Material.Filled.ChevronRight)"
-                               OnClick="ToggleIncomePanelExpandedAsync">
-                        @(_isIncomePanelExpanded ? "ZWIŃ" : "ROZWIŃ")
+                <div class="income-panel-mobile-toggle-wrap">
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Primary"
+                               EndIcon="@(_isIncomePanelExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                               ButtonType="ButtonType.Button"
+                               OnClick="ToggleIncomePanelMobileAsync">
+                        @(_isIncomePanelExpanded ? "Ukryj wpływy" : "Pokaż wpływy")
                     </MudButton>
-                }
+                </div>
+                <div class="income-panel-desktop-toggle-wrap">
+                    @if (_isIncomePanelToggleVisible)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                   EndIcon="@(_isIncomePanelExpanded ? Icons.Material.Filled.ChevronLeft : Icons.Material.Filled.ChevronRight)"
+                                   OnClick="ToggleIncomePanelExpandedAsync">
+                            @(_isIncomePanelExpanded ? "ZWIŃ" : "ROZWIŃ")
+                        </MudButton>
+                    }
+                </div>
                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Repeat" OnClick="NavigateToRegularIncomes">ZARZĄDZAJ CYKLICZNYMI</MudButton>
             </MudStack>
         </MudStack>
-        <div class="income-summary-band mb-3">
+        <div class="income-summary-band mb-3 income-mobile-collapsible-content">
             <div class="income-summary-cell">
                 <MudText Typo="Typo.caption" Class="income-summary-label">Suma wpływów</MudText>
                 <MudText Typo="Typo.h6" Class="income-summary-value">@TotalIncomeAmount.ToString("0.00", Culture) PLN</MudText>

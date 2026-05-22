@@ -106,13 +106,27 @@
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     @foreach (var month in _availableMonthsForSelectedYear)
                     {
-                        <MudChip T="int"
-                                 Value="@month"
-                                 Variant="@(_selectedMonth == month ? Variant.Filled : Variant.Outlined)"
-                                 Color="@(_selectedMonth == month ? Color.Primary : Color.Default)"
-                                 OnClick="() => OnSelectedMonthChipClicked(month)">
-                            @GetMonthLabel(month)
-                        </MudChip>
+                        @if (HasPermanentBalanceTabForSelectedYear(month))
+                        {
+                            <MudChip T="int"
+                                     Value="@month"
+                                     Variant="@(_selectedMonth == month ? Variant.Filled : Variant.Outlined)"
+                                     Color="@(_selectedMonth == month ? Color.Primary : Color.Default)"
+                                     OnClick="() => OnSelectedMonthChipClicked(month)">
+                                @GetMonthLabel(month)
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudButton Variant="@(_selectedMonth == month ? Variant.Filled : Variant.Outlined)"
+                                       Color="@(_selectedMonth == month ? Color.Primary : Color.Secondary)"
+                                       Size="Size.Small"
+                                       Class="month-balance-add-button"
+                                       ButtonType="ButtonType.Button"
+                                       OnClick="() => OnSelectedMonthChipClicked(month)">
+                                + @GetMonthLabel(month)
+                            </MudButton>
+                        }
                     }
                 </MudStack>
             </MudStack>
@@ -166,7 +180,6 @@
                 <MudTh Class="account-order-cell">Kolejność</MudTh>
                 <MudTh>Nazwa</MudTh>
                 <MudTh>Typ</MudTh>
-                <MudTh>Saldo</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>Akcje</MudTh>
             </HeaderContent>
@@ -205,7 +218,6 @@
                             }
                         </MudSelect>
                     </MudTd>
-                    <MudTd>@account.CurrentBalance.ToString("0.00") PLN</MudTd>
                     <MudTd>
                         <MudChip T="bool" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
                             @(account.IsArchived ? "Archiwalne" : "Aktywne")
@@ -221,7 +233,6 @@
                 {
                     <MudTd>@account.Name</MudTd>
                     <MudTd>@account.Type.GetDisplayName()</MudTd>
-                    <MudTd>@account.CurrentBalance.ToString("0.00") zł</MudTd>
                     <MudTd>
                         <MudChip T="bool" Color="@(account.IsArchived ? Color.Warning : Color.Success)">
                             @(account.IsArchived ? "Archiwalne" : "Aktywne")
@@ -291,23 +302,24 @@
 
             var availablePlanMonths = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
             _availablePlanMonths = availablePlanMonths;
-            var knownYears = availablePlanMonths
+            _availableYears = availablePlanMonths
                 .Select(x => x.Year)
-                .Concat(_accounts.SelectMany(x => x.MonthBalances).Select(x => x.Year))
-                .Append(DateTimeProvider.GetLocalDateOnly().Year)
                 .Distinct()
-                .ToList();
-
-            var minYear = knownYears.Min() - 1;
-            var maxYear = knownYears.Max() + 1;
-            _availableYears = Enumerable.Range(minYear, maxYear - minYear + 1)
                 .OrderByDescending(x => x)
                 .ToList();
 
-            var currentYear = DateTimeProvider.GetLocalDateOnly().Year;
+            if (_availableYears.Count == 0)
+            {
+                _availableMonthsForSelectedYear = [];
+                _selectedMonthAmounts.Clear();
+                _selectedMonthAmountInputs.Clear();
+                return;
+            }
+
+            var today = DateTimeProvider.GetLocalDateOnly();
             if (!_availableYears.Contains(_selectedYear))
             {
-                _selectedYear = _availableYears.Count > 0 ? _availableYears[0] : currentYear;
+                _selectedYear = _availableYears.Contains(today.Year) ? today.Year : _availableYears[0];
             }
 
             SyncAvailableMonthsForSelectedYear();
@@ -612,12 +624,53 @@
 
     private void SyncAvailableMonthsForSelectedYear()
     {
-        _availableMonthsForSelectedYear = Enumerable.Range(1, 12).ToList();
+        var planMonths = _availablePlanMonths
+            .Where(x => x.Year == _selectedYear)
+            .Select(x => x.Month)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        var selectableMonths = new SortedSet<int>(planMonths);
+        foreach (var planMonth in planMonths)
+        {
+            if (planMonth > 1)
+            {
+                selectableMonths.Add(planMonth - 1);
+            }
+
+            if (planMonth < 12)
+            {
+                selectableMonths.Add(planMonth + 1);
+            }
+        }
+
+        _availableMonthsForSelectedYear = selectableMonths.ToList();
+
+        if (_availableMonthsForSelectedYear.Count == 0 || _availableMonthsForSelectedYear.Contains(_selectedMonth))
+        {
+            return;
+        }
+
+        var today = DateTimeProvider.GetLocalDateOnly();
+        if (_selectedYear == today.Year && _availableMonthsForSelectedYear.Contains(today.Month))
+        {
+            _selectedMonth = today.Month;
+            return;
+        }
+
+        _selectedMonth = planMonths.Count > 0 ? planMonths[^1] : _availableMonthsForSelectedYear[0];
     }
 
     private string GetMonthLabel(int month)
     {
         return _monthOptions.FirstOrDefault(x => x.Value == month).Label ?? month.ToString();
+    }
+
+    private bool HasPermanentBalanceTabForSelectedYear(int month)
+    {
+        return _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == month)
+               || _accounts.Any(x => x.MonthBalances.Any(balance => balance.Year == _selectedYear && balance.Month == month));
     }
 
     private decimal GetActiveNonSavingsTotalForSelectedMonth()

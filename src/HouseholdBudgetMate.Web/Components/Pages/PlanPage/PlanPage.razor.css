@@ -145,6 +145,14 @@
 	z-index: 6100;
 }
 
+.income-panel-mobile-toggle-wrap {
+	display: none;
+}
+
+.income-panel-desktop-toggle-wrap {
+	display: block;
+}
+
 @media (max-width: 1200px) {
 	.plan-dashboard-root ::deep .income-panel-wrapper {
 		z-index: auto;
@@ -158,16 +166,37 @@
 		position: relative;
 		width: 100% !important;
 		z-index: 20;
-		box-shadow: 0 10px 40px rgba(13, 37, 63, 0.25);
+		box-shadow: var(--hb-shadow);
 		border-color: #a7c9de;
+		animation: none;
 	}
 
 	.plan-dashboard-root ::deep .income-panel-backdrop {
 		display: none;
 	}
 
-	.plan-dashboard-root ::deep .income-panel-toggle {
-		display: none !important;
+	.income-panel-backdrop {
+		display: none;
+	}
+
+	.income-panel-desktop-toggle-wrap {
+		display: none;
+	}
+
+	.income-panel-mobile-toggle-wrap {
+		display: block;
+	}
+
+	.income-panel-wrapper:not(.income-panel-wrapper-expanded) .income-mobile-collapsible-content {
+		display: none;
+	}
+
+	.income-panel-wrapper:not(.income-panel-wrapper-expanded) .income-content-container {
+		display: none;
+	}
+
+	.income-panel-wrapper.income-panel-wrapper-expanded .income-content-container {
+		display: block;
 	}
 }
 

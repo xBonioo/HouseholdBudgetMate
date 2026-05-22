@@ -1,0 +1,35 @@
+.dashboard-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.dashboard-actions-mobile {
+	display: none;
+}
+
+@media (max-width: 960px) {
+	.dashboard-actions-desktop {
+		display: none;
+	}
+
+	.dashboard-actions-mobile {
+		display: flex;
+	}
+
+	.dashboard-actions-mobile ::deep .dashboard-mobile-action {
+		width: 44px;
+		height: 44px;
+		min-width: 44px;
+		border-radius: 8px;
+	}
+
+	.dashboard-actions-mobile ::deep .dashboard-mobile-action .mud-icon-root {
+		margin: 0;
+	}
+
+	.dashboard-mobile-hidden {
+		display: none !important;
+	}
+}

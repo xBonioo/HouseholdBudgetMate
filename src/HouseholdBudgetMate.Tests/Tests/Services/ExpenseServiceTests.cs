@@ -26,6 +26,10 @@ public sealed class ExpenseServiceTests
             new NoOpLoanService());
     }
 
+    /// <summary>
+    /// Creates two expenses for a category with EnvelopeLimit=500 whose combined actual totals 510.
+    /// Verifies that exactly one BudgetExceededEvent is published with the correct CategoryId, SpentAmount, and EnvelopeLimit.
+    /// </summary>
     [Fact]
     public async Task CreateExpenseAsync_Should_Emit_BudgetExceededEvent_When_Category_Limit_Is_Crossed()
     {
@@ -78,6 +82,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(500m, budgetEvents[0].EnvelopeLimit);
     }
 
+    /// <summary>
+    /// Calls GetMonthAsync for a year/month with no existing MonthPlan.
+    /// Verifies that a single MonthPlan row is created in the database with the correct Year and Month.
+    /// </summary>
     [Fact]
     public async Task GetMonthAsync_Should_Create_MonthPlan_When_Missing()
     {
@@ -93,6 +101,10 @@ public sealed class ExpenseServiceTests
         Assert.Single(monthPlans);
     }
 
+    /// <summary>
+    /// Seeds two line items with the same OccurredAt date and verifies that GetMonthAsync returns them
+    /// ordered by Id ascending when the date is the same.
+    /// </summary>
     [Fact]
     public async Task GetMonthAsync_Should_Order_LineItems_By_Day_Then_By_Id_When_Same_Day()
     {
@@ -164,6 +176,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(secondLineItemId, expenseDto.LineItems[1].Id);
     }
 
+    /// <summary>
+    /// Seeds expenses with a root and child tag, plus a line item with the child tag.
+    /// Verifies that GetTagUsageCountsAsync returns count=1 for the root tag and count=2 for the child tag.
+    /// </summary>
     [Fact]
     public async Task GetTagUsageCountsAsync_Should_Aggregate_Expense_And_LineItem_Tag_Usage()
     {
@@ -242,6 +258,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(2, usageByTagId[childTagId]);
     }
 
+    /// <summary>
+    /// Calls DeleteExpenseAsync on an existing expense and verifies that IsDeleted=true and
+    /// DeletedAtUtc is set (soft-delete via query filter).
+    /// </summary>
     [Fact]
     public async Task DeleteExpenseAsync_Should_SoftDelete_Expense()
     {
@@ -277,6 +297,10 @@ public sealed class ExpenseServiceTests
         Assert.NotNull(deleted.DeletedAtUtc);
     }
 
+    /// <summary>
+    /// Creates an expense with a child tag ID and verifies that the TagId is persisted as the child tag
+    /// rather than being cleared or replaced by the parent tag.
+    /// </summary>
     [Fact]
     public async Task CreateExpenseAsync_Should_Keep_Selected_SubTagId()
     {
@@ -321,6 +345,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(childTagId, saved.TagId);
     }
 
+    /// <summary>
+    /// Updates an expense whose TagId was set to a root tag, changing it to a child tag.
+    /// Verifies that the persisted TagId is the child tag and not the root tag.
+    /// </summary>
     [Fact]
     public async Task UpdateExpenseAsync_Should_Keep_Selected_SubTagId()
     {
@@ -388,6 +416,10 @@ public sealed class ExpenseServiceTests
         Assert.NotEqual(rootTagId, saved.TagId);
     }
 
+    /// <summary>
+    /// Exercises the full Create/Update/Delete cycle of MonthSavingsTransferItems.
+    /// Verifies that after deletion the month's SavingsTransfers collection is empty.
+    /// </summary>
     [Fact]
     public async Task SavingsTransferItems_Crud_Should_Work()
     {
@@ -416,6 +448,10 @@ public sealed class ExpenseServiceTests
         Assert.Empty(month.SavingsTransfers);
     }
 
+    /// <summary>
+    /// Seeds four expenses with a mix of ShowRemainingInUI and zero/non-zero actual amounts.
+    /// Verifies PlannedTotal=600, SpentTotal=90, RemainingTotal=560, RemainingPercent≈93.33.
+    /// </summary>
     [Fact]
     public async Task GetMonthAsync_Should_Calculate_Kpi_With_Remaining_Fallback_Without_Double_Counting()
     {
@@ -477,6 +513,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(93.33d, month.Kpi.RemainingPercent, 2);
     }
 
+    /// <summary>
+    /// Creates two expenses sequentially in the same month and verifies that the first gets Order=1
+    /// and the second gets Order=2.
+    /// </summary>
     [Fact]
     public async Task CreateExpenseAsync_Should_Assign_Last_Order_In_Month()
     {
@@ -517,6 +557,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(2, second.Order);
     }
 
+    /// <summary>
+    /// Creates two expenses in a month and then calls ReorderExpensesAsync with the IDs reversed.
+    /// Verifies that GetMonthAsync returns expenses in the new order.
+    /// </summary>
     [Fact]
     public async Task ReorderExpensesAsync_Should_Persist_New_Order()
     {
@@ -562,6 +606,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(first.Id, month.Expenses[1].Id);
     }
 
+    /// <summary>
+    /// Copies two selected expenses from month 8 to month 9 and verifies that copies have
+    /// ActualAmount=0 while PlannedAmount and ShowRemainingInUI are preserved.
+    /// </summary>
     [Fact]
     public async Task CopySelectedExpensesToNextMonthAsync_Should_Copy_Selected_Items_With_Actual_Set_To_Zero()
     {
@@ -621,6 +669,10 @@ public sealed class ExpenseServiceTests
         Assert.False(copiedB.ShowRemainingInUI);
     }
 
+    /// <summary>
+    /// Closes a month and then attempts to create an expense in that month.
+    /// Verifies that a BadRequestException is thrown.
+    /// </summary>
     [Fact]
     public async Task CreateExpenseAsync_Should_Throw_When_Month_Is_Closed()
     {
@@ -649,6 +701,10 @@ public sealed class ExpenseServiceTests
         }, CancellationToken.None));
     }
 
+    /// <summary>
+    /// Closes month 1 after creating a recurring expense definition and then opens month 2.
+    /// Verifies that the recurring expense "Netflix" appears exactly once in month 2 with the correct amount.
+    /// </summary>
     [Fact]
     public async Task CloseMonthAsync_Should_Generate_Regular_Expenses_In_Next_Month_And_Be_Idempotent()
     {
@@ -679,6 +735,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(60m, recurringExpenses[0].PlannedAmount);
     }
 
+    /// <summary>
+    /// Pre-seeds a closed MonthPlan for month 5, then calls OpenMonthAsync.
+    /// Verifies that recurring expenses are NOT generated because the plan already existed.
+    /// </summary>
     [Fact]
     public async Task OpenMonthAsync_Should_Not_Sync_Recurring_Data_For_Existing_MonthPlan()
     {
@@ -718,6 +778,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(0, expensesCount);
     }
 
+    /// <summary>
+    /// Pre-seeds a closed MonthPlan for month 2, then closes month 1 (which would normally open/sync month 2).
+    /// Verifies that month 2 remains closed and no recurring expenses or incomes are added.
+    /// </summary>
     [Fact]
     public async Task CloseMonthAsync_Should_Not_Reopen_Already_Closed_Next_Month_Or_Sync_Recurring_Data()
     {
@@ -787,6 +851,10 @@ public sealed class ExpenseServiceTests
         Assert.Empty(nextMonthIncomes);
     }
 
+    /// <summary>
+    /// Pre-seeds an open MonthPlan for month 6, then calls GetMonthAsync after creating recurring definitions.
+    /// Verifies that recurring expenses and incomes are NOT auto-synced for an already-existing plan.
+    /// </summary>
     [Fact]
     public async Task GetMonthAsync_Should_Not_Sync_Recurring_Data_For_Existing_Open_MonthPlan()
     {
@@ -845,6 +913,10 @@ public sealed class ExpenseServiceTests
         Assert.Empty(incomes);
     }
 
+    /// <summary>
+    /// Creates recurring expense and income definitions then calls GetMonthAsync for a new month.
+    /// Verifies that both the "Netflix" expense and the regular income are auto-synced on first access.
+    /// </summary>
     [Fact]
     public async Task GetMonthAsync_Should_AutoSync_Recurring_Data_For_Open_Month()
     {
@@ -895,6 +967,10 @@ public sealed class ExpenseServiceTests
         Assert.Contains(incomes, x => x.Name == "Wyplata" && x.IsRegular);
     }
 
+    /// <summary>
+    /// Creates a regular expense definition and then soft-deletes it.
+    /// Verifies that IsActive is set to false rather than the row being removed.
+    /// </summary>
     [Fact]
     public async Task DeleteRegularExpenseDefinitionAsync_Should_SoftDelete_By_Setting_IsActive_False()
     {
@@ -923,6 +999,10 @@ public sealed class ExpenseServiceTests
         Assert.False(definition.IsActive);
     }
 
+    /// <summary>
+    /// Creates a regular expense definition and then permanently deletes it.
+    /// Verifies that the row no longer exists in the database.
+    /// </summary>
     [Fact]
     public async Task DeleteRegularExpenseDefinitionPermanentlyAsync_Should_Remove_Definition_From_Database()
     {
@@ -953,6 +1033,10 @@ public sealed class ExpenseServiceTests
         Assert.False(exists);
     }
 
+    /// <summary>
+    /// Creates two regular expense definitions, reverses their order via ReorderRegularExpenseDefinitionsAsync,
+    /// then opens a new month and verifies that auto-generated expenses appear in the new order.
+    /// </summary>
     [Fact]
     public async Task ReorderRegularExpenseDefinitionsAsync_Should_Drive_Order_Of_AutoGenerated_Expenses()
     {
@@ -993,6 +1077,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal("Internet", month.Expenses[1].Name);
     }
 
+    /// <summary>
+    /// Deletes a recurring expense from a month and then calls GetMonthAsync again.
+    /// Verifies that the expense is not re-created and that the soft-deleted row remains in the database.
+    /// </summary>
     [Fact]
     public async Task DeleteRecurringExpense_FromMonth_Should_Not_Recreate_And_Should_Not_Throw_On_Reload()
     {
@@ -1032,6 +1120,10 @@ public sealed class ExpenseServiceTests
         Assert.True(storedExpenses[0].IsDeleted);
     }
 
+    /// <summary>
+    /// Deletes a recurring expense from month 10 and then opens month 11.
+    /// Verifies that the recurring expense is still generated in the next month.
+    /// </summary>
     [Fact]
     public async Task DeleteRecurringExpense_FromMonth_Should_Still_Generate_In_Next_Month()
     {
@@ -1063,6 +1155,11 @@ public sealed class ExpenseServiceTests
         Assert.Contains(november.Expenses, x => x.Name == "Netflix" && x.PlannedAmount == 60m);
     }
 
+    /// <summary>
+    /// Seeds 12 months of expenses, incomes, and account balances for two categories.
+    /// Verifies category totals, averages, months-with-expenses, tag statistics, monthly finance rows,
+    /// and account balance rows returned by GetYearStatisticsAsync.
+    /// </summary>
     [Fact]
     public async Task GetYearStatisticsAsync_Should_Return_Category_Metrics_And_Tables()
     {
@@ -1187,6 +1284,11 @@ public sealed class ExpenseServiceTests
         Assert.Equal(12, accountRow.MonthlyClosingBalances.Count);
     }
 
+    /// <summary>
+    /// Seeds expenses for months 1 and 3 only, with one active and one inactive account.
+    /// Verifies that PopulatedMonths and AccountBalanceMonths contain only those months
+    /// and that the inactive account is excluded from AccountBalances.
+    /// </summary>
     [Fact]
     public async Task GetYearStatisticsAsync_Should_Use_Only_Populated_Months_And_Active_Accounts()
     {
@@ -1249,6 +1351,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(2, accountRow.MonthlyClosingBalances.Count);
     }
 
+    /// <summary>
+    /// Seeds an expense with line items tagged to a child tag; the parent expense uses the parent tag.
+    /// Verifies that GetYearStatisticsAsync rolls up line-item amounts to both child and parent tag statistics.
+    /// </summary>
     [Fact]
     public async Task GetYearStatisticsAsync_Should_Aggregate_Subtags_From_ExpenseLineItems()
     {
@@ -1326,6 +1432,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(200m, result.CategoryStatistics.Single(x => x.CategoryId == categoryId).TotalSpent);
     }
 
+    /// <summary>
+    /// Seeds January with actual=100 and February with actual=0.
+    /// Verifies that only January appears in PopulatedMonths, AccountBalanceMonths, and MonthlyFinance.
+    /// </summary>
     [Fact]
     public async Task GetYearStatisticsAsync_Should_Exclude_Months_With_Zero_Spent_Expenses()
     {
@@ -1424,6 +1534,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(1000m, accountRow.MonthlyClosingBalances[0]);
     }
 
+    /// <summary>
+    /// Seeds an expense with a root tag whose line items have no TagId set.
+    /// Verifies that untagged line item amounts are assigned to the parent expense's tag in the statistics.
+    /// </summary>
     [Fact]
     public async Task GetYearStatisticsAsync_Should_Assign_Untagged_LineItems_To_Expense_Tag()
     {
@@ -1494,6 +1608,10 @@ public sealed class ExpenseServiceTests
             x => x.CategoryId == categoryId && x.TagId is null && x.TotalSpent > 0);
     }
 
+    /// <summary>
+    /// Seeds an expense with two line items and searches with query "farba" (case-insensitive).
+    /// Verifies that exactly one result is returned with correct Year, Month, ExpenseName, and MatchingDescription.
+    /// </summary>
     [Fact]
     public async Task SearchExpenseHistoryAsync_Should_Filter_By_Description_And_Return_Edit_Context()
     {
@@ -1557,6 +1675,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal("Farba scienna", found.MatchingDescription);
     }
 
+    /// <summary>
+    /// Seeds expenses for two categories across three years and requests totals for the home category only.
+    /// Verifies TotalSpent=1350, FirstYear=2024, LastYear=2025 for the filtered category.
+    /// </summary>
     [Fact]
     public async Task GetCategoryLifetimeExpenseTotalsAsync_Should_Return_Filtered_Category_Sum_For_All_Years()
     {
@@ -1628,6 +1750,11 @@ public sealed class ExpenseServiceTests
         Assert.Equal(2025, homeTotal.LastYear);
     }
 
+    /// <summary>
+    /// Seeds two months of expenses, incomes, account balances, and a savings transfer.
+    /// Verifies TransactionCount, UnplannedSpentTotal, SavedAmountThisMonth, SavedAmountYearToDate,
+    /// AverageMonthlyIncome, AverageMonthlySpent, AverageMonthlySaved, and SavingsTimeline for month 2.
+    /// </summary>
     [Fact]
     public async Task GetDashboardSummaryAsync_Should_Calculate_Month_And_Ytd_Metrics()
     {
@@ -1774,6 +1901,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(160m, summary.SavingsTimeline.Single(x => x.Month == 2).SavedAmount);
     }
 
+    /// <summary>
+    /// Seeds one regular expense and one SupportsLineItems expense that has two line items.
+    /// Verifies that TransactionCount=3 (1 regular + 2 line items) instead of 2 (1 regular + 1 parent).
+    /// </summary>
     [Fact]
     public async Task GetDashboardSummaryAsync_Should_Count_LineItems_Instead_Of_Parent_Expense_When_SupportsLineItems()
     {
@@ -1863,6 +1994,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(3, summary.TransactionCount);
     }
 
+    /// <summary>
+    /// Seeds one regular expense and one SupportsLineItems expense with no line items.
+    /// Verifies that TransactionCount=1 (only the regular expense) because the parent is excluded when SupportsLineItems is true.
+    /// </summary>
     [Fact]
     public async Task GetDashboardSummaryAsync_Should_Not_Count_Parent_Expense_When_SupportsLineItems_But_No_LineItems()
     {
@@ -1928,6 +2063,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(1, summary.TransactionCount);
     }
 
+    /// <summary>
+    /// Seeds a planned expense with ActualAmount=0 and a zero-planned/zero-actual expense.
+    /// Verifies that TransactionCount=0 because neither qualifies as a realized transaction.
+    /// </summary>
     [Fact]
     public async Task GetDashboardSummaryAsync_Should_Not_Count_Planned_Expense_With_Zero_Actual_When_No_LineItems()
     {
@@ -1981,6 +2120,10 @@ public sealed class ExpenseServiceTests
         Assert.Equal(0, summary.TransactionCount);
     }
 
+    /// <summary>
+    /// Seeds one expense, two incomes (one past, one future), and two savings transfers (one past, one future)
+    /// with today set to 2026-06-10. Verifies that TransactionCount=3 (1 expense + 1 income + 1 transfer).
+    /// </summary>
     [Fact]
     public async Task GetDashboardSummaryAsync_Should_Not_Count_Future_Incomes_And_Transfers_In_Current_Month()
     {
@@ -2064,5 +2207,595 @@ public sealed class ExpenseServiceTests
         var summary = await service.GetDashboardSummaryAsync(2026, 6, CancellationToken.None);
 
         Assert.Equal(3, summary.TransactionCount);
+    }
+
+    // ─── UpdateExpenseAsync ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Calls UpdateExpenseAsync with an ID that does not exist in the database.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseAsync_Should_Throw_NotFoundException_When_Expense_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = 99999,
+            Name = "Ghost",
+            CategoryId = 1,
+            PlannedAmount = 100m,
+            ActualAmount = 0m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Closes a month and then attempts to update an expense in that month.
+    /// Verifies that a BadRequestException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseAsync_Should_Throw_When_Month_Is_Closed()
+    {
+        int expenseId;
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Dom", Color = "#455A64" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 3, IsClosed = true };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy",
+                CategoryId = categoryId,
+                PlannedAmount = 100m,
+                ActualAmount = 50m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = expenseId,
+            Name = "Zakupy zmienione",
+            CategoryId = categoryId,
+            PlannedAmount = 100m,
+            ActualAmount = 60m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Updates an expense's name and amounts and verifies that the changes are persisted.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseAsync_Should_Persist_Changes()
+    {
+        int expenseId;
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Transport", Color = "#1E88E5" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 2 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Paliwo",
+                CategoryId = categoryId,
+                PlannedAmount = 200m,
+                ActualAmount = 180m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        var result = await service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = expenseId,
+            Name = "Paliwo zaktualizowane",
+            CategoryId = categoryId,
+            PlannedAmount = 220m,
+            ActualAmount = 190m,
+            ShowRemainingInUI = false
+        }, CancellationToken.None);
+
+        Assert.Equal("Paliwo zaktualizowane", result.Name);
+        Assert.Equal(220m, result.PlannedAmount);
+        Assert.Equal(190m, result.ActualAmount);
+        Assert.False(result.ShowRemainingInUI);
+    }
+
+    // ─── DeleteExpenseAsync ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Calls DeleteExpenseAsync with an ID that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task DeleteExpenseAsync_Should_Throw_NotFoundException_When_Expense_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.DeleteExpenseAsync(
+            new DeleteExpenseRequest { Id = 99999 }, CancellationToken.None));
+    }
+
+    // ─── CreateExpenseLineItemAsync ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a line item for an expense that belongs to a SupportsLineItems category.
+    /// Verifies that the line item is returned with correct fields and that the parent
+    /// expense's ActualAmount is recalculated from line items.
+    /// </summary>
+    [Fact]
+    public async Task CreateExpenseLineItemAsync_Should_Create_LineItem_And_Recalculate_ActualAmount()
+    {
+        int expenseId;
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#43A047", SupportsLineItems = true };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 1 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy",
+                CategoryId = categoryId,
+                PlannedAmount = 200m,
+                ActualAmount = 0m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        var lineItem = await service.CreateExpenseLineItemAsync(new CreateExpenseLineItemRequest
+        {
+            ExpenseId = expenseId,
+            Description = "Chleb",
+            Amount = 45m,
+            OccurredAt = new DateOnly(2026, 1, 5)
+        }, CancellationToken.None);
+
+        Assert.Equal(expenseId, lineItem.ExpenseId);
+        Assert.Equal("Chleb", lineItem.Description);
+        Assert.Equal(45m, lineItem.Amount);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(45m, updatedExpense.ActualAmount);
+    }
+
+    /// <summary>
+    /// Attempts to create a line item for an expense in a category with SupportsLineItems=false.
+    /// Verifies that a BadRequestException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task CreateExpenseLineItemAsync_Should_Throw_When_Category_Does_Not_Support_LineItems()
+    {
+        int expenseId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Transport", Color = "#1E88E5", SupportsLineItems = false };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 1 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Paliwo",
+                CategoryId = category.Id,
+                PlannedAmount = 200m,
+                ActualAmount = 150m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateExpenseLineItemAsync(
+            new CreateExpenseLineItemRequest
+            {
+                ExpenseId = expenseId,
+                Description = "Benzyna",
+                Amount = 80m,
+                OccurredAt = new DateOnly(2026, 1, 10)
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Calls CreateExpenseLineItemAsync with an ExpenseId that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task CreateExpenseLineItemAsync_Should_Throw_NotFoundException_When_Expense_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.CreateExpenseLineItemAsync(
+            new CreateExpenseLineItemRequest
+            {
+                ExpenseId = 99999,
+                Description = "Ghost",
+                Amount = 10m,
+                OccurredAt = new DateOnly(2026, 1, 1)
+            }, CancellationToken.None));
+    }
+
+    // ─── UpdateExpenseLineItemAsync ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Updates an existing line item's description and amount and verifies the changes are persisted
+    /// and the parent expense ActualAmount is recalculated.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseLineItemAsync_Should_Update_Fields_And_Recalculate_ActualAmount()
+    {
+        int lineItemId;
+        int expenseId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#43A047", SupportsLineItems = true };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 2 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Tygodniowe zakupy",
+                CategoryId = category.Id,
+                PlannedAmount = 200m,
+                ActualAmount = 30m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+
+            var lineItem = new ExpenseLineItem
+            {
+                ExpenseId = expenseId,
+                Description = "Mleko",
+                Amount = 30m,
+                OccurredAt = new DateOnly(2026, 2, 5)
+            };
+            context.ExpenseLineItems.Add(lineItem);
+            await context.SaveChangesAsync();
+            lineItemId = lineItem.Id;
+        }
+
+        var service = CreateService();
+        var result = await service.UpdateExpenseLineItemAsync(new UpdateExpenseLineItemRequest
+        {
+            Id = lineItemId,
+            Description = "Mleko zmienione",
+            Amount = 55m,
+            OccurredAt = new DateOnly(2026, 2, 6)
+        }, CancellationToken.None);
+
+        Assert.Equal("Mleko zmienione", result.Description);
+        Assert.Equal(55m, result.Amount);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(55m, updatedExpense.ActualAmount);
+    }
+
+    /// <summary>
+    /// Calls UpdateExpenseLineItemAsync with an ID that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseLineItemAsync_Should_Throw_NotFoundException_When_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.UpdateExpenseLineItemAsync(
+            new UpdateExpenseLineItemRequest
+            {
+                Id = 99999,
+                Description = "Ghost",
+                Amount = 10m,
+                OccurredAt = new DateOnly(2026, 1, 1)
+            }, CancellationToken.None));
+    }
+
+    // ─── DeleteExpenseLineItemAsync ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Deletes a line item from an expense and verifies the row is removed.
+    /// Note: when all line items are deleted, ActualAmount retains its last calculated value
+    /// (recalculation is skipped when LineItems.Count == 0).
+    /// </summary>
+    [Fact]
+    public async Task DeleteExpenseLineItemAsync_Should_Remove_LineItem_And_Recalculate_ActualAmount()
+    {
+        int lineItemId;
+        int expenseId;
+        int secondLineItemId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#43A047", SupportsLineItems = true };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 3 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Tygodniowe zakupy",
+                CategoryId = category.Id,
+                PlannedAmount = 150m,
+                ActualAmount = 70m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+
+            var lineItem = new ExpenseLineItem
+            {
+                ExpenseId = expenseId,
+                Description = "Herbata",
+                Amount = 40m,
+                OccurredAt = new DateOnly(2026, 3, 5)
+            };
+            var secondLineItem = new ExpenseLineItem
+            {
+                ExpenseId = expenseId,
+                Description = "Kawa",
+                Amount = 30m,
+                OccurredAt = new DateOnly(2026, 3, 6)
+            };
+            context.ExpenseLineItems.AddRange(lineItem, secondLineItem);
+            await context.SaveChangesAsync();
+            lineItemId = lineItem.Id;
+            secondLineItemId = secondLineItem.Id;
+        }
+
+        var service = CreateService();
+        await service.DeleteExpenseLineItemAsync(
+            new DeleteExpenseLineItemRequest { Id = lineItemId }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var lineItemExists = await verifyContext.ExpenseLineItems.AnyAsync(x => x.Id == lineItemId);
+        Assert.False(lineItemExists);
+
+        // After deleting one of two line items, ActualAmount is recalculated to remaining line item sum.
+        var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(30m, updatedExpense.ActualAmount);
+    }
+
+    /// <summary>
+    /// Calls DeleteExpenseLineItemAsync with an ID that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task DeleteExpenseLineItemAsync_Should_Throw_NotFoundException_When_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.DeleteExpenseLineItemAsync(
+            new DeleteExpenseLineItemRequest { Id = 99999 }, CancellationToken.None));
+    }
+
+    // ─── UpdateRegularExpenseDefinitionAsync ────────────────────────────────────
+
+    /// <summary>
+    /// Updates an existing regular expense definition and verifies that the new name and amount
+    /// are persisted correctly.
+    /// </summary>
+    [Fact]
+    public async Task UpdateRegularExpenseDefinitionAsync_Should_Persist_Changes()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Rachunki", Color = "#455A64" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        var created = await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Prąd",
+            CategoryId = categoryId,
+            Amount = 120m
+        }, CancellationToken.None);
+
+        var updated = await service.UpdateRegularExpenseDefinitionAsync(new UpdateRegularExpenseDefinitionRequest
+        {
+            Id = created.Id,
+            Name = "Prąd zaktualizowany",
+            CategoryId = categoryId,
+            Amount = 135m,
+            IsActive = true,
+            ShowRemainingInUI = false
+        }, CancellationToken.None);
+
+        Assert.Equal("Prąd zaktualizowany", updated.Name);
+        Assert.Equal(135m, updated.Amount);
+    }
+
+    /// <summary>
+    /// Calls UpdateRegularExpenseDefinitionAsync with an ID that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task UpdateRegularExpenseDefinitionAsync_Should_Throw_NotFoundException_When_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.UpdateRegularExpenseDefinitionAsync(
+            new UpdateRegularExpenseDefinitionRequest
+            {
+                Id = 99999,
+                Name = "Ghost",
+                CategoryId = 1,
+                Amount = 50m,
+                IsActive = true
+            }, CancellationToken.None));
+    }
+
+    // ─── MonthSavingsTransferItem not-found edge cases ──────────────────────────
+
+    /// <summary>
+    /// Calls UpdateMonthSavingsTransferItemAsync with an ID that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task UpdateMonthSavingsTransferItemAsync_Should_Throw_NotFoundException_When_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.UpdateMonthSavingsTransferItemAsync(
+            new UpdateMonthSavingsTransferItemRequest
+            {
+                Id = 99999,
+                Amount = 100m,
+                TransferDate = new DateOnly(2026, 1, 10)
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Calls DeleteMonthSavingsTransferItemAsync with an ID that does not exist.
+    /// Verifies that a NotFoundException is thrown.
+    /// </summary>
+    [Fact]
+    public async Task DeleteMonthSavingsTransferItemAsync_Should_Throw_NotFoundException_When_Not_Found()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.DeleteMonthSavingsTransferItemAsync(
+            new DeleteMonthSavingsTransferItemRequest { Id = 99999 }, CancellationToken.None));
+    }
+
+    // ─── BudgetExceededEvent NOT emitted when under limit ───────────────────────
+
+    /// <summary>
+    /// Creates an expense whose actual amount stays below the category's EnvelopeLimit.
+    /// Verifies that no BudgetExceededEvent is published.
+    /// </summary>
+    [Fact]
+    public async Task CreateExpenseAsync_Should_Not_Emit_BudgetExceededEvent_When_Under_Limit()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Odzież", Color = "#8E24AA", EnvelopeLimit = 500m };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var publisher = new RecordingAppEventPublisher();
+        var service = CreateService(publisher);
+
+        await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 5,
+            Name = "Koszula",
+            CategoryId = categoryId,
+            PlannedAmount = 100m,
+            ActualAmount = 100m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        var budgetEvents = publisher.Events.OfType<BudgetExceededEvent>().ToList();
+        Assert.Empty(budgetEvents);
+    }
+
+    // ─── GetYearStatisticsAsync empty year ──────────────────────────────────────
+
+    /// <summary>
+    /// Calls GetYearStatisticsAsync for a year with no expenses or account data.
+    /// Verifies that empty collections are returned without errors.
+    /// </summary>
+    [Fact]
+    public async Task GetYearStatisticsAsync_Should_Return_Empty_Collections_For_Year_With_No_Data()
+    {
+        var service = CreateService();
+        var result = await service.GetYearStatisticsAsync(2099, CancellationToken.None);
+
+        Assert.Empty(result.PopulatedMonths);
+        Assert.Empty(result.CategoryStatistics);
+        Assert.Empty(result.MonthlyFinance);
+        Assert.Empty(result.AccountBalances);
+    }
+
+    // ─── CloseMonthAsync idempotency ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Calls CloseMonthAsync twice on the same month.
+    /// Verifies that the second call is a no-op and does not throw.
+    /// </summary>
+    [Fact]
+    public async Task CloseMonthAsync_Should_Be_Idempotent_When_Already_Closed()
+    {
+        var service = CreateService();
+
+        await service.CloseMonthAsync(2026, 4, CancellationToken.None);
+
+        var ex = await Record.ExceptionAsync(() => service.CloseMonthAsync(2026, 4, CancellationToken.None));
+        Assert.Null(ex);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlan = await verifyContext.MonthPlans.FirstAsync(x => x.Year == 2026 && x.Month == 4);
+        Assert.True(monthPlan.IsClosed);
     }
 }

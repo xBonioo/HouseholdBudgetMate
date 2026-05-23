@@ -1,4 +1,10 @@
-﻿window.scrollExpenseRowIntoView = (anchorId) => {
+﻿window.scrollToCreateExpenseForm = () => {
+    const anchor = document.getElementById("create-expense-anchor");
+    if (!anchor) return;
+    anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+window.scrollExpenseRowIntoView = (anchorId) => {
     if (!anchorId) {
         return;
     }

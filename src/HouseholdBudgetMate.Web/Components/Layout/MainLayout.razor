@@ -97,6 +97,11 @@ else
 
                 @if (IsAdminSession)
                 {
+                    <MudButton Variant="Variant.Text" Class="@GetNavClass("/audit")"
+                               StartIcon="@Icons.Material.Filled.ManageSearch" Href="/audit">
+                        Audyt
+                    </MudButton>
+
                     <MudButton Variant="Variant.Text" Class="@GetNavClass("/admin/config")"
                                StartIcon="@Icons.Material.Filled.AdminPanelSettings" Href="/admin/config">
                         Admin
@@ -139,7 +144,7 @@ else
 
             @* ── Always-visible action button ── *@
             <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Add"
-                       Class="quick-add-button" Href="@CurrentMonthHref">
+                       Class="quick-add-button" Href="@($"{CurrentMonthHref}?addExpense=true")">
                 Dodaj wydatek
             </MudButton>
 
@@ -167,6 +172,8 @@ else
                                 OnClick="CloseDrawer">Kategorie</MudNavLink>
                     @if (IsAdminSession)
                     {
+                        <MudNavLink Class="mobile-nav-link" Href="/audit"
+                                    Icon="@Icons.Material.Filled.ManageSearch" OnClick="CloseDrawer">Audyt</MudNavLink>
                         <MudNavLink Class="mobile-nav-link" Href="/admin/config"
                                     Icon="@Icons.Material.Filled.AdminPanelSettings" OnClick="CloseDrawer">Administracja</MudNavLink>
                     }

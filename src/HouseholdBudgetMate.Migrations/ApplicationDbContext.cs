@@ -15,6 +15,7 @@ public class ApplicationDbContext(
 
     public DbSet<User> Users { get; set; }
     public DbSet<LogEntry> Logs { get; set; }
+    public DbSet<AuditLog> AuditLogs { get; set; }
 
     public DbSet<Category> Categories { get; set; }
     public DbSet<Tag> Tags { get; set; }

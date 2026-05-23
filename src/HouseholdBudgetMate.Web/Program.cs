@@ -6,6 +6,7 @@ using Microsoft.Extensions.FileProviders;
 using HouseholdBudgetMate.Application.Kernel.Configurations;
 using HouseholdBudgetMate.Application.Kernel.Extensions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
+using HouseholdBudgetMate.Application.Auditing;
 using HouseholdBudgetMate.Application.Shared;
 using HouseholdBudgetMate.Web;
 using HouseholdBudgetMate.Web.Middleware;
@@ -101,6 +102,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(
         }
 
         options.ConfigureWarnings(w => w.Ignore(RelationalEventId.MultipleCollectionIncludeWarning));
+        options.AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
         options.UseNpgsql(
             dbConnectionString,
             npgsqlOptions =>
@@ -130,6 +132,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ArchiveMonthsCacheService>();
 builder.Services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 builder.Services.AddScoped<CurrentUserContext>();
+builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 
@@ -166,6 +169,7 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IIncomeService, IncomeService>();
 builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IAdminConfigurationService, AdminConfigurationService>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 

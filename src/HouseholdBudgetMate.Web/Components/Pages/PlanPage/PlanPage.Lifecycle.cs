@@ -1,4 +1,5 @@
-﻿using Microsoft.JSInterop;
+﻿using HouseholdBudgetMate.Web.Components.Dialogs;
+using Microsoft.JSInterop;
 using MudBlazor;
 
 namespace HouseholdBudgetMate.Web.Components.Pages.PlanPage;
@@ -54,6 +55,12 @@ public partial class PlanPage : IAsyncDisposable
                 // Apply query-driven edit mode only once to avoid reopening edit after every reload.
                 NavigationManager.NavigateTo($"/plan/{Year}/{Month}", replace: true);
             }
+            else if (AddExpense && !_isCreateExpenseFormVisible)
+            {
+                _isCreateExpenseFormVisible = true;
+                _scrollToCreateFormPending = true;
+                NavigationManager.NavigateTo($"/plan/{Year}/{Month}", replace: true);
+            }
         }
         catch (Exception ex)
         {
@@ -78,6 +85,13 @@ public partial class PlanPage : IAsyncDisposable
             {
                 // Ignore startup JS timing issues; the page still works without the watcher.
             }
+        }
+
+        if (_scrollToCreateFormPending)
+        {
+            _scrollToCreateFormPending = false;
+            await JsRuntime.InvokeVoidAsync("scrollToCreateExpenseForm");
+            return;
         }
 
         if (!_expenseIdPendingScrollIntoView.HasValue)
@@ -143,7 +157,24 @@ public partial class PlanPage : IAsyncDisposable
 
     private async Task<bool> ConfirmAsync(string message)
     {
-        return await JsRuntime.InvokeAsync<bool>("confirm", message);
+        var parameters = new DialogParameters
+        {
+            [nameof(ConfirmDialog.Message)] = message
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>(
+            "Potwierdzenie",
+            parameters,
+            options);
+        var result = await dialog.Result;
+
+        return result is { Canceled: false };
     }
 
     private async Task ToggleMonthStatusAsync()
@@ -157,7 +188,7 @@ public partial class PlanPage : IAsyncDisposable
             }
             else
             {
-                var confirmation = await ConfirmAsync("Zamknąć miesiąc i wygenerować cykliczne wpisy na kolejny?");
+                var confirmation = await ConfirmAsync("Zamknąć miesiąc?");
                 if (!confirmation)
                 {
                     return;

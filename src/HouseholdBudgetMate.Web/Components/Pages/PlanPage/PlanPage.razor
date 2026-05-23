@@ -12,6 +12,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject ArchiveMonthsCacheService ArchiveCache
+@inject IDialogService DialogService
 
 <script src="@Assets["Components/Pages/PlanPage/PlanPage.razor.js"]"></script>
 
@@ -827,6 +828,7 @@ else
     </MudTable>
 }
 
+<div id="create-expense-anchor"></div>
 <MudDivider Class="my-4"/>
 <MudStack Row="true" Justify="Justify.FlexEnd">
     <MudButton

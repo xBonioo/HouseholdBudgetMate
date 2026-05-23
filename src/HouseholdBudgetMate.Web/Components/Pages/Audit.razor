@@ -1,0 +1,354 @@
+@page "/audit"
+@using HouseholdBudgetMate.Abstractions.Contracts.Audit.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Audit.Requests
+@using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Web.Services
+@using MudBlazor
+
+@inject IAuditService AuditService
+@inject IUserService UserService
+@inject IUserSessionService UserSessionService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Audyt</PageTitle>
+
+@if (!IsAdminSession)
+{
+    <MudPaper Class="pa-4 hb-panel">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+            Nie masz uprawnień do dziennika audytu.
+        </MudAlert>
+    </MudPaper>
+}
+else
+{
+    <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
+        <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
+    </MudOverlay>
+
+    <MudStack Spacing="0">
+        <MudPaper Class="hb-page-header">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4">Audyt zmian</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Historia zmian finansowych w bieżącym budżecie.
+                    </MudText>
+                </MudStack>
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled">
+                    Wyniki: @_logs.Count
+                </MudChip>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            <ActionForm OnSubmit="SearchAsync">
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="2">
+                        <MudSelect T="string"
+                                   Label="Typ encji"
+                                   @bind-Value="_entityType"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Clearable="true">
+                            @foreach (var option in EntityTypeOptions)
+                            {
+                                <MudSelectItem Value="@option.Value">@option.Label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="2">
+                        <MudSelect T="string"
+                                   Label="Operacja"
+                                   @bind-Value="_operation"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Clearable="true">
+                            @foreach (var option in OperationOptions)
+                            {
+                                <MudSelectItem Value="@option.Value">@option.Label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="2">
+                        <MudSelect T="string"
+                                   Label="Użytkownik"
+                                   @bind-Value="_userId"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Clearable="true">
+                            @foreach (var user in _users)
+                            {
+                                <MudSelectItem Value="@user.Id">@user.Username</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="2">
+                        <MudDatePicker Label="Od"
+                                       Date="@_fromDate"
+                                       DateChanged="date => _fromDate = date"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"/>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="2">
+                        <MudDatePicker Label="Do"
+                                       Date="@_toDate"
+                                       DateChanged="date => _toDate = date"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"/>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="2" Class="d-flex align-center justify-end">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Search"
+                                   ButtonType="ButtonType.Submit"
+                                   Disabled="_isLoading">
+                            Szukaj
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </ActionForm>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            @if (_logs.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="hb-muted">Brak wpisów dla wybranych filtrów.</MudText>
+            }
+            else
+            {
+                <div style="overflow-x: auto;">
+                    <MudTable Items="_logs" Dense="true" Hover="true" RowsPerPage="50">
+                        <HeaderContent>
+                            <MudTh></MudTh>
+                            <MudTh>Data</MudTh>
+                            <MudTh>Użytkownik</MudTh>
+                            <MudTh>Typ encji</MudTh>
+                            <MudTh>Operacja</MudTh>
+                            <MudTh>Dotyczy</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="log">
+                            <MudTd>
+                                <MudIconButton Size="Size.Small"
+                                               Icon="@(IsExpanded(log.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                               OnClick="() => ToggleExpanded(log.Id)"/>
+                            </MudTd>
+                            <MudTd DataLabel="Data" Style="white-space: nowrap;">@FormatDate(log.ChangedAtUtc)</MudTd>
+                            <MudTd DataLabel="Użytkownik">@log.UserName</MudTd>
+                            <MudTd DataLabel="Typ encji">@GetEntityTypeLabel(log.EntityType)</MudTd>
+                            <MudTd DataLabel="Operacja">
+                                <MudChip T="string" Size="Size.Small" Color="@GetOperationColor(log.Operation)">
+                                    @GetOperationLabel(log.Operation)
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Dotyczy">@log.EntityContext</MudTd>
+                        </RowTemplate>
+                        <ChildRowContent Context="log">
+                            @if (IsExpanded(log.Id))
+                            {
+                                <MudTd colspan="6" Class="pa-3">
+                                    <MudStack Spacing="1" Class="mb-3">
+                                        <MudText Typo="Typo.subtitle2">Dotyczy</MudText>
+                                        <MudText Typo="Typo.body2">@log.EntityContext</MudText>
+                                        <MudText Typo="Typo.caption" Class="hb-muted">
+                                            @GetEntityTypeLabel(log.EntityType) #@log.EntityId
+                                        </MudText>
+                                    </MudStack>
+                                    @if (log.DiffItems.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="hb-muted">Brak szczegółów zmiany.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudSimpleTable Dense="true" Hover="true">
+                                            <thead>
+                                            <tr>
+                                                <th>Pole</th>
+                                                <th>Przed zmianą</th>
+                                                <th>Po zmianie</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach (var diff in log.DiffItems)
+                                            {
+                                                <tr>
+                                                    <td>@diff.DisplayName</td>
+                                                    <td>@diff.OldValue</td>
+                                                    <td>@diff.NewValue</td>
+                                                </tr>
+                                            }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    }
+                                </MudTd>
+                            }
+                        </ChildRowContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="@PageSizeOptions"
+                                           RowsPerPageString="Wierszy na stronę"
+                                           InfoFormat="{first_item}-{last_item} z {all_items}"/>
+                        </PagerContent>
+                    </MudTable>
+                </div>
+            }
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    private static readonly IReadOnlyList<SelectOption> EntityTypeOptions =
+    [
+        new("Expense", "Wydatek"),
+        new("Income", "Wpływ"),
+        new("Account", "Konto"),
+        new("AccountMonthBalance", "Saldo miesięczne"),
+        new("ExpenseLineItem", "Pozycja wydatku"),
+        new("MonthSavingsTransferItem", "Oszczędności"),
+        new("Category", "Kategoria"),
+        new("LoanInstallment", "Rata kredytu"),
+        new("RegularExpenseDefinition", "Cykliczny wydatek"),
+        new("RegularIncomeDefinition", "Cykliczny wpływ")
+    ];
+
+    private static readonly IReadOnlyList<SelectOption> OperationOptions =
+    [
+        new("Create", "Utworzenie"),
+        new("Update", "Aktualizacja"),
+        new("Delete", "Usunięcie")
+    ];
+    private static readonly int[] PageSizeOptions = [50];
+
+    private bool _isLoading;
+    private string? _entityType;
+    private string? _operation;
+    private string? _userId;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private List<UserDto> _users = [];
+    private IReadOnlyList<AuditLogDto> _logs = [];
+    private readonly HashSet<int> _expandedLogIds = [];
+
+    private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsAdminSession)
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
+        _toDate = DateTime.Today;
+        _fromDate = DateTime.Today.AddDays(-30);
+        await LoadUsersAndLogsAsync();
+    }
+
+    private async Task LoadUsersAndLogsAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            _users = (await UserService.GetUsersAsync(CancellationToken.None)).ToList();
+            await SearchCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Nie można wczytać audytu: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        _isLoading = true;
+        _expandedLogIds.Clear();
+
+        try
+        {
+            await SearchCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Nie można wyszukać wpisów audytu: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SearchCoreAsync()
+    {
+        _logs = await AuditService.SearchAsync(
+            new SearchAuditLogsRequest
+            {
+                EntityType = string.IsNullOrWhiteSpace(_entityType) ? null : _entityType,
+                Operation = string.IsNullOrWhiteSpace(_operation) ? null : _operation,
+                UserId = string.IsNullOrWhiteSpace(_userId) ? null : _userId,
+                FromUtc = ToUtcStartOfDay(_fromDate),
+                ToUtc = ToUtcEndOfDay(_toDate)
+            },
+            CancellationToken.None);
+    }
+
+    private static DateTime? ToUtcStartOfDay(DateTime? date)
+    {
+        return date is null
+            ? null
+            : DateTime.SpecifyKind(date.Value.Date, DateTimeKind.Local).ToUniversalTime();
+    }
+
+    private static DateTime? ToUtcEndOfDay(DateTime? date)
+    {
+        return date is null
+            ? null
+            : DateTime.SpecifyKind(date.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Local).ToUniversalTime();
+    }
+
+    private bool IsExpanded(int id)
+    {
+        return _expandedLogIds.Contains(id);
+    }
+
+    private void ToggleExpanded(int id)
+    {
+        if (!_expandedLogIds.Add(id))
+        {
+            _expandedLogIds.Remove(id);
+        }
+    }
+
+    private static string GetEntityTypeLabel(string entityType)
+    {
+        return EntityTypeOptions.FirstOrDefault(x => x.Value == entityType)?.Label ?? entityType;
+    }
+
+    private static string GetOperationLabel(string operation)
+    {
+        return OperationOptions.FirstOrDefault(x => x.Value == operation)?.Label ?? operation;
+    }
+
+    private static Color GetOperationColor(string operation)
+    {
+        return operation switch
+        {
+            "Create" => Color.Success,
+            "Update" => Color.Info,
+            "Delete" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private static string FormatDate(DateTime changedAtUtc)
+    {
+        return changedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private sealed record SelectOption(string Value, string Label);
+}

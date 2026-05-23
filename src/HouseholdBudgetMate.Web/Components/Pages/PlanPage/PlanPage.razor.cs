@@ -21,6 +21,9 @@ public partial class PlanPage : ComponentBase
     [SupplyParameterFromQuery(Name = "editExpenseId")]
     public int? EditExpenseId { get; set; }
 
+    [SupplyParameterFromQuery(Name = "addExpense")]
+    public bool AddExpense { get; set; }
+
     #endregion
 
     #region State - General
@@ -138,6 +141,7 @@ public partial class PlanPage : ComponentBase
     #region Navigation / UX
 
     private int? _expenseIdPendingScrollIntoView;
+    private bool _scrollToCreateFormPending;
 
     #endregion
 

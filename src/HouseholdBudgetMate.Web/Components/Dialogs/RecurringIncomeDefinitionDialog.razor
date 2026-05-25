@@ -1,0 +1,139 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests
+@using HouseholdBudgetMate.Abstractions.Parsing
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <ActionForm OnSubmit="Save">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.subtitle1">Edytuj cykliczny wpływ</MudText>
+                <MudText Typo="Typo.body2" Class="hb-muted">Zmień nazwę, kwotę, dzień wpływu, konto lub status.</MudText>
+            </div>
+
+            <MudTextField @bind-Value="Model.Name"
+                          Label="Nazwa"
+                          Variant="Variant.Outlined"
+                          MaxLength="64"
+                          Error="@(!string.IsNullOrWhiteSpace(_nameError))"
+                          ErrorText="@_nameError"/>
+
+            <MudTextField T="string"
+                          @bind-Value="_amountInput"
+                          Label="Kwota"
+                          Variant="Variant.Outlined"
+                          InputMode="DecimalInputMode"
+                          Immediate="true"
+                          Adornment="Adornment.End"
+                          AdornmentText="PLN"
+                          Error="@(!string.IsNullOrWhiteSpace(_amountError))"
+                          ErrorText="@_amountError"/>
+
+            <MudNumericField T="int"
+                             @bind-Value="Model.DayOfMonth"
+                             Label="Dzień miesiąca"
+                             Variant="Variant.Outlined"
+                             Min="1"
+                             Max="31"
+                             Error="@(!string.IsNullOrWhiteSpace(_dayError))"
+                             ErrorText="@_dayError"/>
+
+            <MudSelect T="int"
+                       @bind-Value="Model.AccountId"
+                       Label="Konto"
+                       Variant="Variant.Outlined"
+                       Error="@(!string.IsNullOrWhiteSpace(_accountError))"
+                       ErrorText="@_accountError">
+                @foreach (var account in Accounts)
+                {
+                    <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSwitch @bind-Value="Model.IsActive" Color="Color.Primary" Label="Aktywna"/>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="Cancel">Anuluj</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" ButtonType="ButtonType.Submit">
+                    Zapisz
+                </MudButton>
+            </MudStack>
+        </MudStack>
+        </ActionForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private readonly CultureInfo _culture = new("pl-PL");
+    private string _amountInput = string.Empty;
+    private string? _nameError;
+    private string? _amountError;
+    private string? _dayError;
+    private string? _accountError;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public UpdateRegularIncomeDefinitionRequest Model { get; set; } = new();
+    [Parameter] public IReadOnlyList<AccountDto> Accounts { get; set; } = [];
+
+    private static InputMode DecimalInputMode => InputMode.@decimal;
+
+    protected override void OnInitialized()
+    {
+        _amountInput = Model.Amount.ToString("0.00", _culture);
+    }
+
+    private void Save()
+    {
+        ClearErrors();
+
+        if (string.IsNullOrWhiteSpace(Model.Name))
+        {
+            _nameError = "Podaj nazwę wpływu.";
+        }
+
+        if (!LocalizedDecimalParser.TryParse(_amountInput, out var amount) || amount <= 0)
+        {
+            _amountError = "Podaj kwotę większą od zera, np. 100,25.";
+        }
+
+        if (Model.DayOfMonth is < 1 or > 31)
+        {
+            _dayError = "Dzień musi być w zakresie 1-31.";
+        }
+
+        if (Model.AccountId <= 0)
+        {
+            _accountError = "Wybierz konto.";
+        }
+
+        if (HasErrors(_nameError, _amountError, _dayError, _accountError))
+        {
+            return;
+        }
+
+        Model.Name = Model.Name.Trim();
+        Model.Amount = amount;
+        MudDialog.Close(DialogResult.Ok(Model));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void ClearErrors()
+    {
+        _nameError = null;
+        _amountError = null;
+        _dayError = null;
+        _accountError = null;
+    }
+
+    private static bool HasErrors(params string?[] errors)
+    {
+        return errors.Any(error => !string.IsNullOrWhiteSpace(error));
+    }
+}

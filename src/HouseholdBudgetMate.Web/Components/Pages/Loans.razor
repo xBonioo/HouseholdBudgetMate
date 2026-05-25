@@ -6,6 +6,7 @@
 @using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Abstractions.Extensions
 @using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Abstractions.Parsing
 @using MudBlazor
 
 @inject ILoanService LoanService
@@ -473,7 +474,7 @@
 
     private async Task CreateLoanAsync()
     {
-        if (!TryParseLocalizedDecimal(_createPrincipalInput, out var principal)
+        if (!LocalizedDecimalParser.TryParse(_createPrincipalInput, out var principal)
             || !_createStartDate.HasValue
             || !_createEndDate.HasValue)
         {
@@ -487,7 +488,7 @@
 
         if (_createModel.LoanType == LoanType.Cash)
         {
-            if (!TryParseLocalizedDecimal(_createRateInput, out var fixedRate))
+            if (!LocalizedDecimalParser.TryParse(_createRateInput, out var fixedRate))
             {
                 Snackbar.Add("Podaj stale oprocentowanie.", Severity.Warning);
                 return;
@@ -502,8 +503,8 @@
         else
         {
             if (!_createModel.WiborPeriodType.HasValue
-                || !TryParseLocalizedDecimal(_createMarginRateInput, out var margin)
-                || !TryParseLocalizedDecimal(_createInitialWiborInput, out var wibor))
+                || !LocalizedDecimalParser.TryParse(_createMarginRateInput, out var margin)
+                || !LocalizedDecimalParser.TryParse(_createInitialWiborInput, out var wibor))
             {
                 Snackbar.Add("Dla hipoteki podaj typ WIBOR, marze i WIBOR startowy.", Severity.Warning);
                 return;
@@ -511,7 +512,7 @@
 
             if (_createModel.InterestMode == LoanInterestMode.Fixed)
             {
-                if (!TryParseLocalizedDecimal(_createRateInput, out var fixedRate))
+                if (!LocalizedDecimalParser.TryParse(_createRateInput, out var fixedRate))
                 {
                     Snackbar.Add("Dla stalej hipoteki podaj oprocentowanie stale na pierwsze 5 lat.", Severity.Warning);
                     return;
@@ -588,7 +589,7 @@
 
     private async Task AddRateEntryAsync()
     {
-        if (_selectedLoan is null || !_rateEffectiveFrom.HasValue || !TryParseLocalizedDecimal(_newReferenceRateInput, out var rate))
+        if (_selectedLoan is null || !_rateEffectiveFrom.HasValue || !LocalizedDecimalParser.TryParse(_newReferenceRateInput, out var rate))
         {
             Snackbar.Add("Podaj date i nowy WIBOR.", Severity.Warning);
             return;
@@ -757,7 +758,7 @@
 
     private async Task ApplyPrepaymentAsync(LoanInstallmentDto installment)
     {
-        if (_selectedLoan is null || !TryParseLocalizedDecimal(_prepaymentAmountInput, out var amount))
+        if (_selectedLoan is null || !LocalizedDecimalParser.TryParse(_prepaymentAmountInput, out var amount))
         {
             Snackbar.Add("Podaj poprawną kwotę nadpłaty.", Severity.Warning);
             return;
@@ -849,18 +850,6 @@
         }
 
         return rootTags;
-    }
-
-    private static bool TryParseLocalizedDecimal(string? rawValue, out decimal value)
-    {
-        value = 0;
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
-            return false;
-        }
-
-        var normalized = rawValue.Trim().Replace(',', '.');
-        return decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out value);
     }
 
 }

@@ -1,0 +1,100 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Requests
+@using HouseholdBudgetMate.Abstractions.Enums
+@using HouseholdBudgetMate.Abstractions.Extensions
+@using HouseholdBudgetMate.Abstractions.Parsing
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <ActionForm OnSubmit="Save">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.subtitle1">Dodaj konto</MudText>
+                <MudText Typo="Typo.body2" Class="hb-muted">Dodaj rachunek, gotówkę, oszczędności lub inne środki.</MudText>
+            </div>
+
+            <MudTextField @bind-Value="Model.Name"
+                          Label="Nazwa konta"
+                          Variant="Variant.Outlined"
+                          MaxLength="80"
+                          Error="@(!string.IsNullOrWhiteSpace(_nameError))"
+                          ErrorText="@_nameError"/>
+
+            <MudSelect T="AccountType" @bind-Value="Model.Type" Label="Typ" Variant="Variant.Outlined">
+                @foreach (var accountType in _accountTypes)
+                {
+                    <MudSelectItem Value="@accountType">@accountType.GetDisplayName()</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField T="string"
+                          @bind-Value="_balanceInput"
+                          Label="Saldo początkowe"
+                          Variant="Variant.Outlined"
+                          InputMode="DecimalInputMode"
+                          Immediate="true"
+                          Adornment="Adornment.End"
+                          AdornmentText="PLN"
+                          Error="@(!string.IsNullOrWhiteSpace(_balanceError))"
+                          ErrorText="@_balanceError"/>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="Cancel">Anuluj</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" ButtonType="ButtonType.Submit">
+                    Dodaj konto
+                </MudButton>
+            </MudStack>
+        </MudStack>
+        </ActionForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private readonly CultureInfo _culture = new("pl-PL");
+    private readonly AccountType[] _accountTypes = Enum.GetValues<AccountType>();
+    private string _balanceInput = string.Empty;
+    private string? _nameError;
+    private string? _balanceError;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public CreateAccountRequest Model { get; set; } = new() { Type = AccountType.Bank };
+
+    private static InputMode DecimalInputMode => InputMode.@decimal;
+
+    protected override void OnInitialized()
+    {
+        _balanceInput = Model.ClosingBalance.ToString("0.00", _culture);
+    }
+
+    private void Save()
+    {
+        _nameError = null;
+        _balanceError = null;
+
+        if (string.IsNullOrWhiteSpace(Model.Name))
+        {
+            _nameError = "Podaj nazwę konta.";
+        }
+
+        if (!LocalizedDecimalParser.TryParseOrZero(_balanceInput, out var balance))
+        {
+            _balanceError = "Niepoprawny format salda. Użyj np. 1234,56 lub 1234.56.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(_nameError) || !string.IsNullOrWhiteSpace(_balanceError))
+        {
+            return;
+        }
+
+        Model.Name = Model.Name.Trim();
+        Model.ClosingBalance = balance;
+        MudDialog.Close(DialogResult.Ok(Model));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+}

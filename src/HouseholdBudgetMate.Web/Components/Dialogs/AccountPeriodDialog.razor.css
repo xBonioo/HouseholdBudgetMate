@@ -1,0 +1,52 @@
+.account-period-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.account-period-month,
+::deep .account-period-month {
+	min-height: 54px;
+	text-transform: none;
+}
+
+.account-period-month-empty,
+::deep .account-period-month-empty {
+	border-style: dashed !important;
+	border-width: 1.5px !important;
+	border-color: #8aa4bd !important;
+	background: #fbfdff;
+}
+
+.account-period-month-selected,
+::deep .account-period-month-selected,
+.account-period-month-selected:hover,
+::deep .account-period-month-selected:hover,
+.account-period-month-selected:focus-visible,
+::deep .account-period-month-selected:focus-visible {
+	border-color: var(--mud-palette-primary) !important;
+	background-color: var(--mud-palette-primary) !important;
+	color: var(--mud-palette-primary-text) !important;
+}
+
+.account-period-month ::deep .mud-button-label {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	text-transform: none;
+}
+
+.account-period-month-empty ::deep .mud-icon-root,
+::deep .account-period-month-empty .mud-icon-root {
+	font-size: 1rem;
+	margin-left: 0;
+	margin-right: 0;
+}
+
+@media (max-width: 480px) {
+	.account-period-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

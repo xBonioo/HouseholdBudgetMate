@@ -1,13 +1,17 @@
 @using MudBlazor
 
-<MudDialog>
+<MudDialog DefaultFocus="DefaultFocus.LastChild">
     <DialogContent>
-        <MudText>@Message</MudText>
+        <ActionForm OnSubmit="Confirm">
+            <MudStack Spacing="3">
+                <MudText>@Message</MudText>
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="Cancel">Anuluj</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Tak</MudButton>
+                </MudStack>
+            </MudStack>
+        </ActionForm>
     </DialogContent>
-    <DialogActions>
-        <MudButton Variant="Variant.Text" OnClick="Cancel">Anuluj</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirm">Tak</MudButton>
-    </DialogActions>
 </MudDialog>
 
 @code {

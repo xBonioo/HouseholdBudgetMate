@@ -35,6 +35,13 @@ Aplikacja `HouseholdBudgetMate.Web` przy starcie:
 - Runtime config: `%APPDATA%\\HouseholdBudgetMate\\config.json`
 - Pliki aplikacji (uploady itp.): `%APPDATA%\\HouseholdBudgetMate\\files`
 
+## HTTPS i certyfikat localhost (Windows)
+
+- Wersja instalowana przez MSI uruchamia aplikację lokalnie po HTTPS.
+- Aplikacja tworzy certyfikat self-signed dla `localhost` i próbuje dodać go do zaufanych certyfikatów bieżącego użytkownika.
+- Przy pierwszym uruchomieniu może pojawić się ostrzeżenie systemu lub przeglądarki dotyczące SSL/localhost. To jest normalne dla lokalnych certyfikatów.
+- Po zaakceptowaniu i zaufaniu certyfikatu ostrzeżenie zwykle nie pojawia się ponownie.
+
 ## Szybki flow (Release)
 
 1. Zbuduj instalator przez `dotnet build` (komenda wyżej) **lub** skrypt `build-msi.ps1`.

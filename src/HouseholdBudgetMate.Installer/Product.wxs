@@ -35,6 +35,7 @@
     <!-- Desktop shortcut can be enabled during install with ADDDESKTOPSHORTCUT=1 -->
     <Property Id="ADDDESKTOPSHORTCUT" Value="0" />
     <Property Id="ADDAUTOSTART" Value="1" />
+    <WixVariable Id="WixUILicenseRtf" Value="InstallerLicense.rtf" />
     
 
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />

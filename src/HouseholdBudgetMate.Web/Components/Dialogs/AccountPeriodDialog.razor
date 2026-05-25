@@ -1,0 +1,113 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <ActionForm OnSubmit="Save">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.subtitle1">Wybierz miesiąc sald</MudText>
+                <MudText Typo="Typo.body2" Class="hb-muted">Przełącz okres bez przewijania długiej listy miesięcy.</MudText>
+            </div>
+
+            <MudSelect T="int" @bind-Value="_year" Label="Rok" Variant="Variant.Outlined">
+                @foreach (var year in AvailableYears)
+                {
+                    <MudSelectItem Value="@year">@year</MudSelectItem>
+                }
+            </MudSelect>
+
+            <div class="account-period-grid">
+                @foreach (var month in _months)
+                {
+                    var hasData = HasData(month.Value);
+                    <MudButton Variant="@(_month == month.Value ? Variant.Filled : Variant.Outlined)"
+                               Color="@(_month == month.Value ? Color.Primary : Color.Secondary)"
+                               Class="@GetMonthButtonClass(month.Value, hasData)"
+                               ButtonType="ButtonType.Button"
+                               StartIcon="@(hasData ? null : Icons.Material.Filled.Add)"
+                               OnClick="() => SelectMonth(month.Value)">
+                        <span>@month.Label</span>
+                    </MudButton>
+                }
+            </div>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="Cancel">Anuluj</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Check" ButtonType="ButtonType.Submit">
+                    Wybierz
+                </MudButton>
+            </MudStack>
+        </MudStack>
+        </ActionForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private readonly IReadOnlyList<MonthOption> _months = Enumerable.Range(1, 12)
+        .Select(month => new MonthOption(month, new DateTime(2000, month, 1).ToString("MMM", new CultureInfo("pl-PL"))))
+        .ToList();
+
+    private int _year;
+    private int _month;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public int SelectedYear { get; set; }
+    [Parameter] public int SelectedMonth { get; set; }
+    [Parameter] public IReadOnlyList<int> AvailableYears { get; set; } = [];
+    [Parameter] public IReadOnlyList<AvailableMonthDto> AvailablePlanMonths { get; set; } = [];
+    [Parameter] public IReadOnlySet<YearMonthKeyDto> AccountBalanceMonths { get; set; } = new HashSet<YearMonthKeyDto>();
+
+    protected override void OnInitialized()
+    {
+        _year = SelectedYear;
+        _month = SelectedMonth;
+
+        if (!AvailableYears.Contains(_year))
+        {
+            AvailableYears = AvailableYears.Append(_year).Distinct().OrderByDescending(x => x).ToList();
+        }
+    }
+
+    private bool HasData(int month)
+    {
+        return AvailablePlanMonths.Any(x => x.Year == _year && x.Month == month)
+               || AccountBalanceMonths.Contains(new YearMonthKeyDto(_year, month));
+    }
+
+    private string GetMonthButtonClass(int month, bool hasData)
+    {
+        var classes = "account-period-month";
+
+        if (_month == month)
+        {
+            classes += " account-period-month-selected";
+        }
+
+        if (!hasData)
+        {
+            classes += " account-period-month-empty";
+        }
+
+        return classes;
+    }
+
+    private void SelectMonth(int month)
+    {
+        _month = month;
+    }
+
+    private void Save()
+    {
+        MudDialog.Close(DialogResult.Ok(new AccountPeriodSelectionDto(_year, _month)));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private readonly record struct MonthOption(int Value, string Label);
+}

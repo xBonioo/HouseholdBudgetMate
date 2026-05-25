@@ -1,4 +1,5 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto;
+using HouseholdBudgetMate.Abstractions.Contracts.Categories;
 
 namespace HouseholdBudgetMate.Web.Components.Pages.PlanPage;
 
@@ -24,30 +25,7 @@ public partial class PlanPage
 
     private IReadOnlyList<TagDto> GetSelectableTags(int categoryId, int? selectedTagId)
     {
-        var tags = _categories.FirstOrDefault(x => x.Id == categoryId)?.Tags
-            .OrderBy(x => x.Name)
-            .ToList();
-
-        if (tags == null)
-        {
-            return [];
-        }
-
-        if (!selectedTagId.HasValue || tags.Any(x => x.Id == selectedTagId.Value))
-        {
-            return tags;
-        }
-
-        var selectedTag = _categories
-            .SelectMany(x => x.Tags)
-            .FirstOrDefault(x => x.Id == selectedTagId.Value);
-
-        if (selectedTag is not null)
-        {
-            tags.Insert(0, selectedTag);
-        }
-
-        return tags;
+        return CategoryTagSelector.GetSelectableTags(_categories, categoryId, selectedTagId);
     }
 
     private IReadOnlyList<TagDto> GetSelectableRootTags(int categoryId, int? selectedTagId)

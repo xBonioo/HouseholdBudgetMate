@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using MudBlazor;
+using HouseholdBudgetMate.Abstractions.Parsing;
 
 namespace HouseholdBudgetMate.Web.Components.Pages.PlanPage;
 
@@ -8,7 +9,7 @@ public partial class PlanPage
     private Task SetNewPlannedAmountInputAsync(string? input)
     {
         _newExpensePlannedAmountInput = input ?? string.Empty;
-        if (TryParseLocalizedDecimal(_newExpensePlannedAmountInput, out var value))
+        if (LocalizedDecimalParser.TryParseOrZero(_newExpensePlannedAmountInput, out var value))
         {
             _newExpense.PlannedAmount = value;
         }
@@ -19,7 +20,7 @@ public partial class PlanPage
     private Task SetNewActualAmountInputAsync(string? input)
     {
         _newExpenseActualAmountInput = input ?? string.Empty;
-        if (TryParseLocalizedDecimal(_newExpenseActualAmountInput, out var value))
+        if (LocalizedDecimalParser.TryParseOrZero(_newExpenseActualAmountInput, out var value))
         {
             _newExpense.ActualAmount = value;
         }
@@ -30,7 +31,7 @@ public partial class PlanPage
     private Task SetEditPlannedAmountInputAsync(string? input)
     {
         _editExpensePlannedAmountInput = input ?? string.Empty;
-        if (_editExpense is not null && TryParseLocalizedDecimal(_editExpensePlannedAmountInput, out var value))
+        if (_editExpense is not null && LocalizedDecimalParser.TryParseOrZero(_editExpensePlannedAmountInput, out var value))
         {
             _editExpense.PlannedAmount = value;
         }
@@ -41,7 +42,7 @@ public partial class PlanPage
     private Task SetEditActualAmountInputAsync(string? input)
     {
         _editExpenseActualAmountInput = input ?? string.Empty;
-        if (_editExpense is not null && TryParseLocalizedDecimal(_editExpenseActualAmountInput, out var value))
+        if (_editExpense is not null && LocalizedDecimalParser.TryParseOrZero(_editExpenseActualAmountInput, out var value))
         {
             _editExpense.ActualAmount = value;
         }
@@ -52,7 +53,7 @@ public partial class PlanPage
     private Task SetNewIncomeAmountInputAsync(string? input)
     {
         _newIncomeAmountInput = input ?? string.Empty;
-        if (TryParseLocalizedDecimal(_newIncomeAmountInput, out var value))
+        if (LocalizedDecimalParser.TryParseOrZero(_newIncomeAmountInput, out var value))
         {
             _newIncome.Amount = value;
         }
@@ -63,7 +64,7 @@ public partial class PlanPage
     private Task SetEditIncomeAmountInputAsync(string? input)
     {
         _editIncomeAmountInput = input ?? string.Empty;
-        if (_editIncome is not null && TryParseLocalizedDecimal(_editIncomeAmountInput, out var value))
+        if (_editIncome is not null && LocalizedDecimalParser.TryParseOrZero(_editIncomeAmountInput, out var value))
         {
             _editIncome.Amount = value;
         }
@@ -74,7 +75,7 @@ public partial class PlanPage
     private Task SetNewSavingsTransferAmountInputAsync(string? input)
     {
         _newSavingsTransferAmountInput = input ?? string.Empty;
-        if (TryParseLocalizedDecimal(_newSavingsTransferAmountInput, out var value))
+        if (LocalizedDecimalParser.TryParseOrZero(_newSavingsTransferAmountInput, out var value))
         {
             _newSavingsTransfer.Amount = value;
         }
@@ -86,7 +87,7 @@ public partial class PlanPage
     {
         _editSavingsTransferAmountInput = input ?? string.Empty;
         if (_editSavingsTransfer is not null &&
-            TryParseLocalizedDecimal(_editSavingsTransferAmountInput, out var value))
+            LocalizedDecimalParser.TryParseOrZero(_editSavingsTransferAmountInput, out var value))
         {
             _editSavingsTransfer.Amount = value;
         }
@@ -97,7 +98,7 @@ public partial class PlanPage
     private Task SetEditLineItemAmountInputAsync(string? input)
     {
         _editLineItemAmountInput = input ?? string.Empty;
-        if (_editLineItem is not null && TryParseLocalizedDecimal(_editLineItemAmountInput, out var value))
+        if (_editLineItem is not null && LocalizedDecimalParser.TryParseOrZero(_editLineItemAmountInput, out var value))
         {
             _editLineItem.Amount = value;
         }
@@ -123,7 +124,7 @@ public partial class PlanPage
         var normalizedInput = input ?? string.Empty;
         _lineItemCreateAmountInputs[expenseId] = normalizedInput;
 
-        if (TryParseLocalizedDecimal(normalizedInput, out var value))
+        if (LocalizedDecimalParser.TryParseOrZero(normalizedInput, out var value))
         {
             GetLineItemCreateModel(expenseId).Amount = value;
         }
@@ -133,37 +134,13 @@ public partial class PlanPage
 
     private bool TryParseAmountOrWarn(string? input, out decimal value)
     {
-        if (TryParseLocalizedDecimal(input, out value))
+        if (LocalizedDecimalParser.TryParseOrZero(input, out value))
         {
             return true;
         }
 
         Snackbar.Add("Niepoprawny format kwoty. Użyj np. 12,50 lub 12.50.", Severity.Warning);
         return false;
-    }
-
-    private static bool TryParseLocalizedDecimal(string? rawValue, out decimal value)
-    {
-        value = 0;
-
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
-            return true;
-        }
-
-        var normalized = rawValue
-            .Trim()
-            .Replace(" ", string.Empty)
-            .Replace('\u00A0'.ToString(), string.Empty)
-            .Replace(',', '.');
-
-        if (!decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
-        {
-            return false;
-        }
-
-        value = parsed;
-        return true;
     }
 
     private static string FormatDecimalInput(decimal value)

@@ -247,6 +247,19 @@ try
         var startupMessage = $"Aplikacja uruchamia sie pod adresami: {string.Join(", ", startupHostingOptions.GetStartupUrls())}";
         Console.WriteLine(startupMessage);
         app.Logger.LogInformation(startupMessage);
+
+        if (!startupHostingOptions.IsHttpsCertificateTrusted)
+        {
+            const string sslWarning = "HTTPS dla localhost jest aktywne, ale certyfikat nie zostal dodany do zaufanych certyfikatow. Przegladarka moze pokazywac ostrzezenie SSL do czasu recznego zaufania certyfikatu.";
+            Console.WriteLine(sslWarning);
+            app.Logger.LogWarning(sslWarning);
+
+            if (!string.IsNullOrWhiteSpace(startupHostingOptions.HttpsCertificateTrustWarning))
+            {
+                Console.WriteLine(startupHostingOptions.HttpsCertificateTrustWarning);
+                app.Logger.LogWarning(startupHostingOptions.HttpsCertificateTrustWarning);
+            }
+        }
     }
 
     var hasEnvironmentConnectionString = !string.IsNullOrWhiteSpace(environmentConnectionString);

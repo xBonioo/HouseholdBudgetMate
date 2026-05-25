@@ -1,0 +1,147 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests
+@using HouseholdBudgetMate.Abstractions.Parsing
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <ActionForm OnSubmit="Save">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.subtitle1">Edytuj cykliczny wydatek</MudText>
+                <MudText Typo="Typo.body2" Class="hb-muted">Zmień kategorię, tag, kwotę, widoczność pozostałej kwoty lub status.</MudText>
+            </div>
+
+            <MudTextField @bind-Value="Model.Name"
+                          Label="Nazwa"
+                          Variant="Variant.Outlined"
+                          MaxLength="160"
+                          Error="@(!string.IsNullOrWhiteSpace(_nameError))"
+                          ErrorText="@_nameError"/>
+
+            <MudSelect T="int"
+                       Value="Model.CategoryId"
+                       ValueChanged="OnCategoryChanged"
+                       Label="Kategoria"
+                       Variant="Variant.Outlined"
+                       Error="@(!string.IsNullOrWhiteSpace(_categoryError))"
+                       ErrorText="@_categoryError">
+                @foreach (var category in Categories)
+                {
+                    <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="int?"
+                       @bind-Value="Model.TagId"
+                       Label="Tag"
+                       Variant="Variant.Outlined"
+                       Clearable="true"
+                       Class="hb-select-ellipsis">
+                @foreach (var tag in CategoryTagSelector.GetSelectableRootTags(Categories, Model.CategoryId, Model.TagId))
+                {
+                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField T="string"
+                          @bind-Value="_amountInput"
+                          Label="Kwota"
+                          Variant="Variant.Outlined"
+                          InputMode="DecimalInputMode"
+                          Immediate="true"
+                          Adornment="Adornment.End"
+                          AdornmentText="PLN"
+                          Error="@(!string.IsNullOrWhiteSpace(_amountError))"
+                          ErrorText="@_amountError"/>
+
+            <div class="recurring-edit-switches">
+                <MudSwitch @bind-Value="Model.ShowRemainingInUI" Color="Color.Primary" Label="Pokazuj pozostałą kwotę w budżecie"/>
+                <MudSwitch @bind-Value="Model.IsActive" Color="Color.Primary" Label="Aktywna"/>
+            </div>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="Cancel">Anuluj</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" ButtonType="ButtonType.Submit">
+                    Zapisz
+                </MudButton>
+            </MudStack>
+        </MudStack>
+        </ActionForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private readonly CultureInfo _culture = new("pl-PL");
+    private string _amountInput = string.Empty;
+    private string? _nameError;
+    private string? _amountError;
+    private string? _categoryError;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public UpdateRegularExpenseDefinitionRequest Model { get; set; } = new();
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = [];
+
+    private static InputMode DecimalInputMode => InputMode.@decimal;
+
+    protected override void OnInitialized()
+    {
+        _amountInput = Model.Amount.ToString("0.00", _culture);
+    }
+
+    private Task OnCategoryChanged(int categoryId)
+    {
+        Model.CategoryId = categoryId;
+        Model.TagId = null;
+        return Task.CompletedTask;
+    }
+
+    private void Save()
+    {
+        ClearErrors();
+
+        if (string.IsNullOrWhiteSpace(Model.Name))
+        {
+            _nameError = "Podaj nazwę wydatku.";
+        }
+
+        if (!LocalizedDecimalParser.TryParse(_amountInput, out var amount) || amount <= 0)
+        {
+            _amountError = "Podaj kwotę większą od zera, np. 100,25.";
+        }
+
+        if (Model.CategoryId <= 0)
+        {
+            _categoryError = "Wybierz kategorię.";
+        }
+
+        if (HasErrors(_nameError, _amountError, _categoryError))
+        {
+            return;
+        }
+
+        Model.Name = Model.Name.Trim();
+        Model.Amount = amount;
+        MudDialog.Close(DialogResult.Ok(Model));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void ClearErrors()
+    {
+        _nameError = null;
+        _amountError = null;
+        _categoryError = null;
+    }
+
+    private static bool HasErrors(params string?[] errors)
+    {
+        return errors.Any(error => !string.IsNullOrWhiteSpace(error));
+    }
+}

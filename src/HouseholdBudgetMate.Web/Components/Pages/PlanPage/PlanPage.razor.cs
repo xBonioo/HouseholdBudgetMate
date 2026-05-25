@@ -141,7 +141,6 @@ public partial class PlanPage : ComponentBase
     #region Navigation / UX
 
     private int? _expenseIdPendingScrollIntoView;
-    private bool _scrollToCreateFormPending;
 
     #endregion
 

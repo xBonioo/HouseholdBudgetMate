@@ -58,8 +58,7 @@ public partial class PlanPage : IAsyncDisposable
             else if (AddExpense && !_isCreateExpenseFormVisible)
             {
                 _isCreateExpenseFormVisible = true;
-                _scrollToCreateFormPending = true;
-                NavigationManager.NavigateTo($"/plan/{Year}/{Month}", replace: true);
+                NavigationManager.NavigateTo($"/plan/{Year}/{Month}#create-expense-anchor", replace: true);
             }
         }
         catch (Exception ex)
@@ -87,13 +86,6 @@ public partial class PlanPage : IAsyncDisposable
             }
         }
 
-        if (_scrollToCreateFormPending)
-        {
-            _scrollToCreateFormPending = false;
-            await JsRuntime.InvokeVoidAsync("scrollToCreateExpenseForm");
-            return;
-        }
-
         if (!_expenseIdPendingScrollIntoView.HasValue)
         {
             return;
@@ -101,7 +93,14 @@ public partial class PlanPage : IAsyncDisposable
 
         var expenseId = _expenseIdPendingScrollIntoView.Value;
         _expenseIdPendingScrollIntoView = null;
-        await JsRuntime.InvokeVoidAsync("scrollExpenseRowIntoView", GetExpenseEditAnchorId(expenseId));
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("scrollExpenseRowIntoView", GetExpenseEditAnchorId(expenseId));
+        }
+        catch (JSException)
+        {
+            // Ignore startup JS timing issues; scroll is optional.
+        }
     }
 
     [JSInvokable]

@@ -1,22 +1,321 @@
-.accounts-drag {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+.accounts-dashboard {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
 }
 
-.accounts-drag ::deep .month-balance-add-button {
-    min-height: 32px;
-    border-style: dashed;
-    text-transform: none;
+.accounts-alert {
+	border-radius: 10px;
 }
 
-.accounts-drag ::deep .month-balance-add-button .mud-button-label {
-    text-transform: none;
+.accounts-hero {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.accounts-hero-main,
+.accounts-hero-actions,
+.accounts-section-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+}
+
+.accounts-title {
+	font-weight: 700;
+}
+
+.accounts-period-picker {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	min-width: 0;
+}
+
+.accounts-period-button {
+	min-width: 224px;
+	min-height: 46px;
+	text-transform: none;
+}
+
+.accounts-period-button ::deep .mud-button-label {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	line-height: 1.15;
+	text-transform: none;
+	min-width: 0;
+}
+
+.accounts-period-button small {
+	font-size: 0.72rem;
+	color: #6b7280;
+	font-weight: 500;
+}
+
+.accounts-hero-actions {
+	align-items: center;
+	justify-content: flex-start;
+	flex-wrap: wrap;
+}
+
+.accounts-kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+	align-items: stretch;
+}
+
+.accounts-kpi-card {
+	min-height: 126px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.accounts-kpi-card ::deep .hb-kpi-value,
+.accounts-kpi-pair {
+	line-height: 1.18;
+}
+
+.accounts-kpi-pair {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.accounts-kpi-attention {
+	border-color: rgba(245, 158, 11, 0.45);
+	background: linear-gradient(180deg, #ffffff 0%, #fff8ed 100%);
+}
+
+.accounts-panel,
+.accounts-dashboard ::deep .accounts-panel {
+	padding: 18px;
+}
+
+.accounts-insight-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+	gap: 16px;
+	align-items: start;
+}
+
+.accounts-health-list {
+	margin-top: 8px;
+}
+
+.accounts-health-row {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.accounts-summary-split {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+	margin-top: 14px;
+}
+
+.accounts-summary-box {
+	min-width: 0;
+	border: 1px solid #e2eaf2;
+	background: #fbfdff;
+	border-radius: 10px;
+	padding: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.accounts-empty-state {
+	border: 1px dashed #cfdbe7;
+	border-radius: 10px;
+	background: #fbfdff;
+	padding: 18px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.accounts-success-state {
+	border-color: rgba(16, 185, 129, 0.34);
+	background: #f3fbf7;
+}
+
+.accounts-balance-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.accounts-balance-card {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(150px, 0.45fr);
+	gap: 12px;
+	align-items: center;
+	border: 1px solid #e2eaf2;
+	border-radius: 10px;
+	background: #ffffff;
+	padding: 12px;
+}
+
+.accounts-balance-card.is-savings {
+	border-left: 4px solid #10b981;
+}
+
+.accounts-balance-card.is-archived {
+	opacity: 0.78;
+	background: #fafafa;
+}
+
+.accounts-balance-main {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.accounts-balance-main > div,
+.accounts-health-row > div {
+	min-width: 0;
+}
+
+.accounts-balance-status {
+	white-space: nowrap;
+}
+
+.accounts-balance-amount {
+	min-width: 0;
+	text-align: right;
+}
+
+.accounts-management-table {
+	margin-top: 4px;
+}
+
+.accounts-management-table ::deep .mud-table-head .mud-table-cell {
+	font-weight: 700;
+	color: #305066;
+	background: #f4f8fb;
+}
+
+.accounts-row-title {
+	font-weight: 700;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.accounts-actions-cell {
+	white-space: nowrap;
+	text-align: left;
+}
+
+.accounts-actions-row {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 4px;
+}
+
+.accounts-positive {
+	color: #047857;
+}
+
+.accounts-negative {
+	color: #b91c1c;
+}
+
+@media (max-width: 1200px) {
+	.accounts-kpi-grid,
+	.accounts-insight-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.accounts-balance-list {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 @media (max-width: 960px) {
-    .accounts-drag ::deep .account-order-cell,
-    .accounts-drag ::deep .manual-order-action {
-        display: none;
-    }
+	.accounts-hero-main,
+	.accounts-section-heading {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.accounts-period-picker {
+		align-items: stretch;
+		justify-content: flex-start;
+		width: 100%;
+	}
+
+	.accounts-hero-actions {
+		align-items: stretch;
+	}
+
+	.accounts-hero-actions ::deep .mud-button-root,
+	.accounts-hero-actions ::deep .mud-chip-root {
+		width: 100%;
+		justify-content: center;
+	}
+
+	.accounts-kpi-grid,
+	.accounts-insight-grid,
+	.accounts-summary-split {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.accounts-period-button {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.accounts-balance-card {
+		grid-template-columns: minmax(0, 1fr);
+		align-items: start;
+	}
+
+	.accounts-balance-status,
+	.accounts-balance-amount {
+		text-align: left;
+	}
+
+	.accounts-dashboard ::deep .account-order-cell,
+	.accounts-dashboard ::deep .manual-order-action {
+		display: none !important;
+	}
+
+	.accounts-actions-row {
+		justify-content: flex-start;
+	}
+
+	.accounts-actions-cell {
+		text-align: left;
+	}
+}
+
+@media (max-width: 600px) {
+	.accounts-panel,
+	.accounts-dashboard ::deep .accounts-panel {
+		padding: 14px;
+	}
+
+	.accounts-kpi-card {
+		min-height: 112px;
+	}
+
+	.accounts-empty-state {
+		padding: 14px;
+	}
 }

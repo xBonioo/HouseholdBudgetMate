@@ -1,6 +1,10 @@
 @using Microsoft.AspNetCore.Components.Web
 
-<form class="@GetCssClass()" @onsubmit="HandleSubmitAsync" @onsubmit:preventDefault="true" @onsubmit:stopPropagation="true">
+<form class="@GetCssClass()"
+      @onsubmit="HandleFormSubmitAsync"
+      @onsubmit:preventDefault="true"
+      @onsubmit:stopPropagation="true"
+      @onkeydown="HandleKeyDownAsync">
     @ChildContent
 </form>
 
@@ -8,8 +12,10 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public EventCallback OnSubmit { get; set; }
     [Parameter] public string? Class { get; set; }
+    [Parameter] public bool SubmitOnEnter { get; set; } = true;
 
     private bool _isSubmitting;
+    private DateTimeOffset _lastKeyboardSubmitAt;
 
     private string GetCssClass()
     {
@@ -18,7 +24,33 @@
             : $"hb-action-form {Class}";
     }
 
-    private async Task HandleSubmitAsync()
+    private async Task HandleFormSubmitAsync()
+    {
+        if (DateTimeOffset.UtcNow - _lastKeyboardSubmitAt < TimeSpan.FromMilliseconds(250))
+        {
+            return;
+        }
+
+        await SubmitAsync();
+    }
+
+    private async Task HandleKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (!SubmitOnEnter
+            || (args.Key != "Enter" && args.Key != "NumpadEnter")
+            || args.ShiftKey
+            || args.CtrlKey
+            || args.AltKey
+            || args.MetaKey)
+        {
+            return;
+        }
+
+        _lastKeyboardSubmitAt = DateTimeOffset.UtcNow;
+        await SubmitAsync();
+    }
+
+    private async Task SubmitAsync()
     {
         if (_isSubmitting || !OnSubmit.HasDelegate)
         {

@@ -17,6 +17,8 @@ internal sealed class StartupHostingOptions
     public required bool OpenBrowserOnStartup { get; init; }
     public required X509Certificate2 HttpsCertificate { get; init; }
     public required IReadOnlyList<IPAddress> LanAddresses { get; init; }
+    public required bool IsHttpsCertificateTrusted { get; init; }
+    public string? HttpsCertificateTrustWarning { get; init; }
 
     public static StartupHostingOptions Create(IConfiguration configuration, string appDataDirectory)
     {
@@ -30,7 +32,7 @@ internal sealed class StartupHostingOptions
         var httpsPort = FindAvailablePort(preferredHttpsPort, lanAddresses, httpPort);
         var certPath = Path.Combine(appDataDirectory, "certs", "localhost.pfx");
         var certificate = LoadOrCreateCertificate(certPath, lanAddresses);
-        TryTrustCertificate(certificate);
+        var trustResult = TryTrustCertificate(certificate);
 
         return new StartupHostingOptions
         {
@@ -40,7 +42,9 @@ internal sealed class StartupHostingOptions
             EnableLanAccess = enableLanAccess,
             OpenBrowserOnStartup = openBrowserOnStartup,
             HttpsCertificate = certificate,
-            LanAddresses = lanAddresses
+            LanAddresses = lanAddresses,
+            IsHttpsCertificateTrusted = trustResult.IsTrusted,
+            HttpsCertificateTrustWarning = trustResult.Warning
         };
     }
 
@@ -255,7 +259,7 @@ internal sealed class StartupHostingOptions
         return lanAddresses.All(address => subjectAlternativeName.Contains(address.ToString(), StringComparison.OrdinalIgnoreCase));
     }
 
-    private static void TryTrustCertificate(X509Certificate2 certificate)
+    private static CertificateTrustResult TryTrustCertificate(X509Certificate2 certificate)
     {
         try
         {
@@ -271,11 +275,28 @@ internal sealed class StartupHostingOptions
             {
                 store.Add(certificate);
             }
+
+            return CertificateTrustResult.Trusted();
         }
-        catch
+        catch (Exception ex)
         {
             // If policy blocks trust-store writes, app still runs with HTTP/HTTPS;
             // browser may show cert warning.
+            return CertificateTrustResult.NotTrusted(
+                $"Nie udalo sie dodac certyfikatu localhost do zaufanych certyfikatow systemu (CurrentUser/Root). Szczegoly: {ex.Message}");
+        }
+    }
+
+    private readonly record struct CertificateTrustResult(bool IsTrusted, string? Warning)
+    {
+        public static CertificateTrustResult Trusted()
+        {
+            return new CertificateTrustResult(true, null);
+        }
+
+        public static CertificateTrustResult NotTrusted(string warning)
+        {
+            return new CertificateTrustResult(false, warning);
         }
     }
 }

@@ -70,6 +70,18 @@ public partial class Accounts
 
     private string SelectedMonthPlanHref => $"/plan/{_selectedYear}/{_selectedMonth}";
     private string SelectedPeriodLabel => $"{GetMonthLabel(_selectedMonth)} {_selectedYear}";
+    private string BalanceBaseGuidance
+    {
+        get
+        {
+            var missingAccounts = _overview.MissingBalanceAccountNames.Count == 0
+                ? string.Empty
+                : $" Brakuje danych dla: {string.Join(", ", _overview.MissingBalanceAccountNames)}.";
+
+            return $"Uzupełnij salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance i Safe-to-spend.{missingAccounts}";
+        }
+    }
+
     private string AttentionKpiClass => _overview.OverspentCategoryCount > 0
         ? "hb-kpi-card accounts-kpi-card accounts-kpi-attention"
         : "hb-kpi-card accounts-kpi-card";
@@ -301,6 +313,11 @@ public partial class Accounts
 
         _overview = new AccountsOverviewModel(
             _liveBalance.CurrentBalance,
+            _liveBalance.SafeToSpendAmount,
+            _liveBalance.OutstandingPlannedExpensesReserveTotal,
+            _liveBalance.PendingSavingsTransfersReserveTotal,
+            _liveBalance.HasCompleteBalanceBase,
+            _liveBalance.MissingBalanceAccountNames,
             checkingBalance,
             allAccountsBalance,
             _liveBalance.IncomesTotal,
@@ -742,7 +759,12 @@ public partial class Accounts
     private readonly record struct MonthOption(int Value, string Label, string ShortLabel);
 
     private sealed record AccountsOverviewModel(
-        decimal AvailableAfterMonthMovements = 0,
+        decimal LiveBalance = 0,
+        decimal SafeToSpend = 0,
+        decimal OutstandingPlannedExpensesReserveTotal = 0,
+        decimal PendingSavingsTransfersReserveTotal = 0,
+        bool HasCompleteBalanceBase = false,
+        IReadOnlyList<string>? MissingBalanceAccountNamesValue = null,
         decimal CheckingBalance = 0,
         decimal SavingsBalance = 0,
         decimal IncomesTotal = 0,
@@ -751,7 +773,10 @@ public partial class Accounts
         int OverspentCategoryCount = 0,
         int TotalAccountCount = 0,
         int ActiveAccountCount = 0,
-        bool IsMonthClosed = false);
+        bool IsMonthClosed = false)
+    {
+        public IReadOnlyList<string> MissingBalanceAccountNames => MissingBalanceAccountNamesValue ?? [];
+    }
 
     private sealed record AccountBalanceRow(
         int Id,

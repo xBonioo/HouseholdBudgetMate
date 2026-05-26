@@ -63,7 +63,7 @@
     @if (_isInitialLoading)
     {
         <div class="accounts-kpi-grid">
-            @for (var i = 0; i < 6; i++)
+            @for (var i = 0; i < 7; i++)
             {
                 <MudPaper Class="hb-kpi-card accounts-kpi-card">
                     <MudSkeleton Width="45%" Height="16px"/>
@@ -75,11 +75,27 @@
     }
     else
     {
+        @if (!_overview.HasCompleteBalanceBase)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="accounts-alert">
+                @BalanceBaseGuidance
+            </MudAlert>
+        }
+
         <div class="accounts-kpi-grid">
             <MudPaper Class="hb-kpi-card accounts-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Dostępne po ruchach miesiąca</MudText>
-                <MudText Class="hb-kpi-value">@FormatMoney(_overview.AvailableAfterMonthMovements)</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">Saldo live zgodne z dashboardem</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
+                <MudText Class="hb-kpi-value">@(_overview.HasCompleteBalanceBase ? FormatMoney(_overview.LiveBalance) : "Brak danych")</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Po wykonanych ruchach miesiąca</MudText>
+            </MudPaper>
+            <MudPaper Class="hb-kpi-card accounts-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Safe-to-spend</MudText>
+                <MudText Class="hb-kpi-value">@(_overview.HasCompleteBalanceBase ? FormatMoney(_overview.SafeToSpend) : "Brak danych")</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">
+                    @(_overview.HasCompleteBalanceBase
+                        ? $"Rezerwy: {FormatMoney(_overview.OutstandingPlannedExpensesReserveTotal + _overview.PendingSavingsTransfersReserveTotal)}"
+                        : "Wymagane saldo poprzedniego miesiąca")
+                </MudText>
             </MudPaper>
             <MudPaper Class="hb-kpi-card accounts-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Konta bieżące</MudText>

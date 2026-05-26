@@ -164,6 +164,18 @@ public partial class PlanPage : ComponentBase
 
     private bool IsMonthClosed => _monthPlan?.IsClosed == true;
 
+    private string BalanceBaseGuidance
+    {
+        get
+        {
+            var missingAccounts = _liveBalance.MissingBalanceAccountNames.Count == 0
+                ? string.Empty
+                : $" Brakuje danych dla: {string.Join(", ", _liveBalance.MissingBalanceAccountNames)}.";
+
+            return $"Uzupełnij salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance i Safe-to-spend.{missingAccounts}";
+        }
+    }
+
     private decimal UnplannedSpentTotal =>
         _monthPlan?.Expenses
             .Sum(x => x.PlannedAmount <= 0

@@ -100,8 +100,9 @@
     </MudItem>
     <MudItem xs="12" md="4">
         <MudPaper Class="hb-kpi-card">
-            <MudText Typo="Typo.caption" Class="hb-muted">Pozostało</MudText>
+            <MudText Typo="Typo.caption" Class="hb-muted">Pozostało w planie</MudText>
             <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00", _culture) PLN</MudText>
+            <MudText Typo="Typo.caption" Class="hb-muted">Postęp wydatków planowanych</MudText>
             <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
                                Color="@RemainingBudgetColorResolver.Resolve(_kpi.RemainingTotal, _kpi.RemainingPercent)"/>
         </MudPaper>
@@ -155,33 +156,50 @@
 </MudPaper>
 </div>
 
-<div class="dashboard-mobile-hidden">
 <MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-        <MudText Typo="Typo.h6">Live balance</MudText>
-        <MudChip T="string" Color="Color.Primary">@_liveBalance.CurrentBalance.ToString("0.00") PLN</MudChip>
-    </MudStack>
-
-    <MudGrid Class="mt-2">
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Konta bez oszczędności</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.AccountsBaseTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Wpływy miesiąca</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.IncomesTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Wydatki miesiąca</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.ExpensesTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudText Typo="Typo.caption" Class="hb-muted">Oszczędności miesiąca</MudText>
-            <MudText Typo="Typo.h6">@_liveBalance.SavingsTransfersTotal.ToString("0.00") PLN</MudText>
-        </MudItem>
-    </MudGrid>
+    <MudText Typo="Typo.h6">Płynność miesiąca</MudText>
+    @if (!_liveBalance.HasCompleteBalanceBase)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+            @BalanceBaseGuidance
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid Class="mt-2">
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
+                <MudText Typo="Typo.h6">@_liveBalance.CurrentBalance.ToString("0.00", _culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Gotówka po wykonanych ruchach miesiąca</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.caption" Class="hb-muted">Safe-to-spend</MudText>
+                <MudText Typo="Typo.h6">@_liveBalance.SafeToSpendAmount.ToString("0.00", _culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">
+                    Po rezerwie wydatków @_liveBalance.OutstandingPlannedExpensesReserveTotal.ToString("0.00", _culture) PLN i oszczędności @_liveBalance.PendingSavingsTransfersReserveTotal.ToString("0.00", _culture) PLN
+                </MudText>
+            </MudItem>
+        </MudGrid>
+        <MudGrid Class="mt-2">
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Class="hb-muted">Saldo poprzedniego miesiąca</MudText>
+                <MudText Typo="Typo.h6">@_liveBalance.AccountsBaseTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Class="hb-muted">Należne wpływy</MudText>
+                <MudText Typo="Typo.h6">@_liveBalance.IncomesTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Class="hb-muted">Wydatki rzeczywiste</MudText>
+                <MudText Typo="Typo.h6">@_liveBalance.ExpensesTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.caption" Class="hb-muted">Wykonane transfery oszczędnościowe</MudText>
+                <MudText Typo="Typo.h6">@_liveBalance.SavingsTransfersTotal.ToString("0.00", _culture) PLN</MudText>
+            </MudItem>
+        </MudGrid>
+    }
 </MudPaper>
-</div>
 
 @* <MudPaper Class="pa-4 mt-4 hb-panel">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
@@ -321,6 +339,18 @@
     private LiveBalanceDto _liveBalance = new();
     private List<UpcomingInstallmentItem> _upcomingInstallments = [];
     private DashboardSummaryDto _dashboardSummary = new();
+
+    private string BalanceBaseGuidance
+    {
+        get
+        {
+            var missingAccounts = _liveBalance.MissingBalanceAccountNames.Count == 0
+                ? string.Empty
+                : $" Brakuje danych dla: {string.Join(", ", _liveBalance.MissingBalanceAccountNames)}.";
+
+            return $"Uzupełnij salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance i Safe-to-spend.{missingAccounts}";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {

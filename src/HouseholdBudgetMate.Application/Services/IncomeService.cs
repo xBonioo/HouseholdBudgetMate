@@ -412,13 +412,21 @@ public sealed class IncomeService(
             .Include(x => x.MonthBalances)
             .ToListAsync(cancellationToken);
 
-        var accountBaseTotal = accounts.Sum(account =>
-            account.MonthBalances
-                .Where(x => x.Year < previousYear || (x.Year == previousYear && x.Month <= previousMonth))
-                .OrderByDescending(x => x.Year)
-                .ThenByDescending(x => x.Month)
-                .Select(x => x.ClosingBalance)
-                .FirstOrDefault());
+        decimal accountBaseTotal = 0;
+        var missingBalanceAccountNames = new List<string>();
+        foreach (var account in accounts)
+        {
+            var precedingMonthBalance = account.MonthBalances
+                .FirstOrDefault(x => x.Year == previousYear && x.Month == previousMonth);
+
+            if (precedingMonthBalance is null)
+            {
+                missingBalanceAccountNames.Add(account.Name);
+                continue;
+            }
+
+            accountBaseTotal += precedingMonthBalance.ClosingBalance;
+        }
 
         var incomesTotal = await dbContext.Incomes
             .AsNoTracking()
@@ -428,6 +436,8 @@ public sealed class IncomeService(
 
         decimal expensesTotal = 0;
         decimal savingsTransfersTotal = 0;
+        decimal outstandingPlannedExpensesReserveTotal = 0;
+        decimal pendingSavingsTransfersReserveTotal = 0;
         var monthPlan = await dbContext.MonthPlans
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
@@ -439,14 +449,27 @@ public sealed class IncomeService(
                 .Where(x => x.MonthPlanId == monthPlan.Id)
                 .SumAsync(x => x.ActualAmount, cancellationToken);
 
-            var savingsTransfersItemsTotal = await dbContext.MonthSavingsTransferItems
+            outstandingPlannedExpensesReserveTotal = await dbContext.Expenses
+                .AsNoTracking()
+                .Where(x => x.MonthPlanId == monthPlan.Id
+                            && x.PlannedAmount > 0
+                            && x.ActualAmount < x.PlannedAmount)
+                .SumAsync(x => x.PlannedAmount - x.ActualAmount, cancellationToken);
+
+            savingsTransfersTotal = await dbContext.MonthSavingsTransferItems
                 .AsNoTracking()
                 .Where(x => x.MonthPlanId == monthPlan.Id)
                 .Where(x => x.TransferDate <= today)
                 .SumAsync(x => x.Amount, cancellationToken);
 
-            savingsTransfersTotal += savingsTransfersItemsTotal;
+            pendingSavingsTransfersReserveTotal = await dbContext.MonthSavingsTransferItems
+                .AsNoTracking()
+                .Where(x => x.MonthPlanId == monthPlan.Id)
+                .Where(x => x.TransferDate > today)
+                .SumAsync(x => x.Amount, cancellationToken);
         }
+
+        var currentBalance = accountBaseTotal + incomesTotal - expensesTotal - savingsTransfersTotal;
 
         return new LiveBalanceDto
         {
@@ -454,7 +477,14 @@ public sealed class IncomeService(
             IncomesTotal = incomesTotal,
             ExpensesTotal = expensesTotal,
             SavingsTransfersTotal = savingsTransfersTotal,
-            CurrentBalance = accountBaseTotal + incomesTotal - expensesTotal - savingsTransfersTotal
+            CurrentBalance = currentBalance,
+            OutstandingPlannedExpensesReserveTotal = outstandingPlannedExpensesReserveTotal,
+            PendingSavingsTransfersReserveTotal = pendingSavingsTransfersReserveTotal,
+            SafeToSpendAmount = currentBalance
+                                - outstandingPlannedExpensesReserveTotal
+                                - pendingSavingsTransfersReserveTotal,
+            HasCompleteBalanceBase = missingBalanceAccountNames.Count == 0,
+            MissingBalanceAccountNames = missingBalanceAccountNames
         };
     }
 

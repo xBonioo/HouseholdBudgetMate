@@ -1100,6 +1100,11 @@ public sealed class IncomeServiceTests
         Assert.Equal(500m, liveBalance.IncomesTotal);
         Assert.Equal(250m, liveBalance.ExpensesTotal);
         Assert.Equal(2250m, liveBalance.CurrentBalance);
+        Assert.Equal(50m, liveBalance.OutstandingPlannedExpensesReserveTotal);
+        Assert.Equal(0m, liveBalance.PendingSavingsTransfersReserveTotal);
+        Assert.Equal(2200m, liveBalance.SafeToSpendAmount);
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
     }
 
     /// <summary>
@@ -1165,6 +1170,8 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(200m, liveBalance.IncomesTotal);
         Assert.Equal(1100m, liveBalance.CurrentBalance);
+        Assert.Equal(200m, liveBalance.OutstandingPlannedExpensesReserveTotal);
+        Assert.Equal(900m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>
@@ -1227,6 +1234,9 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(300m, liveBalance.SavingsTransfersTotal);
         Assert.Equal(2100m, liveBalance.CurrentBalance);
+        Assert.Equal(200m, liveBalance.OutstandingPlannedExpensesReserveTotal);
+        Assert.Equal(0m, liveBalance.PendingSavingsTransfersReserveTotal);
+        Assert.Equal(1900m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>
@@ -1270,6 +1280,8 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(0m, liveBalance.SavingsTransfersTotal);
         Assert.Equal(1000m, liveBalance.CurrentBalance);
+        Assert.Equal(500m, liveBalance.PendingSavingsTransfersReserveTotal);
+        Assert.Equal(500m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>
@@ -1327,6 +1339,84 @@ public sealed class IncomeServiceTests
 
         // Latest available balance before April is March = 4000
         Assert.Equal(4000m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync marks its result incomplete when a non-savings account has no
+    /// closing balance for the immediately preceding month. An older balance is not a valid substitute.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Report_Incomplete_When_Previous_Month_Balance_Is_Missing()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Konto bez marca", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = account.Id,
+                Year = 2026,
+                Month = 2,
+                ClosingBalance = 1500m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.False(liveBalance.HasCompleteBalanceBase);
+        Assert.Equal(new[] { "Konto bez marca" }, liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(0m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync subtracts actual unplanned spending from live balance but does not
+    /// create a future reserve when PlannedAmount is zero.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Not_Reserve_Unplanned_Actual_Expense()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            var category = new Category { Name = "Inne", Color = "#123456" };
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.Accounts.Add(account);
+            context.Categories.Add(category);
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = account.Id,
+                Year = 2026,
+                Month = 3,
+                ClosingBalance = 1000m
+            });
+
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Nagly koszt",
+                CategoryId = category.Id,
+                PlannedAmount = 0m,
+                ActualAmount = 75m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.Equal(75m, liveBalance.ExpensesTotal);
+        Assert.Equal(925m, liveBalance.CurrentBalance);
+        Assert.Equal(0m, liveBalance.OutstandingPlannedExpensesReserveTotal);
+        Assert.Equal(925m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>

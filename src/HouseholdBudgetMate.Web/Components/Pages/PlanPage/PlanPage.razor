@@ -322,7 +322,6 @@
                         <RowTemplate Context="income">
                             @if (!income.IsRegular && _editIncome is not null && _editIncome.Id == income.Id)
                             {
-                                <ActionForm OnSubmit="SaveIncomeEditAsync">
                                 <MudTd DataLabel="Nazwa">
                                     <MudTextField @bind-Value="_editIncome.Name" Variant="Variant.Outlined"/>
                                 </MudTd>
@@ -359,7 +358,8 @@
                                             Variant="Variant.Filled"
                                             Color="Color.Primary"
                                             Size="Size.Small"
-                                            ButtonType="ButtonType.Submit">
+                                            ButtonType="ButtonType.Button"
+                                            OnClick="SaveIncomeEditAsync">
                                             Zapisz
                                         </MudButton>
                                         <MudButton
@@ -371,7 +371,6 @@
                                         </MudButton>
                                     </div>
                                 </MudTd>
-                                </ActionForm>
                             }
                             else
                             {

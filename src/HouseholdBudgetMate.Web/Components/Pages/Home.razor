@@ -32,19 +32,19 @@
                    OnClick="@(() => NavigationManager.NavigateTo("/accounts"))">
             Zarządzaj kontami
         </MudButton>
-        @* <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                    StartIcon="@Icons.Material.Filled.CreditScore"
                    OnClick="@(() => NavigationManager.NavigateTo("/loans"))">
             Zarządzaj kredytami
-        </MudButton> *@
+        </MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Repeat"
                    OnClick="@(() => NavigationManager.NavigateTo("/recurring"))">
             Zarządzaj cyklicznymi
         </MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Category"
+        @* <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Category"
                    OnClick="@(() => NavigationManager.NavigateTo("/categories"))">
             Zarządzaj kategoriami
-        </MudButton>
+        </MudButton> *@
     </div>
     <div class="dashboard-actions dashboard-actions-mobile">
         <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth"
@@ -75,13 +75,13 @@
                        aria-label="Zarządzaj cyklicznymi"
                        title="Zarządzaj cyklicznymi"
                        OnClick="@(() => NavigationManager.NavigateTo("/recurring"))"/>
-        <MudIconButton Icon="@Icons.Material.Filled.Category"
+        @* <MudIconButton Icon="@Icons.Material.Filled.Category"
                        Variant="Variant.Outlined"
                        Color="Color.Secondary"
                        Class="dashboard-mobile-action"
                        aria-label="Zarządzaj kategoriami"
                        title="Zarządzaj kategoriami"
-                       OnClick="@(() => NavigationManager.NavigateTo("/categories"))"/>
+                       OnClick="@(() => NavigationManager.NavigateTo("/categories"))"/> *@
     </div>
 </MudPaper>
 

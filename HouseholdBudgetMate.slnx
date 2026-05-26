@@ -1,6 +1,5 @@
 <Solution>
     <Folder Name="/docs/">
-        <File Path="docs/ai_rules_for_sprints.md" />
         <File Path="docs/DOMAIN.md" />
         <File Path="docs/Plan Apki.txt" />
         <File Path="docs/sprints.md" />

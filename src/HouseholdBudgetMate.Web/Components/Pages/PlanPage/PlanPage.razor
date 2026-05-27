@@ -106,18 +106,18 @@
 }
 
 <MudGrid Class="hb-kpi-grid">
-    <MudItem xs="12" sm="6" lg="3" Class="hb-kpi-item">
+    <MudItem xs="12" md="4" Class="hb-kpi-item">
         <MudPaper Class="hb-kpi-card">
             <MudText Typo="Typo.caption" Class="hb-muted">Pozostało w planie</MudText>
             <MudText Class="hb-kpi-value">
                 <span class="hb-kpi-amount">@_kpi.RemainingTotal.ToString("0.00")</span>
                 <span class="hb-kpi-currency">PLN</span>
             </MudText>
-            <MudText Typo="Typo.caption" Class="hb-muted">Postęp wydatków planowanych</MudText>
+            <MudText Typo="Typo.caption" Class="hb-muted">Postęp</MudText>
             <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent" Color="@GetRemainingBarColor()"/>
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" lg="3" Class="hb-kpi-item">
+    <MudItem xs="12" md="4" Class="hb-kpi-item">
         <MudPaper Class="hb-kpi-card">
             <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
             @if (_liveBalance.HasCompleteBalanceBase)
@@ -126,7 +126,7 @@
                     <span class="hb-kpi-amount">@_liveBalance.CurrentBalance.ToString("0.00", Culture)</span>
                     <span class="hb-kpi-currency">PLN</span>
                 </MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">Saldo bazowe + należne wpływy - wydatki - wykonane transfery oszczędnościowe</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Saldo + wpływy - wydatki - wykonane transfery oszczędnościowe</MudText>
             }
             else
             {
@@ -135,27 +135,7 @@
             }
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" lg="3" Class="hb-kpi-item">
-        <MudPaper Class="hb-kpi-card">
-            <MudText Typo="Typo.caption" Class="hb-muted">Safe-to-spend</MudText>
-            @if (_liveBalance.HasCompleteBalanceBase)
-            {
-                <MudText Class="hb-kpi-value">
-                    <span class="hb-kpi-amount">@_liveBalance.SafeToSpendAmount.ToString("0.00", Culture)</span>
-                    <span class="hb-kpi-currency">PLN</span>
-                </MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">
-                    Rezerwy: @_liveBalance.OutstandingPlannedExpensesReserveTotal.ToString("0.00", Culture) PLN wydatki + @_liveBalance.PendingSavingsTransfersReserveTotal.ToString("0.00", Culture) PLN oszczędności
-                </MudText>
-            }
-            else
-            {
-                <MudText Class="hb-kpi-value">Brak danych</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">Najpierw uzupełnij saldo bazowe</MudText>
-            }
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" lg="3" Class="hb-kpi-item">
+    <MudItem xs="12" md="4" Class="hb-kpi-item">
         <MudPaper Class="hb-kpi-card">
             <MudText Typo="Typo.caption" Class="hb-muted">Zaoszczędzone w miesiącu</MudText>
             <MudText Class="hb-kpi-value">

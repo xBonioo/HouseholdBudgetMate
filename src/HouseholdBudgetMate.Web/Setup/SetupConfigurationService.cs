@@ -99,37 +99,49 @@ public sealed class SetupConfigurationService(
             dbContext.Users.Add(new User
             {
                 Id = User.DefaultUserId,
-                Username = "Admin",
+                Username = User.TechnicalOwnerUsername,
                 PasswordHash = string.Empty,
                 HouseholdMode = (int)inputModel.HouseholdMode,
                 BudgetOwnerUserId = User.DefaultUserId,
+                IsAdmin = false
+            });
+        }
+        else
+        {
+            defaultAdmin.Username = User.TechnicalOwnerUsername;
+            defaultAdmin.PasswordHash = string.Empty;
+            defaultAdmin.BudgetOwnerUserId = User.DefaultUserId;
+            defaultAdmin.IsAdmin = false;
+        }
+
+        var username = inputModel.AppUsername.Trim();
+        var existingAppUser = await dbContext.Users
+            .FirstOrDefaultAsync(
+                x => x.Id != User.DefaultUserId && x.Username.ToUpper() == username.ToUpper(),
+                cancellationToken);
+        var appUserBudgetOwnerId = inputModel.HouseholdMode == HouseholdBudgetMate.Abstractions.Enums.HouseholdMode.SharedBudget
+            ? User.DefaultUserId
+            : existingAppUser?.Id ?? Guid.NewGuid().ToString("N");
+        if (existingAppUser is null)
+        {
+            dbContext.Users.Add(new User
+            {
+                Id = appUserBudgetOwnerId == User.DefaultUserId
+                    ? Guid.NewGuid().ToString("N")
+                    : appUserBudgetOwnerId,
+                Username = username,
+                PasswordHash = PinHasher.Hash(inputModel.AppPin),
+                HouseholdMode = (int)inputModel.HouseholdMode,
+                BudgetOwnerUserId = appUserBudgetOwnerId,
                 IsAdmin = true
             });
         }
         else
         {
-            defaultAdmin.PasswordHash = string.Empty;
-            defaultAdmin.BudgetOwnerUserId = User.DefaultUserId;
-            defaultAdmin.IsAdmin = true;
-        }
-
-        var username = inputModel.AppUsername.Trim();
-        var existingAppUser = await dbContext.Users
-            .FirstOrDefaultAsync(x => x.Username.ToUpper() == username.ToUpper(), cancellationToken);
-        if (existingAppUser is null)
-        {
-            var appUserId = Guid.NewGuid().ToString("N");
-            dbContext.Users.Add(new User
-            {
-                Id = appUserId,
-                Username = username,
-                PasswordHash = PinHasher.Hash(inputModel.AppPin),
-                HouseholdMode = (int)inputModel.HouseholdMode,
-                BudgetOwnerUserId = inputModel.HouseholdMode == HouseholdBudgetMate.Abstractions.Enums.HouseholdMode.SharedBudget
-                    ? User.DefaultUserId
-                    : appUserId,
-                IsAdmin = false
-            });
+            existingAppUser.PasswordHash = PinHasher.Hash(inputModel.AppPin);
+            existingAppUser.HouseholdMode = (int)inputModel.HouseholdMode;
+            existingAppUser.BudgetOwnerUserId = appUserBudgetOwnerId;
+            existingAppUser.IsAdmin = true;
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

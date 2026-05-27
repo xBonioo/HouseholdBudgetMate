@@ -10,6 +10,7 @@ public sealed class UserDto
     public string BudgetOwnerUserId { get; set; } = string.Empty;
     public string? BudgetOwnerUsername { get; set; }
     public bool HasPin { get; set; }
+    public bool IsInteractive { get; set; }
     public bool IsDefaultAdmin { get; set; }
     public bool IsAdmin { get; set; }
 }

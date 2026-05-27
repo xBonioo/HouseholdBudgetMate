@@ -29,7 +29,7 @@ public sealed class UserSessionService(
 
     public Task<IReadOnlyList<UserDto>> GetUsersAsync(CancellationToken cancellationToken)
     {
-        return userService.GetUsersAsync(cancellationToken);
+        return userService.GetSignInUsersAsync(cancellationToken);
     }
 
     public async Task<bool> TryRestoreFromCookieAsync(CancellationToken cancellationToken)
@@ -78,17 +78,15 @@ public sealed class UserSessionService(
             return UserSessionSignInResult.Failed("Nie znaleziono użytkownika.");
         }
 
-        if (user.HasPin)
+        if (!user.IsInteractive || !user.HasPin)
         {
-            var isValidPin = await userService.ValidatePinAsync(user.Id, pin, cancellationToken);
-            if (!isValidPin)
-            {
-                return UserSessionSignInResult.Failed("Nieprawidłowy PIN.");
-            }
+            return UserSessionSignInResult.Failed("Ten profil nie jest dostępny do logowania.");
         }
-        else if (!user.IsDefaultAdmin)
+
+        var isValidPin = await userService.ValidatePinAsync(user.Id, pin, cancellationToken);
+        if (!isValidPin)
         {
-            return UserSessionSignInResult.Failed("Ten użytkownik nie ma jeszcze ustawionego PIN-u.");
+            return UserSessionSignInResult.Failed("Nieprawidłowy PIN.");
         }
 
         ApplyUser(user);
@@ -110,11 +108,6 @@ public sealed class UserSessionService(
 
     private void ApplyUser(UserDto user)
     {
-        if (user.IsDefaultAdmin && !user.IsAdmin)
-        {
-            user.IsAdmin = true;
-        }
-
         CurrentUser = user;
         currentUserContext.UserId = user.Id;
         currentUserContext.BudgetOwnerUserId = user.BudgetOwnerUserId;

@@ -26,6 +26,7 @@ public static class AccountExtensionMapping
             CurrentBalance = currentBalance,
             IsArchived = account.IsArchived,
             ArchivedAtUtc = account.ArchivedAtUtc,
+            UpdatedAtUtc = account.UpdatedAtUtc,
             MonthBalances = orderedBalances.Select(x => new AccountMonthBalanceDto
             {
                 Id = x.Id,

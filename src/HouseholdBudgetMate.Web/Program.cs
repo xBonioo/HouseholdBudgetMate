@@ -178,6 +178,7 @@ builder.Services.AddScoped<CoreDataSeedService>();
 
 builder.Services.AddScoped<ISetupConfigurationService, SetupConfigurationService>();
 builder.Services.AddScoped<IDatabaseMigrationOrchestrator, DatabaseMigrationOrchestrator>();
+builder.Services.AddScoped<IAccessHardeningService, AccessHardeningService>();
 
 builder.AddSerilogLogging();
 
@@ -227,6 +228,8 @@ try
     {
         app.UseMiddleware<SetupRedirectMiddleware>();
     }
+
+    app.UseMiddleware<AccessHardeningRedirectMiddleware>();
     
     // Configure the HTTP request pipeline.
     if (!app.Environment.IsDevelopment())

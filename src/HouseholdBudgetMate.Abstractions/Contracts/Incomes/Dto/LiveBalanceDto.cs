@@ -7,9 +7,6 @@ public sealed class LiveBalanceDto
     public decimal ExpensesTotal { get; set; }
     public decimal SavingsTransfersTotal { get; set; }
     public decimal CurrentBalance { get; set; }
-    public decimal OutstandingPlannedExpensesReserveTotal { get; set; }
-    public decimal PendingSavingsTransfersReserveTotal { get; set; }
-    public decimal SafeToSpendAmount { get; set; }
     public bool HasCompleteBalanceBase { get; set; }
     public IReadOnlyList<string> MissingBalanceAccountNames { get; set; } = [];
 }

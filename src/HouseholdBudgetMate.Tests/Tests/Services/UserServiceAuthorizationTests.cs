@@ -2,6 +2,7 @@ using FluentAssertions;
 using HouseholdBudgetMate.Abstractions.Contracts.Users.Requests;
 using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
+using HouseholdBudgetMate.Application.Security;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
@@ -539,11 +540,10 @@ public sealed class UserServiceAuthorizationTests
     }
 
     /// <summary>
-    /// Verifies that ValidatePinAsync returns true for the default admin when an empty PIN is provided,
-    /// since the default admin is pinless.
+    /// Verifies that the technical budget owner cannot be used as a PIN-less sign-in profile.
     /// </summary>
     [Fact]
-    public async Task ValidatePinAsync_Should_Return_True_For_Default_Admin_With_Empty_Pin()
+    public async Task ValidatePinAsync_Should_Return_False_For_Technical_Owner_With_Empty_Pin()
     {
         await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
         dbContext.Users.Add(new User
@@ -558,7 +558,7 @@ public sealed class UserServiceAuthorizationTests
         var service = BuildService(factory, User.DefaultUserId);
 
         var result = await service.ValidatePinAsync(User.DefaultUserId, string.Empty, CancellationToken.None);
-        result.Should().BeTrue();
+        result.Should().BeFalse();
     }
 
     /// <summary>
@@ -626,5 +626,33 @@ public sealed class UserServiceAuthorizationTests
         users.Should().HaveCount(3);
         users.Select(u => u.Username).Should().Equal("apple", "mango", "zebra");
     }
-}
 
+    /// <summary>
+    /// Verifies that only visible profiles with configured PINs are offered for sign-in.
+    /// </summary>
+    [Fact]
+    public async Task GetSignInUsersAsync_Should_Exclude_Technical_Owner_And_Pinless_Profile()
+    {
+        await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
+        dbContext.Users.AddRange(
+            new User
+            {
+                Id = User.DefaultUserId,
+                Username = User.TechnicalOwnerUsername,
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId,
+                IsAdmin = true
+            },
+            new User { Id = "pinless", Username = "pinless", PasswordHash = string.Empty, BudgetOwnerUserId = "pinless" },
+            new User { Id = "secured", Username = "secured", PasswordHash = PinHasher.Hash("1234"), BudgetOwnerUserId = "secured" });
+        await dbContext.SaveChangesAsync();
+
+        var service = BuildService(factory, "secured");
+
+        var users = await service.GetSignInUsersAsync(CancellationToken.None);
+
+        users.Should().ContainSingle();
+        users.Single().Id.Should().Be("secured");
+        users.Single().IsInteractive.Should().BeTrue();
+    }
+}

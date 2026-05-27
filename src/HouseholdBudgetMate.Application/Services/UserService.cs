@@ -28,6 +28,26 @@ public sealed class UserService(
         return users.Select(MapToDto).ToList();
     }
 
+    public async Task<IReadOnlyList<UserDto>> GetSignInUsersAsync(CancellationToken cancellationToken)
+    {
+        var users = await GetUsersAsync(cancellationToken);
+        return users
+            .Where(x => x.IsInteractive && x.HasPin)
+            .ToList();
+    }
+
+    public async Task<bool> HasSecureInteractiveAdministratorAsync(CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id != User.DefaultUserId
+                     && x.IsAdmin
+                     && x.PasswordHash.StartsWith("PBKDF2-SHA256:"),
+                cancellationToken);
+    }
+
     public async Task<UserDto> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken)
     {
         var username = NormalizeUsername(request.Username);
@@ -161,9 +181,9 @@ public sealed class UserService(
             return false;
         }
 
-        if (IsPinlessDefaultAdmin(user))
+        if (user.Id == User.DefaultUserId)
         {
-            return string.IsNullOrEmpty(pin);
+            return false;
         }
 
         try
@@ -265,6 +285,7 @@ public sealed class UserService(
             BudgetOwnerUserId = user.BudgetOwnerUserId,
             BudgetOwnerUsername = user.BudgetOwnerUser?.Username,
             HasPin = HasConfiguredPin(user),
+            IsInteractive = user.Id != User.DefaultUserId,
             IsDefaultAdmin = user.Id == User.DefaultUserId,
             IsAdmin = user.Id == User.DefaultUserId || user.IsAdmin
         };
@@ -294,15 +315,8 @@ public sealed class UserService(
 
     private static bool HasConfiguredPin(User user)
     {
-        return !IsPinlessDefaultAdmin(user)
+        return user.Id != User.DefaultUserId
                && !string.IsNullOrWhiteSpace(user.PasswordHash)
                && user.PasswordHash.StartsWith("PBKDF2-SHA256:", StringComparison.Ordinal);
-    }
-
-    private static bool IsPinlessDefaultAdmin(User user)
-    {
-        return user.Id == User.DefaultUserId
-               && (string.IsNullOrWhiteSpace(user.PasswordHash)
-                   || string.Equals(user.PasswordHash, "NOT_CONFIGURED", StringComparison.Ordinal));
     }
 }

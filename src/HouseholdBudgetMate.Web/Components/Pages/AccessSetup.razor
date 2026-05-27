@@ -1,0 +1,104 @@
+@page "/access-setup"
+@layout SetupLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using HouseholdBudgetMate.Web.Setup
+@using MudBlazor
+
+@inject IAccessHardeningService AccessHardeningService
+@inject NavigationManager NavigationManager
+
+<MudPaper Class="pa-4 hb-panel">
+    <MudText Typo="Typo.h4">Zabezpiecz dostęp gospodarstwa</MudText>
+    <MudText Typo="Typo.body2" Class="mt-1 mb-4">
+        Aplikacja wymaga profilu administratora chronionego PIN-em, zanim pokaże dane budżetu.
+        Konto techniczne zachowuje istniejące dane, ale nie służy do logowania.
+    </MudText>
+
+    @if (_isChecking)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true"/>
+    }
+    else
+    {
+        <EditForm EditContext="_editContext">
+            <DataAnnotationsValidator/>
+        </EditForm>
+
+        <ActionForm OnSubmit="SaveAsync">
+            <MudStack Spacing="2">
+                <MudTextField T="string"
+                              Label="Nazwa administratora"
+                              @bind-Value="_model.Username"
+                              For="@(() => _model.Username)"
+                              Required="true"/>
+                <PinKeypadInput Label="PIN administratora"
+                                @bind-Value="_model.Pin"
+                                For="@(() => _model.Pin)"
+                                Required="true"/>
+
+                @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+                }
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           ButtonType="ButtonType.Submit"
+                           Disabled="_isSaving">
+                    @(_isSaving ? "Zapisywanie..." : "Ustanów bezpieczny dostęp")
+                </MudButton>
+            </MudStack>
+        </ActionForm>
+    }
+</MudPaper>
+
+@code {
+    private readonly AccessHardeningInputModel _model = new();
+    private EditContext _editContext = null!;
+    private bool _isChecking = true;
+    private bool _isSaving;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _editContext = new EditContext(_model);
+
+        if (!await AccessHardeningService.IsRequiredAsync(CancellationToken.None))
+        {
+            NavigationManager.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        _isChecking = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_editContext.Validate())
+        {
+            return;
+        }
+
+        _isSaving = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await AccessHardeningService.EstablishAdministratorAsync(
+                _model.Username,
+                _model.Pin,
+                CancellationToken.None);
+            if (!result.IsSuccess)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

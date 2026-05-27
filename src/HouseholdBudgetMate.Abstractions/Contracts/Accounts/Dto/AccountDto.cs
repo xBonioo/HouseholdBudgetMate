@@ -11,5 +11,6 @@ public sealed class AccountDto
     public decimal CurrentBalance { get; set; }
     public bool IsArchived { get; set; }
     public DateTime? ArchivedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
     public IReadOnlyList<AccountMonthBalanceDto> MonthBalances { get; set; } = [];
 }

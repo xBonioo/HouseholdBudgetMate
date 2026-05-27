@@ -1100,9 +1100,6 @@ public sealed class IncomeServiceTests
         Assert.Equal(500m, liveBalance.IncomesTotal);
         Assert.Equal(250m, liveBalance.ExpensesTotal);
         Assert.Equal(2250m, liveBalance.CurrentBalance);
-        Assert.Equal(50m, liveBalance.OutstandingPlannedExpensesReserveTotal);
-        Assert.Equal(0m, liveBalance.PendingSavingsTransfersReserveTotal);
-        Assert.Equal(2200m, liveBalance.SafeToSpendAmount);
         Assert.True(liveBalance.HasCompleteBalanceBase);
         Assert.Empty(liveBalance.MissingBalanceAccountNames);
     }
@@ -1170,8 +1167,6 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(200m, liveBalance.IncomesTotal);
         Assert.Equal(1100m, liveBalance.CurrentBalance);
-        Assert.Equal(200m, liveBalance.OutstandingPlannedExpensesReserveTotal);
-        Assert.Equal(900m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>
@@ -1234,9 +1229,6 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(300m, liveBalance.SavingsTransfersTotal);
         Assert.Equal(2100m, liveBalance.CurrentBalance);
-        Assert.Equal(200m, liveBalance.OutstandingPlannedExpensesReserveTotal);
-        Assert.Equal(0m, liveBalance.PendingSavingsTransfersReserveTotal);
-        Assert.Equal(1900m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>
@@ -1280,8 +1272,6 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(0m, liveBalance.SavingsTransfersTotal);
         Assert.Equal(1000m, liveBalance.CurrentBalance);
-        Assert.Equal(500m, liveBalance.PendingSavingsTransfersReserveTotal);
-        Assert.Equal(500m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>
@@ -1313,11 +1303,11 @@ public sealed class IncomeServiceTests
     }
 
     /// <summary>
-    /// GetLiveBalanceAsync picks the most recent balance among those that are &lt;= the previous month
-    /// when an account has multiple historical balances.
+    /// GetLiveBalanceAsync uses the immediately preceding month's balance
+    /// when an account also has older historical balances.
     /// </summary>
     [Fact]
-    public async Task GetLiveBalanceAsync_Should_Use_Latest_Previous_Month_Balance_Among_Multiple()
+    public async Task GetLiveBalanceAsync_Should_Use_Immediately_Preceding_Month_Balance()
     {
         await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
@@ -1337,7 +1327,7 @@ public sealed class IncomeServiceTests
         var service = CreateService();
         var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
 
-        // Latest available balance before April is March = 4000
+        // The required immediately preceding balance for April is March = 4000.
         Assert.Equal(4000m, liveBalance.AccountsBaseTotal);
     }
 
@@ -1374,11 +1364,186 @@ public sealed class IncomeServiceTests
     }
 
     /// <summary>
-    /// GetLiveBalanceAsync subtracts actual unplanned spending from live balance but does not
-    /// create a future reserve when PlannedAmount is zero.
+    /// GetLiveBalanceAsync treats a stored zero closing balance as complete input.
+    /// A zero amount is different from a missing balance record.
     /// </summary>
     [Fact]
-    public async Task GetLiveBalanceAsync_Should_Not_Reserve_Unplanned_Actual_Expense()
+    public async Task GetLiveBalanceAsync_Should_Accept_Stored_Zero_Previous_Month_Balance()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Konto zerowe", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = account.Id,
+                Year = 2026,
+                Month = 3,
+                ClosingBalance = 0m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(0m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync computes a closed historical month from the latest stored prior
+    /// balances and does not retroactively require missing immediately preceding-month rows.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Use_Available_Historical_Balances_For_Closed_Month()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var accountWithOlderBalance = new Account { Name = "Historia", Type = (int)AccountType.Bank };
+            var accountWithoutBalance = new Account { Name = "Bez historii", Type = (int)AccountType.Bank };
+            context.Accounts.AddRange(accountWithOlderBalance, accountWithoutBalance);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 4, IsClosed = true });
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = accountWithOlderBalance.Id,
+                Year = 2026,
+                Month = 2,
+                ClosingBalance = 1500m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(1500m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync ignores an account archived before the selected month,
+    /// including when the selected month is already closed.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Ignore_Account_Archived_Before_Selected_Closed_Month()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var activeAccount = new Account { Name = "Aktywne", Type = (int)AccountType.Bank };
+            var archivedAccount = new Account
+            {
+                Name = "Archiwalne",
+                Type = (int)AccountType.Bank,
+                IsArchived = true,
+                ArchivedAtUtc = new DateTime(2026, 3, 20, 0, 0, 0, DateTimeKind.Utc)
+            };
+            context.Accounts.AddRange(activeAccount, archivedAccount);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 4, IsClosed = true });
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = activeAccount.Id,
+                Year = 2026,
+                Month = 3,
+                ClosingBalance = 1200m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(1200m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync ignores an account archived during the selected month
+    /// because it is no longer expected to have that month's closing balance.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Ignore_Account_Archived_During_Selected_Month()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var activeAccount = new Account { Name = "Aktywne", Type = (int)AccountType.Bank };
+            var archivedAccount = new Account
+            {
+                Name = "Archiwalne",
+                Type = (int)AccountType.Bank,
+                IsArchived = true,
+                ArchivedAtUtc = DefaultNowUtc.AddDays(-1)
+            };
+            context.Accounts.AddRange(activeAccount, archivedAccount);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 4, IsClosed = true });
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.AddRange(
+                new AccountMonthBalance { AccountId = activeAccount.Id, Year = 2026, Month = 3, ClosingBalance = 1200m },
+                new AccountMonthBalance { AccountId = archivedAccount.Id, Year = 2026, Month = 3, ClosingBalance = 300m });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Equal(1200m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync retains an archived account for a historical month
+    /// when it remained active until after that month ended.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Include_Account_Archived_After_Selected_Month_Ended()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var activeAccount = new Account { Name = "Aktywne", Type = (int)AccountType.Bank };
+            var archivedAccount = new Account
+            {
+                Name = "Archiwalne pozniej",
+                Type = (int)AccountType.Bank,
+                IsArchived = true,
+                ArchivedAtUtc = new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc)
+            };
+            context.Accounts.AddRange(activeAccount, archivedAccount);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 4, IsClosed = true });
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.AddRange(
+                new AccountMonthBalance { AccountId = activeAccount.Id, Year = 2026, Month = 3, ClosingBalance = 1200m },
+                new AccountMonthBalance { AccountId = archivedAccount.Id, Year = 2026, Month = 3, ClosingBalance = 300m });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Equal(1500m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync subtracts actual unplanned spending from live balance.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Subtract_Unplanned_Actual_Expense()
     {
         await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
@@ -1415,8 +1580,6 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(75m, liveBalance.ExpensesTotal);
         Assert.Equal(925m, liveBalance.CurrentBalance);
-        Assert.Equal(0m, liveBalance.OutstandingPlannedExpensesReserveTotal);
-        Assert.Equal(925m, liveBalance.SafeToSpendAmount);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ namespace HouseholdBudgetMate.Domain.Entities;
 public sealed class User : ATimestampable
 {
     public const string DefaultUserId = "default-user";
+    public const string TechnicalOwnerUsername = "__household_owner__";
 
     public string Id { get; set; } = DefaultUserId;
     public string Username { get; set; } = "default";

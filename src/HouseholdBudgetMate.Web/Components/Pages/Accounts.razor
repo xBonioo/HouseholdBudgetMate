@@ -63,7 +63,7 @@
     @if (_isInitialLoading)
     {
         <div class="accounts-kpi-grid">
-            @for (var i = 0; i < 7; i++)
+            @for (var i = 0; i < 6; i++)
             {
                 <MudPaper Class="hb-kpi-card accounts-kpi-card">
                     <MudSkeleton Width="45%" Height="16px"/>
@@ -86,16 +86,7 @@
             <MudPaper Class="hb-kpi-card accounts-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
                 <MudText Class="hb-kpi-value">@(_overview.HasCompleteBalanceBase ? FormatMoney(_overview.LiveBalance) : "Brak danych")</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">Po wykonanych ruchach miesiąca</MudText>
-            </MudPaper>
-            <MudPaper Class="hb-kpi-card accounts-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Safe-to-spend</MudText>
-                <MudText Class="hb-kpi-value">@(_overview.HasCompleteBalanceBase ? FormatMoney(_overview.SafeToSpend) : "Brak danych")</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">
-                    @(_overview.HasCompleteBalanceBase
-                        ? $"Rezerwy: {FormatMoney(_overview.OutstandingPlannedExpensesReserveTotal + _overview.PendingSavingsTransfersReserveTotal)}"
-                        : "Wymagane saldo poprzedniego miesiąca")
-                </MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Saldo live</MudText>
             </MudPaper>
             <MudPaper Class="hb-kpi-card accounts-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Konta bieżące</MudText>
@@ -237,7 +228,7 @@
             <div>
                 <MudText Typo="Typo.h6">Salda kont</MudText>
                 <MudText Typo="Typo.body2" Class="hb-muted">
-                    @(_overview.IsMonthClosed ? "Miesiąc jest zamknięty, więc salda są tylko do odczytu." : "Edytuj salda dla wybranego miesiąca i zapisz je jednym kliknięciem.")
+                    @(_overview.IsMonthClosed ? "Miesiąc jest zamknięty, więc salda są tylko do odczytu." : "Edytuj salda dla wybranego miesiąca i zapisz je jednym kliknięciem. Zero jest saldem dopiero po zapisaniu wpisu.")
                 </MudText>
             </div>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
@@ -282,6 +273,9 @@
                         <div class="accounts-balance-status">
                             <MudChip T="string" Color="@(row.IsArchived ? Color.Warning : Color.Success)" Variant="Variant.Outlined" Size="Size.Small">
                                 @(row.IsArchived ? "Archiwalne" : "Aktywne")
+                            </MudChip>
+                            <MudChip T="string" Color="@(row.HasRecordedBalance ? Color.Info : Color.Warning)" Variant="Variant.Outlined" Size="Size.Small">
+                                @(row.HasRecordedBalance ? "Saldo zapisane" : "Brak zapisu")
                             </MudChip>
                         </div>
                         <div class="accounts-balance-amount">

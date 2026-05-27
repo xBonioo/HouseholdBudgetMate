@@ -78,7 +78,7 @@ public partial class Accounts
                 ? string.Empty
                 : $" Brakuje danych dla: {string.Join(", ", _overview.MissingBalanceAccountNames)}.";
 
-            return $"Uzupełnij salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance i Safe-to-spend.{missingAccounts}";
+            return $"Uzupełnij i zapisz salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance. Zapisana wartość 0,00 PLN jest poprawnym saldem.{missingAccounts}";
         }
     }
 
@@ -313,9 +313,6 @@ public partial class Accounts
 
         _overview = new AccountsOverviewModel(
             _liveBalance.CurrentBalance,
-            _liveBalance.SafeToSpendAmount,
-            _liveBalance.OutstandingPlannedExpensesReserveTotal,
-            _liveBalance.PendingSavingsTransfersReserveTotal,
             _liveBalance.HasCompleteBalanceBase,
             _liveBalance.MissingBalanceAccountNames,
             checkingBalance,
@@ -360,7 +357,8 @@ public partial class Accounts
             account.Type.GetDisplayName(),
             account.Order,
             GetSelectedMonthAmount(account.Id),
-            account.IsArchived);
+            account.IsArchived,
+            TryGetSelectedMonthBalance(account.Id) is not null);
     }
 
     private async Task OpenCreateAccountDialogAsync()
@@ -630,7 +628,8 @@ public partial class Accounts
         }
 
         _balanceInputErrors.Clear();
-        foreach (var account in _accounts.Where(x => !x.IsArchived))
+        var editableAccounts = GetAccountsForSelectedMonth();
+        foreach (var account in editableAccounts)
         {
             var input = GetSelectedMonthAmountInput(account.Id);
             if (!LocalizedDecimalParser.TryParseOrZero(input, out _))
@@ -650,7 +649,7 @@ public partial class Accounts
 
         try
         {
-            foreach (var account in _accounts.Where(x => !x.IsArchived))
+            foreach (var account in editableAccounts)
             {
                 var input = GetSelectedMonthAmountInput(account.Id);
                 LocalizedDecimalParser.TryParseOrZero(input, out var amount);
@@ -707,10 +706,22 @@ public partial class Accounts
         }
 
         return _accounts
-            .Where(x => !x.IsArchived)
+            .Where(IsApplicableForSelectedMonthBalance)
             .OrderBy(x => x.Order)
             .ThenBy(x => x.Name)
             .ToList();
+    }
+
+    private bool IsApplicableForSelectedMonthBalance(AccountDto account)
+    {
+        if (!account.IsArchived)
+        {
+            return true;
+        }
+
+        var nextMonthStartUtc = new DateTime(_selectedYear, _selectedMonth, 1, 0, 0, 0, DateTimeKind.Utc)
+            .AddMonths(1);
+        return (account.ArchivedAtUtc ?? account.UpdatedAtUtc) >= nextMonthStartUtc;
     }
 
     private bool HasPermanentBalanceTabForSelectedYear(int month)
@@ -760,9 +771,6 @@ public partial class Accounts
 
     private sealed record AccountsOverviewModel(
         decimal LiveBalance = 0,
-        decimal SafeToSpend = 0,
-        decimal OutstandingPlannedExpensesReserveTotal = 0,
-        decimal PendingSavingsTransfersReserveTotal = 0,
         bool HasCompleteBalanceBase = false,
         IReadOnlyList<string>? MissingBalanceAccountNamesValue = null,
         decimal CheckingBalance = 0,
@@ -785,7 +793,8 @@ public partial class Accounts
         string TypeLabel,
         int Order,
         decimal Amount,
-        bool IsArchived);
+        bool IsArchived,
+        bool HasRecordedBalance);
 
     private sealed record BudgetHealthItem(
         string Name,

@@ -6,6 +6,8 @@ namespace HouseholdBudgetMate.Abstractions.Interfaces;
 public interface IUserService
 {
     Task<IReadOnlyList<UserDto>> GetUsersAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<UserDto>> GetSignInUsersAsync(CancellationToken cancellationToken);
+    Task<bool> HasSecureInteractiveAdministratorAsync(CancellationToken cancellationToken);
     Task<UserDto> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken);
     Task<UserDto> UpdateUserBudgetModeAsync(UpdateUserBudgetModeRequest request, CancellationToken cancellationToken);
     Task<UserDto> UpdateUserAdminRoleAsync(UpdateUserAdminRoleRequest request, CancellationToken cancellationToken);

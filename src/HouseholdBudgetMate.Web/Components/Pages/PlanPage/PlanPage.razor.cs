@@ -172,7 +172,7 @@ public partial class PlanPage : ComponentBase
                 ? string.Empty
                 : $" Brakuje danych dla: {string.Join(", ", _liveBalance.MissingBalanceAccountNames)}.";
 
-            return $"Uzupełnij salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance i Safe-to-spend.{missingAccounts}";
+            return $"Uzupełnij i zapisz salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance. Zapisana wartość 0,00 PLN jest poprawnym saldem.{missingAccounts}";
         }
     }
 

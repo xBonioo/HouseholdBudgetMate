@@ -102,7 +102,6 @@
         <MudPaper Class="hb-kpi-card">
             <MudText Typo="Typo.caption" Class="hb-muted">Pozostało w planie</MudText>
             <MudText Class="hb-kpi-value">@_kpi.RemainingTotal.ToString("0.00", _culture) PLN</MudText>
-            <MudText Typo="Typo.caption" Class="hb-muted">Postęp wydatków planowanych</MudText>
             <MudProgressLinear Class="mt-2" Rounded="true" Value="@_kpi.RemainingPercent"
                                Color="@RemainingBudgetColorResolver.Resolve(_kpi.RemainingTotal, _kpi.RemainingPercent)"/>
         </MudPaper>
@@ -166,20 +165,11 @@
     }
     else
     {
-        <MudGrid Class="mt-2">
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
-                <MudText Typo="Typo.h6">@_liveBalance.CurrentBalance.ToString("0.00", _culture) PLN</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">Gotówka po wykonanych ruchach miesiąca</MudText>
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.caption" Class="hb-muted">Safe-to-spend</MudText>
-                <MudText Typo="Typo.h6">@_liveBalance.SafeToSpendAmount.ToString("0.00", _culture) PLN</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">
-                    Po rezerwie wydatków @_liveBalance.OutstandingPlannedExpensesReserveTotal.ToString("0.00", _culture) PLN i oszczędności @_liveBalance.PendingSavingsTransfersReserveTotal.ToString("0.00", _culture) PLN
-                </MudText>
-            </MudItem>
-        </MudGrid>
+        <MudPaper Class="pa-3 mt-2" Elevation="0" Outlined="true">
+            <MudText Typo="Typo.caption" Class="hb-muted">Live balance</MudText>
+            <MudText Typo="Typo.h6">@_liveBalance.CurrentBalance.ToString("0.00", _culture) PLN</MudText>
+            <MudText Typo="Typo.caption" Class="hb-muted">Saldo live</MudText>
+        </MudPaper>
         <MudGrid Class="mt-2">
             <MudItem xs="12" sm="6" md="3">
                 <MudText Typo="Typo.caption" Class="hb-muted">Saldo poprzedniego miesiąca</MudText>
@@ -348,7 +338,7 @@
                 ? string.Empty
                 : $" Brakuje danych dla: {string.Join(", ", _liveBalance.MissingBalanceAccountNames)}.";
 
-            return $"Uzupełnij salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance i Safe-to-spend.{missingAccounts}";
+            return $"Uzupełnij i zapisz salda zamknięcia kont za poprzedni miesiąc, aby obliczyć Live balance. Zapisana wartość 0,00 PLN jest poprawnym saldem.{missingAccounts}";
         }
     }
 

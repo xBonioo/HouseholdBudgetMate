@@ -180,6 +180,7 @@ builder.Services.AddScoped<ISetupConfigurationService, SetupConfigurationService
 builder.Services.AddScoped<IDatabaseMigrationOrchestrator, DatabaseMigrationOrchestrator>();
 builder.Services.AddScoped<IAccessHardeningService, AccessHardeningService>();
 builder.Services.AddScoped<IAccessRecoveryService, AccessRecoveryService>();
+builder.Services.AddSingleton<ILocalAccessGrantService, LocalAccessGrantService>();
 
 builder.AddSerilogLogging();
 
@@ -213,6 +214,12 @@ static bool IsEnabled(string? value)
 try
 {
     var app = builder.Build();
+
+    app.Use((context, next) =>
+    {
+        LocalAccessGrantService.CaptureDirectRemoteAddress(context);
+        return next(context);
+    });
 
     if (isContainerOrCloud)
     {

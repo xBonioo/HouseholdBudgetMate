@@ -5,6 +5,7 @@
 @using MudBlazor
 
 @inject IAccessHardeningService AccessHardeningService
+@inject ILocalAccessGrantService LocalAccessGrantService
 @inject NavigationManager NavigationManager
 
 <MudPaper Class="pa-4 hb-panel">
@@ -59,9 +60,19 @@
     private bool _isSaving;
     private string? _errorMessage;
 
+    [SupplyParameterFromQuery(Name = "grant")]
+    public string? LocalAccessGrant { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         _editContext = new EditContext(_model);
+
+        if (!LocalAccessGrantService.IsValid(LocalAccessGrant, LocalAccessPurposes.AccessHardening))
+        {
+            _errorMessage = "Konfiguracja dostepu jest dostepna tylko lokalnie.";
+            _isChecking = false;
+            return;
+        }
 
         if (!await AccessHardeningService.IsRequiredAsync(CancellationToken.None))
         {
@@ -87,6 +98,7 @@
             var result = await AccessHardeningService.EstablishAdministratorAsync(
                 _model.Username,
                 _model.Pin,
+                LocalAccessGrant,
                 CancellationToken.None);
             if (!result.IsSuccess)
             {

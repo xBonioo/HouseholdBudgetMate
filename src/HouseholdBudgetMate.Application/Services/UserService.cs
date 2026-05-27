@@ -113,7 +113,14 @@ public sealed class UserService(
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return await BuildUserDtoAsync(dbContext, user.Id, cancellationToken);
+        var updatedUser = await BuildUserDtoAsync(dbContext, user.Id, cancellationToken);
+
+        if (user.Id == currentUserContext.UserId)
+        {
+            currentUserContext.SetInteractiveUser(updatedUser.Id, updatedUser.BudgetOwnerUserId);
+        }
+
+        return updatedUser;
     }
 
     public async Task<UserDto> UpdateUserAdminRoleAsync(

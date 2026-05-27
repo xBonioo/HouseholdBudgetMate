@@ -1,9 +1,11 @@
+using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using HouseholdBudgetMate.Application.Security;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Tests.Shared;
 using HouseholdBudgetMate.Web.Setup;
+using Microsoft.AspNetCore.Http;
 
 namespace HouseholdBudgetMate.Tests.Tests.Services;
 
@@ -14,9 +16,14 @@ public sealed class AccessRecoveryServiceTests
     {
         var runtimeState = CreateRuntimeState(localAccessRecoveryEnabled: false);
         await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
-        var service = new AccessRecoveryService(runtimeState, factory);
+        var grants = new LocalAccessGrantService();
+        var service = new AccessRecoveryService(runtimeState, factory, grants);
 
-        var result = await service.RecoverAdministratorAsync("Admin", "5678", CancellationToken.None);
+        var result = await service.RecoverAdministratorAsync(
+            "Admin",
+            "5678",
+            IssueLocalGrant(grants),
+            CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().Contain("nie jest włączony");
@@ -45,9 +52,14 @@ public sealed class AccessRecoveryServiceTests
                 IsAdmin = true
             });
         await dbContext.SaveChangesAsync();
-        var service = new AccessRecoveryService(runtimeState, factory);
+        var grants = new LocalAccessGrantService();
+        var service = new AccessRecoveryService(runtimeState, factory, grants);
 
-        var result = await service.RecoverAdministratorAsync("Admin", "5678", CancellationToken.None);
+        var result = await service.RecoverAdministratorAsync(
+            "Admin",
+            "5678",
+            IssueLocalGrant(grants),
+            CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         runtimeState.IsLocalAccessRecoveryEnabled.Should().BeFalse();
@@ -73,9 +85,14 @@ public sealed class AccessRecoveryServiceTests
             IsAdmin = true
         });
         await dbContext.SaveChangesAsync();
-        var service = new AccessRecoveryService(runtimeState, factory);
+        var grants = new LocalAccessGrantService();
+        var service = new AccessRecoveryService(runtimeState, factory, grants);
 
-        var result = await service.RecoverAdministratorAsync("Replacement Admin", "9876", CancellationToken.None);
+        var result = await service.RecoverAdministratorAsync(
+            "Replacement Admin",
+            "9876",
+            IssueLocalGrant(grants),
+            CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
 
@@ -87,6 +104,55 @@ public sealed class AccessRecoveryServiceTests
         var administrator = verificationContext.Users.Single(x => x.Id != User.DefaultUserId);
         administrator.IsAdmin.Should().BeTrue();
         PinHasher.Verify("9876", administrator.PasswordHash).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecoverAdministratorAsync_Should_Reject_Operation_Without_Local_Grant()
+    {
+        var runtimeState = CreateRuntimeState(localAccessRecoveryEnabled: true);
+        await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
+        var service = new AccessRecoveryService(runtimeState, factory, new LocalAccessGrantService());
+
+        var result = await service.RecoverAdministratorAsync("Admin", "5678", null, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("tylko lokalnie");
+        runtimeState.IsLocalAccessRecoveryEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecoverAdministratorAsync_Should_Keep_Recovery_Mode_When_Database_Save_Fails()
+    {
+        var runtimeState = CreateRuntimeState(localAccessRecoveryEnabled: true);
+        var databaseName = Guid.NewGuid().ToString("N");
+        await using (var seedContext = TestDbContextFactory.CreateDbContext(databaseName))
+        {
+            seedContext.Users.Add(new User
+            {
+                Id = User.DefaultUserId,
+                Username = User.TechnicalOwnerUsername,
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId,
+                IsAdmin = false
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var grants = new LocalAccessGrantService();
+        var service = new AccessRecoveryService(
+            runtimeState,
+            TestDbContextFactory.CreateThrowingFactory(databaseName, throwOnSave: true),
+            grants);
+
+        await service.Invoking(x => x.RecoverAdministratorAsync(
+                "Admin",
+                "5678",
+                IssueLocalGrant(grants),
+                CancellationToken.None))
+            .Should().ThrowAsync<Exception>()
+            .WithMessage("Simulated SaveChanges failure");
+
+        runtimeState.IsLocalAccessRecoveryEnabled.Should().BeTrue();
     }
 
     private static RuntimeConfigurationState CreateRuntimeState(bool localAccessRecoveryEnabled)
@@ -111,5 +177,12 @@ public sealed class AccessRecoveryServiceTests
             JsonSerializer.Serialize(config, RuntimeConfigurationState.JsonOptions));
         state.ReloadFromDisk();
         return state;
+    }
+
+    private static string IssueLocalGrant(LocalAccessGrantService grants)
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Loopback;
+        return grants.IssueGrantForRequest(context, LocalAccessPurposes.AccessRecovery)!;
     }
 }

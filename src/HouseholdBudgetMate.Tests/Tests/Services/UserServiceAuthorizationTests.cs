@@ -464,6 +464,41 @@ public sealed class UserServiceAuthorizationTests
     }
 
     [Fact]
+    public async Task UpdateUserBudgetModeAsync_Should_Refresh_Current_Administrator_Budget_Scope()
+    {
+        await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
+        dbContext.Users.AddRange(
+            new User { Id = User.DefaultUserId, Username = User.TechnicalOwnerUsername, PasswordHash = string.Empty, BudgetOwnerUserId = User.DefaultUserId },
+            new User
+            {
+                Id = "admin2",
+                Username = "admin2",
+                PasswordHash = PinHasher.Hash("1357"),
+                BudgetOwnerUserId = User.DefaultUserId,
+                HouseholdMode = (int)HouseholdMode.SharedBudget,
+                IsAdmin = true
+            });
+        await dbContext.SaveChangesAsync();
+        var currentUser = new CurrentUserContext
+        {
+            UserId = "admin2",
+            BudgetOwnerUserId = User.DefaultUserId
+        };
+        var service = new UserService(factory, currentUser);
+
+        await service.UpdateUserBudgetModeAsync(
+            new UpdateUserBudgetModeRequest
+            {
+                UserId = "admin2",
+                HouseholdMode = HouseholdMode.SeparateBudget
+            },
+            CancellationToken.None);
+
+        currentUser.UserId.Should().Be("admin2");
+        currentUser.BudgetOwnerUserId.Should().Be("admin2");
+    }
+
+    [Fact]
     public async Task UpdateUserBudgetModeAsync_Should_Reject_Technical_Owner_As_Managed_Profile()
     {
         await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);

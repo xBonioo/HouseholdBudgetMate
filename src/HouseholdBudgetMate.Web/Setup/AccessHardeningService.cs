@@ -11,12 +11,17 @@ public interface IAccessHardeningService
     Task<AccessHardeningResult> EstablishAdministratorAsync(
         string username,
         string pin,
+        string? localAccessGrant,
         CancellationToken cancellationToken);
 }
 
-public sealed class AccessHardeningService(IDbContextFactory<ApplicationDbContext> dbContextFactory)
+public sealed class AccessHardeningService(
+    IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    ILocalAccessGrantService localAccessGrantService)
     : IAccessHardeningService
 {
+    private static readonly SemaphoreSlim EstablishmentLock = new(1, 1);
+
     public async Task<bool> IsRequiredAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -32,8 +37,14 @@ public sealed class AccessHardeningService(IDbContextFactory<ApplicationDbContex
     public async Task<AccessHardeningResult> EstablishAdministratorAsync(
         string username,
         string pin,
+        string? localAccessGrant,
         CancellationToken cancellationToken)
     {
+        if (!localAccessGrantService.IsValid(localAccessGrant, LocalAccessPurposes.AccessHardening))
+        {
+            return AccessHardeningResult.Failed("Konfiguracja dostepu jest dostepna tylko lokalnie.");
+        }
+
         username = username.Trim();
         if (username.Length is < 3 or > 100)
         {
@@ -50,53 +61,84 @@ public sealed class AccessHardeningService(IDbContextFactory<ApplicationDbContex
             return AccessHardeningResult.Failed(ex.Message);
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var technicalOwner = await dbContext.Users
-            .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);
-
-        if (technicalOwner is null)
+        await EstablishmentLock.WaitAsync(cancellationToken);
+        try
         {
-            technicalOwner = new User
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            if (await HasSecureInteractiveAdministratorAsync(dbContext, cancellationToken))
             {
-                Id = User.DefaultUserId,
-                Username = User.TechnicalOwnerUsername,
-                PasswordHash = string.Empty,
-                BudgetOwnerUserId = User.DefaultUserId,
-                IsAdmin = false
-            };
-            dbContext.Users.Add(technicalOwner);
-        }
-        else
-        {
-            technicalOwner.Username = await ResolveTechnicalOwnerUsernameAsync(dbContext, cancellationToken);
-            technicalOwner.PasswordHash = string.Empty;
-            technicalOwner.BudgetOwnerUserId = User.DefaultUserId;
-            technicalOwner.IsAdmin = false;
-        }
+                return AccessHardeningResult.Failed("Bezpieczny administrator jest juz skonfigurowany.");
+            }
 
-        var administrator = await dbContext.Users
-            .FirstOrDefaultAsync(
-                x => x.Id != User.DefaultUserId && x.Username.ToUpper() == username.ToUpper(),
+            if (!localAccessGrantService.TryConsume(localAccessGrant, LocalAccessPurposes.AccessHardening))
+            {
+                return AccessHardeningResult.Failed("Lokalne uprawnienie konfiguracji wygaslo.");
+            }
+
+            var technicalOwner = await dbContext.Users
+                .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);
+
+            if (technicalOwner is null)
+            {
+                technicalOwner = new User
+                {
+                    Id = User.DefaultUserId,
+                    Username = User.TechnicalOwnerUsername,
+                    PasswordHash = string.Empty,
+                    BudgetOwnerUserId = User.DefaultUserId,
+                    IsAdmin = false
+                };
+                dbContext.Users.Add(technicalOwner);
+            }
+            else
+            {
+                technicalOwner.Username = await ResolveTechnicalOwnerUsernameAsync(dbContext, cancellationToken);
+                technicalOwner.PasswordHash = string.Empty;
+                technicalOwner.BudgetOwnerUserId = User.DefaultUserId;
+                technicalOwner.IsAdmin = false;
+            }
+
+            var administrator = await dbContext.Users
+                .FirstOrDefaultAsync(
+                    x => x.Id != User.DefaultUserId && x.Username.ToUpper() == username.ToUpper(),
+                    cancellationToken);
+
+            if (administrator is null)
+            {
+                administrator = new User
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Username = username,
+                    HouseholdMode = 1,
+                    BudgetOwnerUserId = User.DefaultUserId
+                };
+                dbContext.Users.Add(administrator);
+            }
+
+            administrator.PasswordHash = pinHash;
+            administrator.IsAdmin = true;
+            administrator.BudgetOwnerUserId = User.DefaultUserId;
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return AccessHardeningResult.Success();
+        }
+        finally
+        {
+            EstablishmentLock.Release();
+        }
+    }
+
+    private static Task<bool> HasSecureInteractiveAdministratorAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id != User.DefaultUserId
+                     && x.IsAdmin
+                     && x.PasswordHash.StartsWith("PBKDF2-SHA256:"),
                 cancellationToken);
-
-        if (administrator is null)
-        {
-            administrator = new User
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                Username = username,
-                HouseholdMode = 1,
-                BudgetOwnerUserId = User.DefaultUserId
-            };
-            dbContext.Users.Add(administrator);
-        }
-
-        administrator.PasswordHash = pinHash;
-        administrator.IsAdmin = true;
-        administrator.BudgetOwnerUserId = User.DefaultUserId;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return AccessHardeningResult.Success();
     }
 
     private static async Task<string> ResolveTechnicalOwnerUsernameAsync(

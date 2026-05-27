@@ -12,20 +12,30 @@ public interface IAccessRecoveryService
     Task<AccessRecoveryResult> RecoverAdministratorAsync(
         string username,
         string pin,
+        string? localAccessGrant,
         CancellationToken cancellationToken);
 }
 
 public sealed class AccessRecoveryService(
     RuntimeConfigurationState runtimeConfigurationState,
-    IDbContextFactory<ApplicationDbContext> dbContextFactory) : IAccessRecoveryService
+    IDbContextFactory<ApplicationDbContext> dbContextFactory,
+    ILocalAccessGrantService localAccessGrantService) : IAccessRecoveryService
 {
+    private static readonly SemaphoreSlim RecoveryLock = new(1, 1);
+
     public bool IsRecoveryRequired => runtimeConfigurationState.IsLocalAccessRecoveryEnabled;
 
     public async Task<AccessRecoveryResult> RecoverAdministratorAsync(
         string username,
         string pin,
+        string? localAccessGrant,
         CancellationToken cancellationToken)
     {
+        if (!localAccessGrantService.IsValid(localAccessGrant, LocalAccessPurposes.AccessRecovery))
+        {
+            return AccessRecoveryResult.Failed("Odzyskiwanie dostepu jest dostepne tylko lokalnie.");
+        }
+
         if (!IsRecoveryRequired)
         {
             return AccessRecoveryResult.Failed("Lokalny tryb odzyskiwania nie jest włączony.");
@@ -47,55 +57,68 @@ public sealed class AccessRecoveryService(
             return AccessRecoveryResult.Failed(ex.Message);
         }
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var technicalOwner = await dbContext.Users
-            .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);
-
-        if (technicalOwner is null)
+        await RecoveryLock.WaitAsync(cancellationToken);
+        try
         {
-            technicalOwner = new User
+            if (!IsRecoveryRequired)
             {
-                Id = User.DefaultUserId,
-                Username = User.TechnicalOwnerUsername,
-                BudgetOwnerUserId = User.DefaultUserId
-            };
-            dbContext.Users.Add(technicalOwner);
-        }
+                return AccessRecoveryResult.Failed("Lokalny tryb odzyskiwania nie jest wlaczony.");
+            }
 
-        technicalOwner.Username = await ResolveTechnicalOwnerUsernameAsync(dbContext, cancellationToken);
-        technicalOwner.PasswordHash = string.Empty;
-        technicalOwner.IsAdmin = false;
-        technicalOwner.BudgetOwnerUserId = User.DefaultUserId;
-
-        var administrator = await dbContext.Users
-            .FirstOrDefaultAsync(
-                x => x.Id != User.DefaultUserId && x.Username.ToUpper() == username.ToUpper(),
-                cancellationToken);
-
-        if (administrator is null)
-        {
-            administrator = new User
+            if (!localAccessGrantService.TryConsume(localAccessGrant, LocalAccessPurposes.AccessRecovery))
             {
-                Id = Guid.NewGuid().ToString("N"),
-                Username = username,
-                HouseholdMode = 1,
-                BudgetOwnerUserId = User.DefaultUserId
-            };
-            dbContext.Users.Add(administrator);
+                return AccessRecoveryResult.Failed("Lokalne uprawnienie odzyskiwania wygaslo.");
+            }
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var technicalOwner = await dbContext.Users
+                .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);
+
+            if (technicalOwner is null)
+            {
+                technicalOwner = new User
+                {
+                    Id = User.DefaultUserId,
+                    Username = User.TechnicalOwnerUsername,
+                    BudgetOwnerUserId = User.DefaultUserId
+                };
+                dbContext.Users.Add(technicalOwner);
+            }
+
+            technicalOwner.Username = await ResolveTechnicalOwnerUsernameAsync(dbContext, cancellationToken);
+            technicalOwner.PasswordHash = string.Empty;
+            technicalOwner.IsAdmin = false;
+            technicalOwner.BudgetOwnerUserId = User.DefaultUserId;
+
+            var administrator = await dbContext.Users
+                .FirstOrDefaultAsync(
+                    x => x.Id != User.DefaultUserId && x.Username.ToUpper() == username.ToUpper(),
+                    cancellationToken);
+
+            if (administrator is null)
+            {
+                administrator = new User
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Username = username,
+                    HouseholdMode = 1,
+                    BudgetOwnerUserId = User.DefaultUserId
+                };
+                dbContext.Users.Add(administrator);
+            }
+
+            administrator.PasswordHash = pinHash;
+            administrator.IsAdmin = true;
+            administrator.BudgetOwnerUserId = User.DefaultUserId;
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            var disableResult = await DisableRecoveryModeAsync(cancellationToken);
+            return disableResult.IsSuccess ? AccessRecoveryResult.Success() : disableResult;
         }
-
-        administrator.PasswordHash = pinHash;
-        administrator.IsAdmin = true;
-        administrator.BudgetOwnerUserId = User.DefaultUserId;
-
-        var disableResult = await DisableRecoveryModeAsync(cancellationToken);
-        if (!disableResult.IsSuccess)
+        finally
         {
-            return disableResult;
+            RecoveryLock.Release();
         }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return AccessRecoveryResult.Success();
     }
 
     private static async Task<string> ResolveTechnicalOwnerUsernameAsync(

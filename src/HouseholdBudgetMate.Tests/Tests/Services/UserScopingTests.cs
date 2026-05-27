@@ -269,11 +269,11 @@ public sealed class UserScopingTests
     }
 
     /// <summary>
-    /// Verifies that when BudgetOwnerUserId is null in the CurrentUserContext,
-    /// CurrentBudgetOwnerUserId falls back to CurrentUserId for both stamping and filtering.
+    /// Verifies that an interactive identity without an established budget owner cannot
+    /// read or write budget data.
     /// </summary>
     [Fact]
-    public async Task Context_Null_BudgetOwnerUserId_Falls_Back_To_CurrentUserId()
+    public async Task Context_Null_BudgetOwnerUserId_Fails_Closed()
     {
         var options = NewOptions();
 
@@ -283,20 +283,21 @@ public sealed class UserScopingTests
             await ctx.SaveChangesAsync();
         }
 
-        // Create context with null BudgetOwnerUserId
         var contextWithNullOwner = new CurrentUserContext { UserId = "user-a", BudgetOwnerUserId = null };
 
-        await using (var ctx = new ApplicationDbContext(options, contextWithNullOwner))
+        await using (var seedContext = new ApplicationDbContext(options, CreateCurrentUserContext("user-a")))
         {
-            ctx.Accounts.Add(new Account { Name = "NullOwnerAccount", Type = (int)AccountType.Bank, Order = 1 });
-            await ctx.SaveChangesAsync();
+            seedContext.Accounts.Add(new Account { Name = "Protected Account", Type = (int)AccountType.Bank, Order = 1 });
+            await seedContext.SaveChangesAsync();
         }
 
-        await using var verifyCtx = new ApplicationDbContext(options, CreateCurrentUserContext("user-a"));
-        var accounts = await verifyCtx.Accounts.ToListAsync();
+        await using var unauthorizedContext = new ApplicationDbContext(options, contextWithNullOwner);
+        (await unauthorizedContext.Accounts.ToListAsync()).Should().BeEmpty();
 
-        accounts.Should().ContainSingle();
-        accounts[0].UserId.Should().Be("user-a");
+        unauthorizedContext.Accounts.Add(new Account { Name = "Rejected Account", Type = (int)AccountType.Bank, Order = 2 });
+        await unauthorizedContext.Invoking(x => x.SaveChangesAsync())
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*authenticated user or explicit system scope*");
     }
 
     // ── Other entity types ────────────────────────────────────────────────────
@@ -406,16 +407,15 @@ public sealed class UserScopingTests
     }
 
     /// <summary>
-    /// Verifies that when no CurrentUserContext is provided, the DefaultUserId is used
-    /// for stamping new entities.
+    /// Verifies that absence of an interactive or explicit system context does not expose
+    /// or permit changes to the technical owner's budget.
     /// </summary>
     [Fact]
-    public async Task DefaultUserId_Is_Stamped_When_No_UserContext_Is_Provided()
+    public async Task No_UserContext_Fails_Closed_For_Technical_Owner_Budget()
     {
         var options = NewOptions();
 
-        // Seed the default user so FK constraints are satisfied
-        await using (var ctx = new ApplicationDbContext(options))
+        await using (var ctx = new ApplicationDbContext(options, CurrentUserContext.ForTechnicalOwner()))
         {
             ctx.Users.Add(new User
             {
@@ -423,22 +423,24 @@ public sealed class UserScopingTests
                 Username = "default",
                 PasswordHash = "hash"
             });
+            ctx.Categories.Add(new Category { Name = "Protected Category", Color = "#123456" });
+            ctx.Accounts.Add(new Account { Name = "Protected Account", Type = (int)AccountType.Cash, Order = 1 });
             await ctx.SaveChangesAsync();
         }
 
-        int accountId;
-        await using (var ctx = new ApplicationDbContext(options)) // no context
+        await using (var ctx = new ApplicationDbContext(options))
         {
-            var account = new Account { Name = "Default Account", Type = (int)AccountType.Cash, Order = 1 };
-            ctx.Accounts.Add(account);
-            await ctx.SaveChangesAsync();
-            accountId = account.Id;
+            (await ctx.Accounts.ToListAsync()).Should().BeEmpty();
+            (await ctx.Categories.ToListAsync()).Should().BeEmpty();
+
+            ctx.Accounts.Add(new Account { Name = "Rejected Account", Type = (int)AccountType.Cash, Order = 2 });
+            await ctx.Invoking(x => x.SaveChangesAsync())
+                .Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("*authenticated user or explicit system scope*");
         }
 
-        await using var verifyCtx = new ApplicationDbContext(options);
-        var saved = await verifyCtx.Accounts.SingleAsync(x => x.Id == accountId);
-
-        saved.UserId.Should().Be(User.DefaultUserId);
+        await using var verifyCtx = new ApplicationDbContext(options, CurrentUserContext.ForTechnicalOwner());
+        (await verifyCtx.Accounts.ToListAsync()).Should().ContainSingle(x => x.Name == "Protected Account");
+        (await verifyCtx.Categories.ToListAsync()).Should().ContainSingle(x => x.Name == "Protected Category");
     }
 }
-

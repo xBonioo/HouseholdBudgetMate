@@ -24,9 +24,12 @@ public sealed class AuditService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
-        var budgetOwnerUserId = string.IsNullOrWhiteSpace(currentUserContext.BudgetOwnerUserId)
-            ? currentUserContext.UserId
-            : currentUserContext.BudgetOwnerUserId;
+        if (string.IsNullOrWhiteSpace(currentUserContext.BudgetOwnerUserId))
+        {
+            throw new ForbiddenException("Admin permissions are required.");
+        }
+
+        var budgetOwnerUserId = currentUserContext.BudgetOwnerUserId;
 
         var query = dbContext.AuditLogs
             .AsNoTracking()
@@ -788,7 +791,8 @@ public sealed class AuditService(
             .AsNoTracking()
             .AnyAsync(
                 x => x.Id == currentUserContext.UserId
-                     && (x.IsAdmin || x.Id == User.DefaultUserId),
+                     && x.Id != User.DefaultUserId
+                     && x.IsAdmin,
                 cancellationToken);
 
         if (!isAdmin)

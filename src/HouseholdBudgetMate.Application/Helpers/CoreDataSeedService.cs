@@ -1,6 +1,7 @@
 ﻿using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,8 @@ namespace HouseholdBudgetMate.Application.Helpers;
 public sealed class CoreDataSeedService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider,
-    ILogger<CoreDataSeedService> logger)
+    ILogger<CoreDataSeedService> logger,
+    CurrentUserContext currentUserContext)
 {
     private static readonly IReadOnlyList<CategorySeedDefinition> DefaultCategories =
     [
@@ -105,6 +107,7 @@ public sealed class CoreDataSeedService(
 
     public async Task SeedDefaultsAsync(CancellationToken cancellationToken)
     {
+        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         if (!dbContext.Database.CanConnect()) return;
@@ -123,6 +126,7 @@ public sealed class CoreDataSeedService(
     {
         var now = dateTimeProvider.GetLocalDateTime();
 
+        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         if (!await dbContext.Database.CanConnectAsync(cancellationToken)) return;
@@ -193,9 +197,10 @@ public sealed class CoreDataSeedService(
         dbContext.Users.Add(new User
         {
             Id = dbContext.CurrentUserId,
-            Username = dbContext.CurrentUserId,
+            Username = User.TechnicalOwnerUsername,
             PasswordHash = string.Empty,
-            IsAdmin = dbContext.CurrentUserId == User.DefaultUserId
+            BudgetOwnerUserId = User.DefaultUserId,
+            IsAdmin = false
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);

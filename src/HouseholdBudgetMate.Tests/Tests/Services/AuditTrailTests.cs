@@ -625,6 +625,20 @@ public sealed class AuditTrailTests
             .ThrowAsync<ForbiddenException>();
     }
 
+    [Fact]
+    public async Task SaveChanges_WhenNoSessionExists_Should_Reject_AuditedChanges()
+    {
+        var currentUser = new CurrentUserContext();
+        var options = NewOptions(currentUser);
+
+        await using var dbContext = new ApplicationDbContext(options, currentUser);
+        dbContext.Categories.Add(new Category { Name = "Hidden", Color = "#123456" });
+
+        await dbContext.Invoking(x => x.SaveChangesAsync())
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*authenticated user or explicit system scope*");
+    }
+
     private static DbContextOptions<ApplicationDbContext> NewOptions(CurrentUserContext currentUserContext)
     {
         return new DbContextOptionsBuilder<ApplicationDbContext>()

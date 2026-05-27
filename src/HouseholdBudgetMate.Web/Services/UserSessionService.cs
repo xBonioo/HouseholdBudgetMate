@@ -54,7 +54,7 @@ public sealed class UserSessionService(
             return false;
         }
 
-        var users = await userService.GetUsersAsync(cancellationToken);
+        var users = await userService.GetSignInUsersAsync(cancellationToken);
         var user = users.FirstOrDefault(x => string.Equals(x.Id, userId, StringComparison.Ordinal));
         if (user is null)
         {
@@ -71,7 +71,7 @@ public sealed class UserSessionService(
         string pin,
         CancellationToken cancellationToken)
     {
-        var users = await userService.GetUsersAsync(cancellationToken);
+        var users = await userService.GetSignInUsersAsync(cancellationToken);
         var user = users.FirstOrDefault(x => string.Equals(x.Id, userId, StringComparison.Ordinal));
         if (user is null)
         {

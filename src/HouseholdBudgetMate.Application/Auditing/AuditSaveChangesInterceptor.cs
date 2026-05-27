@@ -287,14 +287,22 @@ public sealed class AuditSaveChangesInterceptor(CurrentUserContext currentUserCo
 
     private (string ActorUserId, string BudgetOwnerUserId) ResolveUserScope()
     {
-        var actorUserId = string.IsNullOrWhiteSpace(currentUserContext.UserId)
-            ? User.DefaultUserId
-            : currentUserContext.UserId;
-        var budgetOwnerUserId = string.IsNullOrWhiteSpace(currentUserContext.BudgetOwnerUserId)
-            ? actorUserId
-            : currentUserContext.BudgetOwnerUserId!;
+        if (currentUserContext.IsSystemOperation
+            && currentUserContext.UserId == User.DefaultUserId
+            && currentUserContext.BudgetOwnerUserId == User.DefaultUserId)
+        {
+            return (User.DefaultUserId, User.DefaultUserId);
+        }
 
-        return (actorUserId, budgetOwnerUserId);
+        if (string.IsNullOrWhiteSpace(currentUserContext.UserId)
+            || currentUserContext.UserId == User.DefaultUserId
+            || string.IsNullOrWhiteSpace(currentUserContext.BudgetOwnerUserId))
+        {
+            throw new InvalidOperationException(
+                "An authenticated user or explicit system scope is required for audited changes.");
+        }
+
+        return (currentUserContext.UserId, currentUserContext.BudgetOwnerUserId);
     }
 
     private static string ResolveOperation(EntityEntry entry)

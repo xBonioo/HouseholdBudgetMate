@@ -44,11 +44,7 @@ public static class TestDbContextFactory
 
     private static CurrentUserContext CreateCurrentUserContext()
     {
-        return new CurrentUserContext
-        {
-            UserId = User.DefaultUserId,
-            BudgetOwnerUserId = User.DefaultUserId
-        };
+        return CurrentUserContext.ForTechnicalOwner();
     }
 
     private sealed class InMemoryDbContextFactory(DbContextOptions<ApplicationDbContext> options)

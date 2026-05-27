@@ -86,11 +86,7 @@ public sealed class SetupConfigurationService(
 
         await using var dbContext = new ApplicationDbContext(
             options,
-            new CurrentUserContext
-            {
-                UserId = User.DefaultUserId,
-                BudgetOwnerUserId = User.DefaultUserId
-            });
+            CurrentUserContext.ForTechnicalOwner());
 
         var defaultAdmin = await dbContext.Users
             .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);

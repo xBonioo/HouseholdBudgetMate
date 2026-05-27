@@ -10,8 +10,12 @@ public class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     CurrentUserContext? currentUserContext = null) : DbContext(options)
 {
-    public string CurrentUserId => currentUserContext?.UserId ?? User.DefaultUserId;
-    public string CurrentBudgetOwnerUserId => currentUserContext?.BudgetOwnerUserId ?? CurrentUserId;
+    private const string NoBudgetAccessScope = "__no_budget_access__";
+
+    public string CurrentUserId => currentUserContext?.UserId ?? string.Empty;
+    public string CurrentBudgetOwnerUserId => HasAuthorizedBudgetScope()
+        ? currentUserContext!.BudgetOwnerUserId!
+        : NoBudgetAccessScope;
 
     public DbSet<User> Users { get; set; }
     public DbSet<LogEntry> Logs { get; set; }
@@ -61,6 +65,7 @@ public class ApplicationDbContext(
     {
         var now = DateTime.UtcNow;
 
+        EnsureUserScopedWriteAccess();
         StampUserScope(ChangeTracker.Entries<Account>(), (entity, userId) => entity.UserId = userId);
         StampUserScope(ChangeTracker.Entries<AccountMonthBalance>(), (entity, userId) => entity.UserId = userId);
         StampUserScope(ChangeTracker.Entries<Expense>(), (entity, userId) => entity.UserId = userId);
@@ -102,9 +107,64 @@ public class ApplicationDbContext(
         {
             if (entry.State == EntityState.Added)
             {
-                setUserId(entry.Entity, CurrentBudgetOwnerUserId);
+                setUserId(entry.Entity, RequireBudgetOwnerUserId());
             }
         }
+    }
+
+    private void EnsureUserScopedWriteAccess()
+    {
+        if (!ChangeTracker.Entries().Any(entry =>
+                (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                && IsUserScopedEntity(entry.Entity)))
+        {
+            return;
+        }
+
+        _ = RequireBudgetOwnerUserId();
+    }
+
+    private string RequireBudgetOwnerUserId()
+    {
+        if (!HasAuthorizedBudgetScope())
+        {
+            throw new InvalidOperationException(
+                "An authenticated user or explicit system scope is required for budget changes.");
+        }
+
+        return currentUserContext!.BudgetOwnerUserId!;
+    }
+
+    private bool HasAuthorizedBudgetScope()
+    {
+        if (currentUserContext is null
+            || string.IsNullOrWhiteSpace(currentUserContext.UserId)
+            || string.IsNullOrWhiteSpace(currentUserContext.BudgetOwnerUserId))
+        {
+            return false;
+        }
+
+        return currentUserContext.IsSystemOperation
+            ? currentUserContext.UserId == User.DefaultUserId
+              && currentUserContext.BudgetOwnerUserId == User.DefaultUserId
+            : currentUserContext.UserId != User.DefaultUserId;
+    }
+
+    private static bool IsUserScopedEntity(object entity)
+    {
+        return entity is Account
+            or AccountMonthBalance
+            or Expense
+            or ExpenseLineItem
+            or Income
+            or Loan
+            or LoanCharge
+            or LoanInstallment
+            or LoanRateEntry
+            or MonthPlan
+            or MonthSavingsTransferItem
+            or RegularExpenseDefinition
+            or RegularIncomeDefinition;
     }
 
     private static void ConfigureUserScopedEntities(ModelBuilder modelBuilder)
@@ -143,7 +203,7 @@ public class ApplicationDbContext(
     {
         modelBuilder.Entity<Account>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<AccountMonthBalance>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
-        modelBuilder.Entity<Category>().HasQueryFilter(x => !x.IsDeleted);
+        modelBuilder.Entity<Category>().HasQueryFilter(x => CurrentBudgetOwnerUserId != NoBudgetAccessScope && !x.IsDeleted);
         modelBuilder.Entity<Expense>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId && !x.IsDeleted);
         modelBuilder.Entity<ExpenseLineItem>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<Income>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId && !x.IsDeleted);
@@ -155,6 +215,6 @@ public class ApplicationDbContext(
         modelBuilder.Entity<MonthSavingsTransferItem>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<RegularExpenseDefinition>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<RegularIncomeDefinition>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
-        modelBuilder.Entity<Tag>().HasQueryFilter(x => !x.IsDeleted);
+        modelBuilder.Entity<Tag>().HasQueryFilter(x => CurrentBudgetOwnerUserId != NoBudgetAccessScope && !x.IsDeleted);
     }
 }

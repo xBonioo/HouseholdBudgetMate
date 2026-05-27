@@ -6,11 +6,18 @@ public sealed class AccessHardeningRedirectMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(
         HttpContext context,
-        IAccessHardeningService accessHardeningService)
+        IAccessHardeningService accessHardeningService,
+        IAccessRecoveryService accessRecoveryService)
     {
         if (ShouldBypass(context.Request))
         {
             await next(context);
+            return;
+        }
+
+        if (accessRecoveryService.IsRecoveryRequired)
+        {
+            context.Response.Redirect("/access-recovery", permanent: false);
             return;
         }
 
@@ -33,6 +40,7 @@ public sealed class AccessHardeningRedirectMiddleware(RequestDelegate next)
         var requestPath = request.Path;
         if (requestPath.StartsWithSegments("/setup", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/access-setup", StringComparison.OrdinalIgnoreCase)
+            || requestPath.StartsWithSegments("/access-recovery", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/_framework", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/_content", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/_blazor", StringComparison.OrdinalIgnoreCase)

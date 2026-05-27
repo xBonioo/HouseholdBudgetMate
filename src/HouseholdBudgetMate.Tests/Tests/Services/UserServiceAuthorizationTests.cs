@@ -16,10 +16,35 @@ public sealed class UserServiceAuthorizationTests
 {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    private const string VisibleAdministratorId = "visible-admin";
+
     private static UserService BuildService(
         IDbContextFactory<ApplicationDbContext> factory,
-        string userId) =>
-        new(factory, new CurrentUserContext { UserId = userId });
+        string userId)
+    {
+        if (userId == User.DefaultUserId)
+        {
+            using var dbContext = factory.CreateDbContext();
+            if (!dbContext.Users.Any(x => x.Id == VisibleAdministratorId))
+            {
+                dbContext.Users.Add(new User
+                {
+                    Id = VisibleAdministratorId,
+                    Username = "Visible administrator",
+                    PasswordHash = PinHasher.Hash("1357"),
+                    BudgetOwnerUserId = User.DefaultUserId,
+                    IsAdmin = true
+                });
+                dbContext.SaveChanges();
+            }
+
+            userId = VisibleAdministratorId;
+        }
+
+        return new UserService(
+            factory,
+            new CurrentUserContext { UserId = userId, BudgetOwnerUserId = User.DefaultUserId });
+    }
 
     // ── CreateUserAsync ──────────────────────────────────────────────────────
 
@@ -44,6 +69,29 @@ public sealed class UserServiceAuthorizationTests
 
         await service.Invoking(s => s.CreateUserAsync(
                 new CreateUserRequest { Username = "new-user", Pin = "1234", HouseholdMode = HouseholdMode.SeparateBudget },
+                CancellationToken.None))
+            .Should().ThrowAsync<ForbiddenException>();
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_Should_Reject_Technical_Owner_As_Administrative_Actor()
+    {
+        await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
+        dbContext.Users.Add(new User
+        {
+            Id = User.DefaultUserId,
+            Username = User.TechnicalOwnerUsername,
+            PasswordHash = string.Empty,
+            BudgetOwnerUserId = User.DefaultUserId,
+            IsAdmin = true
+        });
+        await dbContext.SaveChangesAsync();
+        var service = new UserService(
+            factory,
+            new CurrentUserContext { UserId = User.DefaultUserId, BudgetOwnerUserId = User.DefaultUserId });
+
+        await service.Invoking(x => x.CreateUserAsync(
+                new CreateUserRequest { Username = "member", Pin = "1234" },
                 CancellationToken.None))
             .Should().ThrowAsync<ForbiddenException>();
     }
@@ -233,7 +281,7 @@ public sealed class UserServiceAuthorizationTests
             {
                 Id = "standard-user",
                 Username = "standard",
-                PasswordHash = string.Empty,
+                PasswordHash = PinHasher.Hash("2468"),
                 BudgetOwnerUserId = "standard-user",
                 IsAdmin = false
             });
@@ -246,6 +294,36 @@ public sealed class UserServiceAuthorizationTests
             CancellationToken.None);
 
         updated.IsAdmin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpdateUserAdminRoleAsync_Should_Reject_Pinless_Profile_Promotion()
+    {
+        await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
+        dbContext.Users.AddRange(
+            new User
+            {
+                Id = User.DefaultUserId,
+                Username = User.TechnicalOwnerUsername,
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId
+            },
+            new User
+            {
+                Id = "pinless",
+                Username = "pinless",
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId
+            });
+        await dbContext.SaveChangesAsync();
+
+        var service = BuildService(factory, User.DefaultUserId);
+
+        await service.Invoking(x => x.UpdateUserAdminRoleAsync(
+                new UpdateUserAdminRoleRequest { UserId = "pinless", IsAdmin = true },
+                CancellationToken.None))
+            .Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*configured PIN*");
     }
 
     /// <summary>
@@ -269,10 +347,10 @@ public sealed class UserServiceAuthorizationTests
     }
 
     /// <summary>
-    /// Verifies that UpdateUserAdminRoleAsync throws BadRequestException when attempting to revoke the default admin's role.
+    /// Verifies that UpdateUserAdminRoleAsync does not expose the technical budget owner as a managed profile.
     /// </summary>
     [Fact]
-    public async Task UpdateUserAdminRoleAsync_Should_Throw_BadRequest_When_Revoking_Default_Admin_Role()
+    public async Task UpdateUserAdminRoleAsync_Should_Throw_BadRequest_For_Technical_Owner()
     {
         await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
         dbContext.Users.Add(new User
@@ -291,7 +369,7 @@ public sealed class UserServiceAuthorizationTests
                 new UpdateUserAdminRoleRequest { UserId = User.DefaultUserId, IsAdmin = false },
                 CancellationToken.None))
             .Should().ThrowAsync<BadRequestException>()
-            .WithMessage("*Default administrator*");
+            .WithMessage("*technical budget owner*");
     }
 
     /// <summary>
@@ -303,7 +381,7 @@ public sealed class UserServiceAuthorizationTests
         await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
         dbContext.Users.AddRange(
             new User { Id = User.DefaultUserId, Username = "root", PasswordHash = string.Empty, BudgetOwnerUserId = User.DefaultUserId },
-            new User { Id = "admin2", Username = "admin2", PasswordHash = string.Empty, BudgetOwnerUserId = "admin2", IsAdmin = true });
+            new User { Id = "admin2", Username = "admin2", PasswordHash = PinHasher.Hash("1357"), BudgetOwnerUserId = "admin2", IsAdmin = true });
         await dbContext.SaveChangesAsync();
 
         var service = BuildService(factory, "admin2");
@@ -385,6 +463,32 @@ public sealed class UserServiceAuthorizationTests
         result.BudgetOwnerUserId.Should().Be("user1");
     }
 
+    [Fact]
+    public async Task UpdateUserBudgetModeAsync_Should_Reject_Technical_Owner_As_Managed_Profile()
+    {
+        await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
+        dbContext.Users.Add(new User
+        {
+            Id = User.DefaultUserId,
+            Username = User.TechnicalOwnerUsername,
+            PasswordHash = string.Empty,
+            BudgetOwnerUserId = User.DefaultUserId
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = BuildService(factory, User.DefaultUserId);
+
+        await service.Invoking(x => x.UpdateUserBudgetModeAsync(
+                new UpdateUserBudgetModeRequest
+                {
+                    UserId = User.DefaultUserId,
+                    HouseholdMode = HouseholdMode.SeparateBudget
+                },
+                CancellationToken.None))
+            .Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*technical budget owner*");
+    }
+
     /// <summary>
     /// Verifies that UpdateUserBudgetModeAsync throws NotFoundException when the target user does not exist.
     /// </summary>
@@ -432,10 +536,10 @@ public sealed class UserServiceAuthorizationTests
     }
 
     /// <summary>
-    /// Verifies that UpdateUserPinAsync throws BadRequestException when called for the default admin user.
+    /// Verifies that UpdateUserPinAsync throws BadRequestException when called for the technical owner.
     /// </summary>
     [Fact]
-    public async Task UpdateUserPinAsync_Should_Throw_BadRequest_For_Default_Admin()
+    public async Task UpdateUserPinAsync_Should_Throw_BadRequest_For_Technical_Owner()
     {
         await using var dbContext = TestDbContextFactory.CreateDbContext(out var factory);
         dbContext.Users.Add(new User
@@ -453,7 +557,7 @@ public sealed class UserServiceAuthorizationTests
                 new UpdateUserPinRequest { UserId = User.DefaultUserId, Pin = "1234" },
                 CancellationToken.None))
             .Should().ThrowAsync<BadRequestException>()
-            .WithMessage("*Default administrator*");
+            .WithMessage("*technical budget owner*");
     }
 
     /// <summary>

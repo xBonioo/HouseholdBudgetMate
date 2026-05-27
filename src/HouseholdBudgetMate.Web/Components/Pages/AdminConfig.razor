@@ -31,7 +31,7 @@ else
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.h4">Administracja</MudText>
                     <MudText Typo="Typo.body2" Class="hb-muted">
-                        Zarządzaj użytkownikami, dostępem do budżetu, uprawnieniami administratora i połączeniem z bazą.
+                        Zarządzaj profilami gospodarstwa, dostępem do budżetu, uprawnieniami administratora i połączeniem z bazą.
                     </MudText>
                     <MudText Typo="Typo.caption" Class="mt-1">Ścieżka konfiguracji: @RuntimeConfigurationState.ConfigFilePath</MudText>
                 </MudStack>
@@ -50,20 +50,20 @@ else
             <MudStack Spacing="3">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     <MudStack Spacing="0">
-                        <MudText Typo="Typo.h6">Użytkownicy</MudText>
+                        <MudText Typo="Typo.h6">Profile gospodarstwa</MudText>
                         <MudText Typo="Typo.body2" Class="hb-muted">
-                            Nowi użytkownicy są standardowi. Uprawnienia administratora trzeba nadać ręcznie.
+                            Nowe profile wymagają PIN-u. Uprawnienia administratora trzeba nadać ręcznie.
                         </MudText>
                     </MudStack>
-                    <MudChip T="int" Color="Color.Secondary" Variant="Variant.Outlined">Użytkownicy: @_users.Count</MudChip>
+                    <MudChip T="int" Color="Color.Secondary" Variant="Variant.Outlined">Profile: @_users.Count</MudChip>
                 </MudStack>
 
                 <MudPaper Class="pa-4 hb-panel" Elevation="0">
-                    <MudText Typo="Typo.subtitle1" Class="mb-2">Dodaj użytkownika</MudText>
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Dodaj profil</MudText>
                     <ActionForm OnSubmit="CreateUserAsync">
                     <MudGrid>
                         <MudItem xs="12" md="3">
-                            <MudTextField T="string" Label="Nazwa użytkownika" @bind-Value="_newUsername" Variant="Variant.Outlined" Margin="Margin.Dense"/>
+                            <MudTextField T="string" Label="Nazwa profilu" @bind-Value="_newUsername" Variant="Variant.Outlined" Margin="Margin.Dense"/>
                         </MudItem>
                         <MudItem xs="12" md="2">
                             <PinKeypadInput Label="PIN" @bind-Value="_newUserPin"/>
@@ -76,6 +76,7 @@ else
                         </MudItem>
                         <MudItem xs="12" md="3">
                             <MudSelect T="string" Label="Wspólny z" @bind-Value="_newUserBudgetOwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(_newUserMode == HouseholdMode.SeparateBudget)">
+                                <MudSelectItem Value="@User.DefaultUserId">Wspólny budżet gospodarstwa</MudSelectItem>
                                 @foreach (var user in _users)
                                 {
                                     <MudSelectItem Value="@user.Id">@user.Username</MudSelectItem>
@@ -113,10 +114,6 @@ else
                                                 <MudChip T="string" Color="Color.Default" Size="Size.Small">Standardowy</MudChip>
                                             }
 
-                                            @if (user.IsDefaultAdmin)
-                                            {
-                                                <MudChip T="string" Color="Color.Primary" Size="Size.Small">Główny</MudChip>
-                                            }
                                         </MudStack>
                                     </MudStack>
 
@@ -140,6 +137,7 @@ else
                                                        Variant="Variant.Outlined"
                                                        Margin="Margin.Dense"
                                                        Disabled="@(_userModes[user.Id] == HouseholdMode.SeparateBudget)">
+                                                <MudSelectItem Value="@User.DefaultUserId">Wspólny budżet gospodarstwa</MudSelectItem>
                                                 @foreach (var owner in _users)
                                                 {
                                                     <MudSelectItem Value="@owner.Id">@owner.Username</MudSelectItem>
@@ -151,20 +149,12 @@ else
                                                        Label="Uprawnienia administratora"
                                                        Color="Color.Error"
                                                        Value="@_userAdmins[user.Id]"
-                                                       ValueChanged="value => _userAdmins[user.Id] = value"
-                                                       Disabled="@user.IsDefaultAdmin"/>
+                                                       ValueChanged="value => _userAdmins[user.Id] = value"/>
                                         </MudItem>
                                         <MudItem xs="12" sm="6" Class="d-flex align-center">
-                                            @if (user.IsDefaultAdmin)
-                                            {
-                                                <MudText Typo="Typo.body2" Color="Color.Secondary">Konto główne nie używa PIN-u.</MudText>
-                                            }
-                                            else
-                                            {
-                                                <MudButton FullWidth="true" Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Dialpad" ButtonType="ButtonType.Button" OnClick="() => ChangePinAsync(user.Id)" Disabled="_isBusy">
-                                                    Zmień PIN
-                                                </MudButton>
-                                            }
+                                            <MudButton FullWidth="true" Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Dialpad" ButtonType="ButtonType.Button" OnClick="() => ChangePinAsync(user.Id)" Disabled="_isBusy">
+                                                Zmień PIN
+                                            </MudButton>
                                         </MudItem>
                                     </MudGrid>
 
@@ -275,7 +265,9 @@ else
 
     private async Task LoadUsersAsync()
     {
-        _users = (await UserService.GetUsersAsync(CancellationToken.None)).ToList();
+        _users = (await UserService.GetUsersAsync(CancellationToken.None))
+            .Where(x => x.IsInteractive)
+            .ToList();
         _userModes.Clear();
         _userOwners.Clear();
         _userAdmins.Clear();
@@ -287,7 +279,7 @@ else
             _userAdmins[user.Id] = user.IsAdmin;
         }
 
-        _newUserBudgetOwnerId = _users.FirstOrDefault()?.Id ?? User.DefaultUserId;
+        _newUserBudgetOwnerId = User.DefaultUserId;
     }
 
     private void LoadDatabaseFields()
@@ -323,7 +315,7 @@ else
             _newUserPin = string.Empty;
             _newUserMode = HouseholdMode.SeparateBudget;
             await LoadUsersAsync();
-            ShowSuccess("Użytkownik dodany.");
+            ShowSuccess("Profil dodany.");
         });
     }
 
@@ -349,7 +341,7 @@ else
                 CancellationToken.None);
 
             await LoadUsersAsync();
-            ShowSuccess("Użytkownik zapisany.");
+            ShowSuccess("Profil zapisany.");
         });
     }
 

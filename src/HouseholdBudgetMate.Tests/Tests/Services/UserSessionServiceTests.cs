@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto;
 using HouseholdBudgetMate.Abstractions.Interfaces;
@@ -41,7 +42,11 @@ public sealed class UserSessionServiceTests
         {
             CookieValue = dataProtectionProvider
                 .CreateProtector("HouseholdBudgetMate.CurrentUserCookie")
-                .Protect(User.DefaultUserId)
+                .Protect(JsonSerializer.Serialize(new
+                {
+                    UserId = User.DefaultUserId,
+                    SessionSecurityStamp = "technical-owner-stamp"
+                }))
         };
         var technicalOwner = new UserDto
         {
@@ -49,7 +54,8 @@ public sealed class UserSessionServiceTests
             Username = User.TechnicalOwnerUsername,
             BudgetOwnerUserId = User.DefaultUserId,
             IsInteractive = false,
-            HasPin = false
+            HasPin = false,
+            SessionSecurityStamp = "technical-owner-stamp"
         };
         var userService = new Mock<IUserService>();
         userService.Setup(x => x.GetUsersAsync(It.IsAny<CancellationToken>()))
@@ -124,6 +130,37 @@ public sealed class UserSessionServiceTests
         jsRuntime.CookieValue.Should().BeNull();
     }
 
+    [Fact]
+    public async Task TryRestoreFromCookieAsync_Should_Delete_Cookie_After_Pin_Changes()
+    {
+        var user = CreateEligibleUser();
+        var userService = new Mock<IUserService>();
+        userService.Setup(x => x.GetSignInUsersAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([user]);
+        userService.Setup(x => x.ValidatePinAsync(user.Id, "1234", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var dataProtectionProvider = new EphemeralDataProtectionProvider();
+        var jsRuntime = new CookieJsRuntime();
+        var signInService = new UserSessionService(
+            userService.Object,
+            new CurrentUserContext(),
+            jsRuntime,
+            dataProtectionProvider);
+        await signInService.SignInAsync(user.Id, "1234", CancellationToken.None);
+
+        user.SessionSecurityStamp = "stamp-after-pin-reset";
+        var restoreService = new UserSessionService(
+            userService.Object,
+            new CurrentUserContext(),
+            jsRuntime,
+            dataProtectionProvider);
+
+        var restored = await restoreService.TryRestoreFromCookieAsync(CancellationToken.None);
+
+        restored.Should().BeFalse();
+        jsRuntime.CookieValue.Should().BeNull();
+    }
+
     private static UserSessionService CreateService(
         IUserService userService,
         CurrentUserContext context,
@@ -141,7 +178,8 @@ public sealed class UserSessionServiceTests
             BudgetOwnerUserId = User.DefaultUserId,
             HasPin = true,
             IsInteractive = true,
-            IsAdmin = true
+            IsAdmin = true,
+            SessionSecurityStamp = "initial-pin-stamp"
         };
     }
 

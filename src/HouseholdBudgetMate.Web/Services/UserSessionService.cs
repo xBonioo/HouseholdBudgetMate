@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Domain.Infrastructure;
@@ -44,9 +45,10 @@ public sealed class UserSessionService(
             return false;
         }
 
+        TrustedSessionCookie? cookie;
         try
         {
-            userId = _cookieProtector.Unprotect(userId);
+            cookie = JsonSerializer.Deserialize<TrustedSessionCookie>(_cookieProtector.Unprotect(userId));
         }
         catch
         {
@@ -54,8 +56,18 @@ public sealed class UserSessionService(
             return false;
         }
 
+        if (cookie is null
+            || string.IsNullOrWhiteSpace(cookie.UserId)
+            || string.IsNullOrWhiteSpace(cookie.SessionSecurityStamp))
+        {
+            await DeleteCookieAsync();
+            return false;
+        }
+
         var users = await userService.GetSignInUsersAsync(cancellationToken);
-        var user = users.FirstOrDefault(x => string.Equals(x.Id, userId, StringComparison.Ordinal));
+        var user = users.FirstOrDefault(x =>
+            string.Equals(x.Id, cookie.UserId, StringComparison.Ordinal)
+            && string.Equals(x.SessionSecurityStamp, cookie.SessionSecurityStamp, StringComparison.Ordinal));
         if (user is null)
         {
             await DeleteCookieAsync();
@@ -93,7 +105,13 @@ public sealed class UserSessionService(
         await jsRuntime.InvokeVoidAsync(
             "householdBudgetMate.cookies.set",
             cancellationToken,
-            new object?[] { CookieName, _cookieProtector.Protect(user.Id), CookieDays });
+            new object?[]
+            {
+                CookieName,
+                _cookieProtector.Protect(JsonSerializer.Serialize(
+                    new TrustedSessionCookie(user.Id, user.SessionSecurityStamp))),
+                CookieDays
+            });
 
         return UserSessionSignInResult.Success(user);
     }
@@ -101,22 +119,22 @@ public sealed class UserSessionService(
     public async Task SignOutAsync()
     {
         CurrentUser = null;
-        currentUserContext.UserId = string.Empty;
-        currentUserContext.BudgetOwnerUserId = null;
+        currentUserContext.ClearInteractiveUser();
         await DeleteCookieAsync();
     }
 
     private void ApplyUser(UserDto user)
     {
         CurrentUser = user;
-        currentUserContext.UserId = user.Id;
-        currentUserContext.BudgetOwnerUserId = user.BudgetOwnerUserId;
+        currentUserContext.SetInteractiveUser(user.Id, user.BudgetOwnerUserId);
     }
 
     private ValueTask DeleteCookieAsync()
     {
         return jsRuntime.InvokeVoidAsync("householdBudgetMate.cookies.delete", CookieName);
     }
+
+    private sealed record TrustedSessionCookie(string UserId, string SessionSecurityStamp);
 }
 
 public sealed class UserSessionSignInResult

@@ -179,6 +179,7 @@ builder.Services.AddScoped<CoreDataSeedService>();
 builder.Services.AddScoped<ISetupConfigurationService, SetupConfigurationService>();
 builder.Services.AddScoped<IDatabaseMigrationOrchestrator, DatabaseMigrationOrchestrator>();
 builder.Services.AddScoped<IAccessHardeningService, AccessHardeningService>();
+builder.Services.AddScoped<IAccessRecoveryService, AccessRecoveryService>();
 
 builder.AddSerilogLogging();
 

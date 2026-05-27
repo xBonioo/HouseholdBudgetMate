@@ -36,6 +36,27 @@ public sealed class CurrentUserContext
         });
     }
 
+    public void SetInteractiveUser(string userId, string budgetOwnerUserId)
+    {
+        if (string.IsNullOrWhiteSpace(userId)
+            || userId == User.DefaultUserId
+            || string.IsNullOrWhiteSpace(budgetOwnerUserId))
+        {
+            throw new ArgumentException("A visible user and budget owner are required for interactive access.");
+        }
+
+        UserId = userId;
+        BudgetOwnerUserId = budgetOwnerUserId;
+        IsSystemOperation = false;
+    }
+
+    public void ClearInteractiveUser()
+    {
+        UserId = string.Empty;
+        BudgetOwnerUserId = null;
+        IsSystemOperation = false;
+    }
+
     private sealed class ScopeReset(Action reset) : IDisposable
     {
         private Action? _reset = reset;

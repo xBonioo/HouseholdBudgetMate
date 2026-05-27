@@ -11,6 +11,7 @@ public sealed class UserDto
     public string? BudgetOwnerUsername { get; set; }
     public bool HasPin { get; set; }
     public bool IsInteractive { get; set; }
+    public string SessionSecurityStamp { get; set; } = string.Empty;
     public bool IsDefaultAdmin { get; set; }
     public bool IsAdmin { get; set; }
 }

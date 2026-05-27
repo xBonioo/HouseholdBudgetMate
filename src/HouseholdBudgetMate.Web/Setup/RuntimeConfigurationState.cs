@@ -12,6 +12,7 @@ public sealed class RuntimeConfigurationState
     private RuntimeDatabaseConfiguration? _database;
     private HouseholdMode _householdMode = HouseholdMode.SharedBudget;
     private IReadOnlyList<string> _sharedWithUserIds = [];
+    private bool _localAccessRecoveryEnabled;
 
     public RuntimeConfigurationState(string baseDirectory)
     {
@@ -64,6 +65,17 @@ public sealed class RuntimeConfigurationState
         }
     }
 
+    public bool IsLocalAccessRecoveryEnabled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _localAccessRecoveryEnabled;
+            }
+        }
+    }
+
     public void ReloadFromDisk()
     {
         lock (_lock)
@@ -109,6 +121,7 @@ public sealed class RuntimeConfigurationState
         _database = null;
         _householdMode = HouseholdMode.SharedBudget;
         _sharedWithUserIds = [];
+        _localAccessRecoveryEnabled = false;
 
         if (!File.Exists(ConfigFilePath))
         {
@@ -131,6 +144,7 @@ public sealed class RuntimeConfigurationState
             _database = config.Database;
             _householdMode = config.HouseholdMode;
             _sharedWithUserIds = NormalizeUserIds(config.SharedWithUserIds);
+            _localAccessRecoveryEnabled = config.LocalAccessRecoveryEnabled;
         }
         catch
         {
@@ -143,6 +157,7 @@ public sealed class RuntimeConfigurationState
         public RuntimeDatabaseConfiguration Database { get; init; } = new();
         public HouseholdMode HouseholdMode { get; init; } = HouseholdMode.SharedBudget;
         public IReadOnlyList<string> SharedWithUserIds { get; init; } = [];
+        public bool LocalAccessRecoveryEnabled { get; init; }
     }
 
     public static IReadOnlyList<string> NormalizeUserIds(IEnumerable<string>? userIds)

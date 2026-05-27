@@ -1,0 +1,71 @@
+@page "/access-recovery"
+@layout SetupLayout
+@using HouseholdBudgetMate.Web.Setup
+@using MudBlazor
+
+@inject IAccessRecoveryService AccessRecoveryService
+@inject NavigationManager NavigationManager
+
+<MudPaper Class="pa-4 hb-panel">
+    <MudText Typo="Typo.h4">Odzyskiwanie dostępu administratora</MudText>
+    <MudText Typo="Typo.body2" Class="mt-1 mb-4">
+        Lokalny tryb odzyskiwania jest aktywny. Ustaw nowy PIN widocznego administratora.
+        Dane budżetu pozostaną zablokowane do czasu zalogowania nowym PIN-em.
+    </MudText>
+
+    <ActionForm OnSubmit="SaveAsync">
+        <MudStack Spacing="2">
+            <MudTextField T="string" Label="Nazwa administratora" @bind-Value="_username" Required="true"/>
+            <PinKeypadInput Label="Nowy PIN administratora" @bind-Value="_pin" Required="true"/>
+
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="_isSaving">
+                @(_isSaving ? "Zapisywanie..." : "Ustaw nowy PIN i zakończ odzyskiwanie")
+            </MudButton>
+        </MudStack>
+    </ActionForm>
+</MudPaper>
+
+@code {
+    private string _username = string.Empty;
+    private string _pin = string.Empty;
+    private bool _isSaving;
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        if (!AccessRecoveryService.IsRecoveryRequired)
+        {
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await AccessRecoveryService.RecoverAdministratorAsync(
+                _username,
+                _pin,
+                CancellationToken.None);
+            if (!result.IsSuccess)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

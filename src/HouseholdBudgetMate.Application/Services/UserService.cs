@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Users.Requests;
 using HouseholdBudgetMate.Abstractions.Enums;
@@ -92,6 +94,12 @@ public sealed class UserService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
+
+        if (request.UserId == User.DefaultUserId)
+        {
+            throw new BadRequestException("The technical budget owner cannot be administered as a household profile.");
+        }
+
         var user = await dbContext.Users
             .FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
             ?? throw new NotFoundException("User not found.");
@@ -120,9 +128,9 @@ public sealed class UserService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
-        if (request.UserId == User.DefaultUserId && !request.IsAdmin)
+        if (request.UserId == User.DefaultUserId)
         {
-            throw new BadRequestException("Default administrator must keep Admin permissions.");
+            throw new BadRequestException("The technical budget owner cannot be administered as a household profile.");
         }
 
         if (request.UserId == currentUserContext.UserId && !request.IsAdmin)
@@ -134,7 +142,12 @@ public sealed class UserService(
             .FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
             ?? throw new NotFoundException("User not found.");
 
-        user.IsAdmin = request.UserId == User.DefaultUserId || request.IsAdmin;
+        if (request.IsAdmin && !HasConfiguredPin(user))
+        {
+            throw new BadRequestException("An administrator profile must have a configured PIN.");
+        }
+
+        user.IsAdmin = request.IsAdmin;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return await BuildUserDtoAsync(dbContext, user.Id, cancellationToken);
@@ -149,7 +162,7 @@ public sealed class UserService(
 
         if (request.UserId == User.DefaultUserId)
         {
-            throw new BadRequestException("Default administrator does not use a PIN.");
+            throw new BadRequestException("The technical budget owner cannot be administered as a household profile.");
         }
 
         var pinHash = HashPinOrThrowBadRequest(request.Pin);
@@ -286,8 +299,9 @@ public sealed class UserService(
             BudgetOwnerUsername = user.BudgetOwnerUser?.Username,
             HasPin = HasConfiguredPin(user),
             IsInteractive = user.Id != User.DefaultUserId,
+            SessionSecurityStamp = BuildSessionSecurityStamp(user),
             IsDefaultAdmin = user.Id == User.DefaultUserId,
-            IsAdmin = user.Id == User.DefaultUserId || user.IsAdmin
+            IsAdmin = user.Id != User.DefaultUserId && user.IsAdmin
         };
     }
 
@@ -304,7 +318,9 @@ public sealed class UserService(
             .AsNoTracking()
             .AnyAsync(
                 x => x.Id == currentUserContext.UserId
-                     && (x.IsAdmin || x.Id == User.DefaultUserId),
+                     && x.Id != User.DefaultUserId
+                     && x.IsAdmin
+                     && x.PasswordHash.StartsWith("PBKDF2-SHA256:"),
                 cancellationToken);
 
         if (!isAdmin)
@@ -318,5 +334,16 @@ public sealed class UserService(
         return user.Id != User.DefaultUserId
                && !string.IsNullOrWhiteSpace(user.PasswordHash)
                && user.PasswordHash.StartsWith("PBKDF2-SHA256:", StringComparison.Ordinal);
+    }
+
+    private static string BuildSessionSecurityStamp(User user)
+    {
+        if (!HasConfiguredPin(user))
+        {
+            return string.Empty;
+        }
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(user.PasswordHash));
+        return Convert.ToHexString(bytes);
     }
 }

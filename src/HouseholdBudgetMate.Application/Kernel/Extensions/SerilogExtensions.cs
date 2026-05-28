@@ -1,6 +1,8 @@
 using System.Globalization;
+using HouseholdBudgetMate.Application.Kernel.Logging;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using HouseholdBudgetMate.Application.Kernel.Configurations;
 using NpgsqlTypes;
@@ -53,6 +55,13 @@ public static class SerilogExtensions
         Log.Logger = loggerConfiguration.CreateLogger();
 
         builder.Host.UseSerilog();
+    }
+
+    public static IServiceCollection AddOperationalLogCleanup(this IServiceCollection services)
+    {
+        services.AddScoped<OperationalLogCleanupService>();
+        services.AddHostedService<OperationalLogCleanupHostedService>();
+        return services;
     }
 
     public static void UseSerilogRequestLoggingWithThreshold(this WebApplication app)

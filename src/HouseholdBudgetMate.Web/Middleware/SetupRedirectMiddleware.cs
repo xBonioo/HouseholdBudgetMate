@@ -25,6 +25,7 @@ public sealed class SetupRedirectMiddleware(RequestDelegate next, RuntimeConfigu
     private static bool IsAllowedPath(PathString requestPath)
     {
         if (requestPath.StartsWithSegments("/setup", StringComparison.OrdinalIgnoreCase)
+            || requestPath.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/_framework", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/_content", StringComparison.OrdinalIgnoreCase)
             || requestPath.StartsWithSegments("/_blazor", StringComparison.OrdinalIgnoreCase)

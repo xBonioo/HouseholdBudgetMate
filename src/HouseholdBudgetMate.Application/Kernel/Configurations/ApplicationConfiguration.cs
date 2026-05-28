@@ -48,6 +48,11 @@ public sealed class ApplicationConfiguration
     ///     Clean up database of old logs.
     /// </summary>
     public bool LogCleanupTask { get; init; }
+
+    /// <summary>
+    ///     Number of days to keep operational logs in the Logs table.
+    /// </summary>
+    public int LogRetentionDays { get; init; } = 30;
     
     /// <summary>
     ///     Seed data to database.

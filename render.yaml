@@ -6,7 +6,7 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /
+    healthCheckPath: /health/ready
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
@@ -19,6 +19,10 @@ services:
       - key: Application__SeedDataToDatabase
         value: "false"
       - key: WebHosting__EnableLanAccess
+        value: "false"
+      - key: Blazor__DetailedErrors
+        value: "false"
+      - key: FileStorage__EnablePublicFileServing
         value: "false"
       - key: DATABASE_URL
         fromDatabase:

@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.FileProviders;
 using HouseholdBudgetMate.Application.Kernel.Configurations;
 using HouseholdBudgetMate.Application.Kernel.Extensions;
 using HouseholdBudgetMate.Application.Kernel.Timing;
@@ -125,7 +124,9 @@ builder.Services.AddRazorComponents()
 // Configure Blazor circuit options (DetailedErrors, disconnect timeout, etc.).
 builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions>(options =>
 {
-    options.DetailedErrors = true;
+    options.DetailedErrors = RuntimeSafetyOptions.ShouldEnableDetailedErrors(
+        builder.Environment,
+        builder.Configuration);
 });
 
 builder.Services.AddMemoryCache();
@@ -180,6 +181,7 @@ builder.Services.AddScoped<ISetupConfigurationService, SetupConfigurationService
 builder.Services.AddScoped<IDatabaseMigrationOrchestrator, DatabaseMigrationOrchestrator>();
 builder.Services.AddScoped<IAccessHardeningService, AccessHardeningService>();
 builder.Services.AddScoped<IAccessRecoveryService, AccessRecoveryService>();
+builder.Services.AddScoped<IRealDataReadinessService, RealDataReadinessService>();
 builder.Services.AddSingleton<ILocalAccessGrantService, LocalAccessGrantService>();
 
 builder.AddSerilogLogging();
@@ -187,6 +189,7 @@ builder.AddSerilogLogging();
 var applicationConfig = builder.Configuration.GetSection("Application").Get<ApplicationConfiguration>()
                         ?? throw new InvalidOperationException("Application configuration is missing");
 builder.Services.AddSingleton(applicationConfig);
+builder.Services.AddOperationalLogCleanup();
 // builder.WebHost.UseUrls("https://0.0.0.0:5001");
 // builder.WebHost.UseUrls("http://0.0.0.0:5000");
 
@@ -333,16 +336,20 @@ try
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
     app.MapControllers();
+    app.MapReadinessEndpoint();
 
     // Create files folder in writable user profile location.
     var filesPath = Path.Combine(appDataDirectory, Constants.FolderNameFiles);
     if (!Directory.Exists(filesPath)) Directory.CreateDirectory(filesPath);
 
-    app.UseStaticFiles(new StaticFileOptions
+    if (RuntimeSafetyOptions.ShouldEnablePublicFileServing(app.Configuration))
     {
-        FileProvider = new PhysicalFileProvider(filesPath),
-        RequestPath = Constants.RequestPathFiles
-    });
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(filesPath),
+            RequestPath = Constants.RequestPathFiles
+        });
+    }
 
     if (startupHostingOptions is not null)
     {

@@ -3,12 +3,14 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Users.Requests
 @using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Application.Helpers
 @using HouseholdBudgetMate.Domain.Entities
 @using HouseholdBudgetMate.Web.Services
 @using HouseholdBudgetMate.Web.Setup
 @using MudBlazor
 
 @inject IAdminConfigurationService AdminConfigurationService
+@inject CoreDataSeedService CoreDataSeedService
 @inject IUserService UserService
 @inject IUserSessionService UserSessionService
 @inject RuntimeConfigurationState RuntimeConfigurationState
@@ -167,6 +169,35 @@ else
                         </MudItem>
                     }
                 </MudGrid>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            <MudStack Spacing="3">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6">Dane aplikacji</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Reset usuwa dane budżetowe, kategorie, tagi, audyt i logi, ale zostawia profile użytkowników oraz konfigurację połączenia.
+                    </MudText>
+                </MudStack>
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.DeleteForever"
+                               ButtonType="ButtonType.Button"
+                               OnClick="ClearDatabaseAsync"
+                               Disabled="_isBusy">
+                        Wyczyść bazę danych
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               ButtonType="ButtonType.Button"
+                               OnClick="SeedDatabaseAsync"
+                               Disabled="_isBusy">
+                        Uruchom seed
+                    </MudButton>
+                </MudStack>
             </MudStack>
         </MudPaper>
 
@@ -376,6 +407,38 @@ else
                 CancellationToken.None);
 
             ShowSuccess("PIN zmieniony.");
+        });
+    }
+
+    private async Task ClearDatabaseAsync()
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(ConfirmDialog.Message)] = "Wyczyścić dane budżetowe, kategorie, tagi, audyt i logi? Profile użytkowników oraz konfiguracja połączenia zostaną zachowane. Tej operacji nie można cofnąć."
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Wyczyść bazę danych", parameters);
+        var result = await dialog.Result;
+        if (result is not { Canceled: false })
+        {
+            return;
+        }
+
+        await RunAdminActionAsync(async () =>
+        {
+            await CoreDataSeedService.ClearBudgetDataAsync(CancellationToken.None);
+            await LoadUsersAsync();
+            ShowSuccess("Baza danych została wyczyszczona. Profile użytkowników zostały zachowane.");
+        });
+    }
+
+    private async Task SeedDatabaseAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            await CoreDataSeedService.SeedDefaultsForCurrentBudgetAsync(CancellationToken.None);
+            await CoreDataSeedService.EnsureCurrentMonthPlanForCurrentBudgetAsync(CancellationToken.None);
+            ShowSuccess("Seed został uruchomiony dla bieżącego budżetu.");
         });
     }
 

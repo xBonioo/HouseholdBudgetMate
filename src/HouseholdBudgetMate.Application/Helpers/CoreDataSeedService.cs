@@ -108,9 +108,42 @@ public sealed class CoreDataSeedService(
     public async Task SeedDefaultsAsync(CancellationToken cancellationToken)
     {
         using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
+        await SeedDefaultsForActiveScopeAsync(cancellationToken);
+    }
+
+    public Task SeedDefaultsForCurrentBudgetAsync(CancellationToken cancellationToken)
+    {
+        return SeedDefaultsForActiveScopeAsync(cancellationToken);
+    }
+
+    public async Task ClearBudgetDataAsync(CancellationToken cancellationToken)
+    {
+        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
+        await using var strategyContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (!await strategyContext.Database.CanConnectAsync(cancellationToken)) return;
+
+        if (strategyContext.Database.IsRelational())
+        {
+            var executionStrategy = strategyContext.Database.CreateExecutionStrategy();
+            await executionStrategy.ExecuteAsync(async () =>
+            {
+                await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                await ClearBudgetDataAsync(dbContext, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+            return;
+        }
+
+        await ClearBudgetDataAsync(strategyContext, cancellationToken);
+    }
+
+    private async Task SeedDefaultsForActiveScopeAsync(CancellationToken cancellationToken)
+    {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        if (!dbContext.Database.CanConnect()) return;
+        if (!await dbContext.Database.CanConnectAsync(cancellationToken)) return;
         await EnsureCurrentUserAsync(dbContext, cancellationToken);
         if (dbContext.Accounts.Any()) return;
 
@@ -122,11 +155,99 @@ public sealed class CoreDataSeedService(
         await SeedDefaultRegularIncomesAsync(dbContext, cancellationToken);
     }
 
+    private async Task ClearBudgetDataAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    {
+        await DeleteAllAsync(dbContext, dbContext.ExpenseLineItems.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Expenses.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.MonthSavingsTransferItems.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Incomes.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.LoanCharges.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.LoanInstallments.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.LoanRateEntries.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Loans.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.RegularExpenseDefinitions.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.RegularIncomeDefinitions.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.AccountMonthBalances.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Accounts.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.MonthPlans.IgnoreQueryFilters(), cancellationToken);
+
+        await ClearTagParentReferencesAsync(dbContext, cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Tags.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Categories.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.AuditLogs, cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Logs, cancellationToken);
+
+        logger.LogWarning("Budget data cleared by administrator action.");
+    }
+
+    private static async Task ClearTagParentReferencesAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            await dbContext.Tags
+                .IgnoreQueryFilters()
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.ParentTagId, (int?)null),
+                    cancellationToken);
+            return;
+        }
+
+        var tags = await dbContext.Tags
+            .IgnoreQueryFilters()
+            .Where(x => x.ParentTagId != null)
+            .ToListAsync(cancellationToken);
+        if (tags.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var tag in tags)
+        {
+            tag.ParentTagId = null;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task DeleteAllAsync<TEntity>(
+        ApplicationDbContext dbContext,
+        IQueryable<TEntity> query,
+        CancellationToken cancellationToken)
+        where TEntity : class
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            await query.ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        var entities = await query.ToListAsync(cancellationToken);
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        dbContext.Set<TEntity>().RemoveRange(entities);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task EnsureCurrentMonthPlanAsync(CancellationToken cancellationToken)
+    {
+        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
+        await EnsureCurrentMonthPlanForActiveScopeAsync(cancellationToken);
+    }
+
+    public Task EnsureCurrentMonthPlanForCurrentBudgetAsync(CancellationToken cancellationToken)
+    {
+        return EnsureCurrentMonthPlanForActiveScopeAsync(cancellationToken);
+    }
+
+    private async Task EnsureCurrentMonthPlanForActiveScopeAsync(CancellationToken cancellationToken)
     {
         var now = dateTimeProvider.GetLocalDateTime();
 
-        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         if (!await dbContext.Database.CanConnectAsync(cancellationToken)) return;

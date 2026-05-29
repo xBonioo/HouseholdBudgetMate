@@ -53,75 +53,6 @@ else
             <MudStack Spacing="3">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     <MudStack Spacing="0">
-                        <MudText Typo="Typo.h6">Real data readiness</MudText>
-                        <MudText Typo="Typo.body2" Class="hb-muted">
-                            Checklist dla wejścia w realne dane: automatyczne kontrole aplikacji oraz ręczne evidence przed pilotem MVP.
-                        </MudText>
-                    </MudStack>
-                    @if (_readinessReport is not null)
-                    {
-                        <MudChip T="string"
-                                 Color="@(_readinessReport.IsAppCheckReady ? Color.Success : Color.Warning)"
-                                 Variant="Variant.Filled">
-                            @(_readinessReport.IsAppCheckReady ? "App checks ready" : "App checks need attention")
-                        </MudChip>
-                    }
-                </MudStack>
-
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                    Free Render jest zaakceptowanym ryzykiem pilota MVP, nie pełną trwałą produkcją.
-                    Decyzja real-data wymaga ręcznego `pg_dump`, restore smoke testu i przeglądu migracji.
-                </MudAlert>
-
-                @if (_readinessReport is null)
-                {
-                    <MudProgressLinear Indeterminate="true"/>
-                }
-                else
-                {
-                    <MudText Typo="Typo.subtitle1">Automatyczne kontrole</MudText>
-                    <MudList T="RealDataReadinessCheck" Dense="true">
-                        @foreach (var check in _readinessReport.AutomatedChecks)
-                        {
-                            <MudListItem T="RealDataReadinessCheck">
-                                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Wrap="Wrap.NoWrap">
-                                    <MudIcon Icon="@(check.IsReady ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Warning)"
-                                             Color="@(check.IsReady ? Color.Success : Color.Warning)"/>
-                                    <MudStack Spacing="0">
-                                        <MudText Typo="Typo.body1">@check.Name</MudText>
-                                        <MudText Typo="Typo.caption" Class="hb-muted">@check.Description</MudText>
-                                    </MudStack>
-                                </MudStack>
-                            </MudListItem>
-                        }
-                    </MudList>
-
-                    <MudText Typo="Typo.subtitle1">Ręczne evidence</MudText>
-                    <MudText Typo="Typo.caption" Class="hb-muted">
-                        Zapisuj w: @_readinessReport.EvidencePath
-                    </MudText>
-                    <MudList T="RealDataReadinessManualItem" Dense="true">
-                        @foreach (var item in _readinessReport.ManualItems)
-                        {
-                            <MudListItem T="RealDataReadinessManualItem">
-                                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Wrap="Wrap.NoWrap">
-                                    <MudIcon Icon="@Icons.Material.Filled.Assignment" Color="Color.Info"/>
-                                    <MudStack Spacing="0">
-                                        <MudText Typo="Typo.body1">@item.Name</MudText>
-                                        <MudText Typo="Typo.caption" Class="hb-muted">@item.Description</MudText>
-                                    </MudStack>
-                                </MudStack>
-                            </MudListItem>
-                        }
-                    </MudList>
-                }
-            </MudStack>
-        </MudPaper>
-
-        <MudPaper Class="pa-4 mt-4 hb-panel">
-            <MudStack Spacing="3">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    <MudStack Spacing="0">
                         <MudText Typo="Typo.h6">Profile gospodarstwa</MudText>
                         <MudText Typo="Typo.body2" Class="hb-muted">
                             Nowe profile wymagają PIN-u. Uprawnienia administratora trzeba nadać ręcznie.
@@ -307,6 +238,76 @@ else
             </MudButton>
             </ActionForm>
         </MudPaper>
+
+            <MudPaper Class="pa-4 mt-4 hb-panel">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">Real data readiness</MudText>
+                            <MudText Typo="Typo.body2" Class="hb-muted">
+                                Checklist dla wejścia w realne dane: automatyczne kontrole aplikacji oraz ręczne evidence przed
+                                pilotem MVP.
+                            </MudText>
+                        </MudStack>
+                        @if (_readinessReport is not null)
+                        {
+                            <MudChip T="string" Color="@(_readinessReport.IsAppCheckReady ? Color.Success : Color.Warning)"
+                                     Variant="Variant.Filled">
+                                @(_readinessReport.IsAppCheckReady ? "App checks ready" : "App checks need attention")
+                            </MudChip>
+                        }
+                    </MudStack>
+
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                        Free Render jest zaakceptowanym ryzykiem pilota MVP, nie pełną trwałą produkcją.
+                        Decyzja real-data wymaga ręcznego `pg_dump`, restore smoke testu i przeglądu migracji.
+                    </MudAlert>
+
+                    @if (_readinessReport is null)
+                    {
+                        <MudProgressLinear Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.subtitle1">Automatyczne kontrole</MudText>
+                        <MudList T="RealDataReadinessCheck" Dense="true">
+                            @foreach (var check in _readinessReport.AutomatedChecks)
+                            {
+                                <MudListItem T="RealDataReadinessCheck">
+                                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Wrap="Wrap.NoWrap">
+                                        <MudIcon
+                                        Icon="@(check.IsReady ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Warning)"
+                                        Color="@(check.IsReady ? Color.Success : Color.Warning)" />
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.body1">@check.Name</MudText>
+                                            <MudText Typo="Typo.caption" Class="hb-muted">@check.Description</MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+
+                        <MudText Typo="Typo.subtitle1">Ręczne evidence</MudText>
+                        <MudText Typo="Typo.caption" Class="hb-muted">
+                            Zapisuj w: @_readinessReport.EvidencePath
+                        </MudText>
+                        <MudList T="RealDataReadinessManualItem" Dense="true">
+                            @foreach (var item in _readinessReport.ManualItems)
+                            {
+                                <MudListItem T="RealDataReadinessManualItem">
+                                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Wrap="Wrap.NoWrap">
+                                        <MudIcon Icon="@Icons.Material.Filled.Assignment" Color="Color.Info" />
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.body1">@item.Name</MudText>
+                                            <MudText Typo="Typo.caption" Class="hb-muted">@item.Description</MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                </MudStack>
+            </MudPaper>
     </MudStack>
 }
 

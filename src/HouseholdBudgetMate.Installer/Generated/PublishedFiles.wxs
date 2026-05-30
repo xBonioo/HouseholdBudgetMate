@@ -19,6 +19,8 @@
         </Directory>
         <Directory Id="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8" Name="images">
         </Directory>
+        <Directory Id="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF" Name="js">
+        </Directory>
       </Directory>
     </DirectoryRef>
   </Fragment>
@@ -162,6 +164,24 @@
       </Component>
       <Component Id="Cmp8A95297CFD65CA35AC5245B29D0F64C5A1CFDA21" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
         <File Id="Fil8A95297CFD65CA35AC5245B29D0F64C5A1CFDA21" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\logo.png" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpDE16D70391E67AFAB1E4C857BA7315C36763DB75" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="FilDE16D70391E67AFAB1E4C857BA7315C36763DB75" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\chart.umd.min.js" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp52F06162B4F9F20AF46CBB567C39B3F7DE7DD85E" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="Fil52F06162B4F9F20AF46CBB567C39B3F7DE7DD85E" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\chart.umd.min.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp326DD966D165804ABD211245ED4C7A1FE431B397" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="Fil326DD966D165804ABD211245ED4C7A1FE431B397" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\chart.umd.min.js.gz" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpA897410E545CEF0F0E06AD506B68AF406C1CD1EF" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="FilA897410E545CEF0F0E06AD506B68AF406C1CD1EF" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\charts.js" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpA8D9EC62B51B10AEC7D407477AE2A232ADE91BFC" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="FilA8D9EC62B51B10AEC7D407477AE2A232ADE91BFC" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\charts.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="Cmp376E8C8E15DBE5C6C4F8C768CBFD45DA8D64F8F8" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="Fil376E8C8E15DBE5C6C4F8C768CBFD45DA8D64F8F8" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\charts.js.gz" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Fragment>

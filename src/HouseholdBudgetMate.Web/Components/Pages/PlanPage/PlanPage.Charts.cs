@@ -35,9 +35,15 @@ public partial class PlanPage
             return;
         }
 
+        var available = GetPieAvailableCategories();
+
+        // On first call (nothing explicitly deselected), pre-select all available categories.
+        if (_pieSelectedCategoryIds.Count == 0)
+            _pieSelectedCategoryIds = available.Select(x => x.Id).ToHashSet();
+
         var grouped = _monthPlan.Expenses
             .Where(e => e.ActualAmount > 0)
-            .Where(e => _pieSelectedCategoryIds.Count == 0 || _pieSelectedCategoryIds.Contains(e.CategoryId))
+            .Where(e => _pieSelectedCategoryIds.Contains(e.CategoryId))
             .GroupBy(e => new { e.CategoryId, e.CategoryName })
             .Select(g => (CategoryId: g.Key.CategoryId, Label: g.Key.CategoryName, Amount: g.Sum(x => x.ActualAmount)))
             .Where(x => x.Amount > 0)

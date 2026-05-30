@@ -327,7 +327,7 @@
         <MudItem xs="12" md="4">
             <MudSelect T="int"
                        MultiSelection="true"
-                       Label="Kategorie w trendzie (puste = top 5)"
+                       Label="Kategorie w trendzie"
                        Variant="Variant.Outlined"
                        Margin="Margin.Dense"
                        SelectedValues="_chartSelectedCategoryIds"
@@ -374,7 +374,7 @@
 <MudPaper Class="pa-4 mt-4 hb-panel">
     <MudText Typo="Typo.h6">Trend wydatków wg kategorii</MudText>
     <MudText Typo="Typo.body2" Class="hb-muted mt-1">
-        @(_chartSelectedCategoryIds.Count > 0 ? "Wybrane kategorie." : "Top 5 kategorii wg łącznej kwoty w wybranym oknie.")
+        @(_chartSelectedCategoryIds.Count > 0 ? "Wybrane kategorie." : "Brak wybranych kategorii.")
     </MudText>
     @if (_lineDatasets.Length == 0)
     {
@@ -1028,6 +1028,9 @@
             : ClampToHistoryRange(new DateOnly(now.Year, now.Month, now.Day));
         if (_chartFromDate.HasValue && _chartToDate.HasValue && _chartFromDate > _chartToDate)
             _chartFromDate = _chartToDate;
+
+        // Pre-select all categories so user deselects rather than selects.
+        _chartSelectedCategoryIds = _categories.Select(c => c.Id).ToHashSet();
     }
 
     private DateTime? GetChartFromDateTime() => _chartFromDate?.ToDateTime(TimeOnly.MinValue);
@@ -1133,7 +1136,7 @@
         foreach (var ((year, month, catId), amount) in lookup)
         {
             if (!monthSet.Contains((year, month))) continue;
-            if (_chartSelectedCategoryIds.Count > 0 && !_chartSelectedCategoryIds.Contains(catId)) continue;
+            if (!_chartSelectedCategoryIds.Contains(catId)) continue;
             var name = GetChartCategoryName(catId);
             catTotals[catId] = catTotals.TryGetValue(catId, out var prev)
                 ? (prev.Name, prev.Total + amount)
@@ -1142,7 +1145,7 @@
 
         var catColorMap = _categories.ToDictionary(c => c.Id, c => c.Color);
 
-        var limit = _chartSelectedCategoryIds.Count > 0 ? int.MaxValue : 5;
+        var limit = int.MaxValue;
         _lineDatasets = catTotals
             .OrderByDescending(x => x.Value.Total)
             .Take(limit)

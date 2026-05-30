@@ -239,3 +239,19 @@ body,
     background: #0F172A !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
 }
+
+/* ── Dark mode: PlanPage expense forms (add + edit) ──────────────────────────── */
+.hbm-dark .expense-editor-cell {
+    background: #0B1222 !important;
+}
+.hbm-dark .expense-form-shell {
+    background: #1E293B !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35) !important;
+}
+.hbm-dark .expense-edit-shell {
+    border-left-color: #6366F1 !important;
+}
+.hbm-dark .expense-form-title {
+    color: #E2E8F0 !important;
+}

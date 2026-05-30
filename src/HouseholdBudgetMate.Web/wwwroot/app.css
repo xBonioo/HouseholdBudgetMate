@@ -141,3 +141,101 @@ h1:focus {
 .mud-file-upload-filelist {
     display: none;
 }
+
+/* ── Smooth dark-mode transitions ───────────────────────────────────────────── */
+body,
+.hb-page-header,
+.hb-panel,
+.hb-kpi-card {
+    transition: background-color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+}
+
+.hb-muted {
+    transition: color 0.2s ease;
+}
+
+/* ── Dark mode — .hbm-dark toggled on <html> via JS interop ─────────────────── */
+.hbm-dark body {
+    background-color: #0F172A !important;
+    color-scheme: dark;
+}
+
+/* MudBlazor renders MudMainContent as <main class="mud-main-content"> */
+.hbm-dark .mud-main-content {
+    background: #0F172A !important;
+}
+
+.hbm-dark .hb-page-header {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(14, 165, 233, 0.12)) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.hbm-dark .hb-panel {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.hbm-dark .hb-kpi-card {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.hbm-dark .hb-muted {
+    color: #94A3B8 !important;
+}
+
+.hbm-dark .hb-danger-row {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+.hbm-dark .hb-warning-row {
+    background-color: rgba(245, 158, 11, 0.18) !important;
+}
+
+/* ── Dark mode: PlanPage income band ────────────────────────────────────────── */
+.hbm-dark .income-summary-band {
+    background: #1E293B !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.hbm-dark .income-summary-cell {
+    background: #0F172A !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.hbm-dark .income-summary-label {
+    color: #94A3B8 !important;
+}
+.hbm-dark .income-summary-value {
+    color: #E2E8F0 !important;
+}
+
+/* ── Dark mode: Accounts page ────────────────────────────────────────────────── */
+.hbm-dark .accounts-summary-box,
+.hbm-dark .accounts-empty-state {
+    background: #1E293B !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.hbm-dark .accounts-success-state {
+    background: rgba(16, 185, 129, 0.12) !important;
+    border-color: rgba(16, 185, 129, 0.25) !important;
+}
+.hbm-dark .accounts-balance-card {
+    background: #1E293B !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.hbm-dark .accounts-balance-card.is-archived {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+.hbm-dark .accounts-management-table ::deep .mud-table-head .mud-table-cell {
+    background: #1E293B !important;
+    color: #94A3B8 !important;
+}
+
+/* ── Dark mode: Recurring page ───────────────────────────────────────────────── */
+.hbm-dark .recurring-create-panel,
+.hbm-dark .recurring-dashboard .recurring-create-panel {
+    background: #1E293B !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.hbm-dark .recurring-create-box,
+.hbm-dark .recurring-empty-state {
+    background: #0F172A !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}

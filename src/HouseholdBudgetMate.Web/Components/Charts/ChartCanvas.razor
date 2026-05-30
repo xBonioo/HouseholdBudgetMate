@@ -1,0 +1,89 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div style="position: relative; height: @Height; width: 100%;">
+    <canvas @ref="_canvas"></canvas>
+</div>
+
+@code {
+    /// <summary>CSS height of the chart container, e.g. "300px".</summary>
+    [Parameter] public string Height { get; set; } = "300px";
+
+    /// <summary>Chart type: "bar", "line", "pie", "mixed".</summary>
+    [Parameter, EditorRequired] public string ChartType { get; set; } = "bar";
+
+    /// <summary>X-axis labels (or pie slice labels).</summary>
+    [Parameter, EditorRequired] public string[] Labels { get; set; } = [];
+
+    /// <summary>One or more dataset descriptors.</summary>
+    [Parameter, EditorRequired] public ChartDataset[] Datasets { get; set; } = [];
+
+    /// <summary>Injected by MainLayout — controls light vs dark palette.</summary>
+    [CascadingParameter(Name = "IsDarkMode")] public bool IsDarkMode { get; set; }
+
+    private ElementReference _canvas;
+    private readonly string _chartId = $"hbm-{Guid.NewGuid():N}";
+    private bool _isCreated;
+
+    // Track previous parameter references so we skip JS interop when nothing changed.
+    private string[] _prevLabels = [];
+    private ChartDataset[] _prevDatasets = [];
+    private bool _prevDarkMode;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await CreateAsync();
+            return;
+        }
+
+        if (!_isCreated) return;
+
+        // Reference-equality check: parent stores data in fields, so new instances
+        // are only created when data actually changes.
+        if (Labels != _prevLabels || Datasets != _prevDatasets || IsDarkMode != _prevDarkMode)
+        {
+            await UpdateAsync();
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        await JS.InvokeVoidAsync("HBM.charts.create",
+            _canvas, _chartId, ChartType, Labels, BuildJsDatasets(), IsDarkMode);
+        _isCreated = true;
+        _prevLabels = Labels;
+        _prevDatasets = Datasets;
+        _prevDarkMode = IsDarkMode;
+    }
+
+    private async Task UpdateAsync()
+    {
+        await JS.InvokeVoidAsync("HBM.charts.update",
+            _canvas, _chartId, Labels, BuildJsDatasets(), IsDarkMode);
+        _prevLabels = Labels;
+        _prevDatasets = Datasets;
+        _prevDarkMode = IsDarkMode;
+    }
+
+    private object[] BuildJsDatasets() =>
+        Datasets.Select(d => (object)new
+        {
+            label            = d.Label,
+            data             = d.Data.Select(x => (double)x).ToArray(),
+            backgroundColor  = d.BackgroundColor,
+            borderColor      = d.BorderColor,
+            type             = d.Type,
+            backgroundColors = d.BackgroundColors
+        }).ToArray();
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_isCreated) return;
+        try   { await JS.InvokeVoidAsync("HBM.charts.destroy", _chartId); }
+        catch (JSDisconnectedException)  { /* circuit gone — chart already destroyed */ }
+        catch (TaskCanceledException)    { /* navigation / shutdown */ }
+    }
+}

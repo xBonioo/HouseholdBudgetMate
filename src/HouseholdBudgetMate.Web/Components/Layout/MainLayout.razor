@@ -14,9 +14,10 @@
 @inject ArchiveMonthsCacheService ArchiveCache
 @inject IUserSessionService UserSessionService
 @inject IDialogService DialogService
+@inject IJSRuntime JS
 
 @* Required *@
-<MudThemeProvider Theme="@AppTheme.Default" />
+<MudThemeProvider Theme="@AppTheme.Default" IsDarkMode="@_isDarkMode" />
 <MudPopoverProvider />
 
 @* Needed for dialogs *@
@@ -148,6 +149,11 @@ else
                 Dodaj wydatek
             </MudButton>
 
+            @* ── Dark mode toggle ── *@
+            <MudTooltip Text="@(_isDarkMode ? "Jasny motyw" : "Ciemny motyw")" Placement="Placement.Bottom">
+                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                                Color="Color.Inherit" OnClick="ToggleDarkMode" aria-label="Przełącz motyw" />
+            </MudTooltip>
         </MudAppBar>
 
         <div class="mobile-sidebar-overlay @(_drawerOpen ? "is-open" : string.Empty)" @onclick="CloseDrawer"></div>
@@ -186,7 +192,9 @@ else
 
         <MudMainContent Class="app-main-content">
             <MudContainer MaxWidth="@(IsPlanPage? MaxWidth.False: MaxWidth.Large)" Class="py-6">
-                @Body
+                <CascadingValue Name="IsDarkMode" Value="@_isDarkMode">
+                    @Body
+                </CascadingValue>
             </MudContainer>
         </MudMainContent>
         </MudLayout>
@@ -206,6 +214,7 @@ else
     private bool _drawerOpen;
     private bool _sessionReady;
     private bool _sessionInitializationStarted;
+    private bool _isDarkMode;
 
     private string CurrentUserLabel => UserSessionService.CurrentUser?.Username ?? "Użytkownik";
     private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
@@ -281,6 +290,15 @@ else
             }
 
             await LoadAndCacheMonthsAsync();
+
+            // Restore dark-mode preference from cookie
+            var darkCookie = await JS.InvokeAsync<string?>("householdBudgetMate.cookies.get", "hbm-dark");
+            if (darkCookie == "1")
+            {
+                _isDarkMode = true;
+                await JS.InvokeVoidAsync("document.documentElement.classList.add", "hbm-dark");
+                await InvokeAsync(StateHasChanged);
+            }
         }
         catch
         {
@@ -462,5 +480,12 @@ else
         return isActive
             ? "appbar-button appbar-button-active"
             : "appbar-button";
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("document.documentElement.classList.toggle", "hbm-dark", _isDarkMode);
+        await JS.InvokeVoidAsync("householdBudgetMate.cookies.set", "hbm-dark", _isDarkMode ? "1" : "0", 365);
     }
 }

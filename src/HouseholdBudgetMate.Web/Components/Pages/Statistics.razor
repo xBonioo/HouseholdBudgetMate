@@ -304,6 +304,94 @@
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Filtry wykresów</MudText>
+    <MudGrid Class="mt-2" Spacing="2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="Od"
+                           Date="@GetChartFromDateTime()"
+                           DateChanged="OnChartFromDateChanged"
+                           MinDate="@GetHistoryMinDateTime()"
+                           MaxDate="@GetHistoryMaxDateTime()"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="Do"
+                           Date="@GetChartToDateTime()"
+                           DateChanged="OnChartToDateChanged"
+                           MinDate="@GetHistoryMinDateTime()"
+                           MaxDate="@GetHistoryMaxDateTime()"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="int"
+                       MultiSelection="true"
+                       Label="Kategorie w trendzie (puste = top 5)"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       SelectedValues="_chartSelectedCategoryIds"
+                       SelectedValuesChanged="OnChartCategoriesChanged"
+                       ToStringFunc="GetCategorySelectText"
+                       Clearable="true"
+                       Class="hb-select-ellipsis">
+                @foreach (var category in _categories.OrderBy(x => x.Name))
+                {
+                    <MudSelectItem T="int" Value="@category.Id">@category.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="@(() => LoadChartDataAsync(CancellationToken.None))">
+                Zastosuj
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Miesięczne wydatki</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
+        Słupki — wydane; linia — zaplanowane.
+    </MudText>
+    @if (_barLabels.Length == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do wykresu.</MudText>
+    }
+    else
+    {
+        <div class="mt-3">
+            <ChartCanvas ChartType="mixed"
+                         Labels="@_barLabels"
+                         Datasets="@_barDatasets"
+                         Height="320px" />
+        </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Trend wydatków wg kategorii</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
+        @(_chartSelectedCategoryIds.Count > 0 ? "Wybrane kategorie." : "Top 5 kategorii wg łącznej kwoty w wybranym oknie.")
+    </MudText>
+    @if (_lineDatasets.Length == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do wykresu.</MudText>
+    }
+    else
+    {
+        <div class="mt-3">
+            <ChartCanvas ChartType="line"
+                         Labels="@_barLabels"
+                         Datasets="@_lineDatasets"
+                         Height="320px" />
+        </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
     <MudText Typo="Typo.h6">Historia roczna: miesiąc × kategoria × kwota</MudText>
 
     @if (_statistics.CategoryBreakdown.Count == 0)
@@ -452,8 +540,10 @@
         _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
         _availableHistoryMonths = (await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None)).ToList();
         InitializeLifetimeRange();
+        InitializeChartRange();
         await LoadStatisticsAsync();
         await LoadCategoryRangeStatisticsAsync();
+        await LoadChartDataAsync(CancellationToken.None);
     }
 
     private async Task OnSelectedYearChanged(int year)
@@ -463,6 +553,8 @@
         _expandedTagIds.Clear();
         await LoadStatisticsAsync();
         ResetLifetimeRangeToSelectedYear();
+        InitializeChartRange();
+        await LoadChartDataAsync(CancellationToken.None);
     }
 
     private async Task LoadStatisticsAsync()
@@ -913,4 +1005,167 @@
     }
 
     private sealed record YearSummaryRow(string Label, decimal Total, decimal MonthlyAverage);
+
+    #region Charts — user-defined date range
+
+    private static readonly string[] _polishMonthsShort =
+        ["Sty", "Lut", "Mar", "Kwi", "Maj", "Cze", "Lip", "Sie", "Wrz", "Paź", "Lis", "Gru"];
+
+    private DateOnly? _chartFromDate;
+    private DateOnly? _chartToDate;
+    private HashSet<int> _chartSelectedCategoryIds = [];
+    private Dictionary<int, YearStatisticsDto> _chartYearStats = new();
+    private string[] _barLabels = [];
+    private ChartDataset[] _barDatasets = [];
+    private ChartDataset[] _lineDatasets = [];
+
+    private void InitializeChartRange()
+    {
+        var now = DateTimeProvider.GetLocalDateOnly();
+        _chartFromDate = ClampToHistoryRange(new DateOnly(_selectedYear, 1, 1));
+        _chartToDate   = _selectedYear < now.Year
+            ? ClampToHistoryRange(new DateOnly(_selectedYear, 12, DateTime.DaysInMonth(_selectedYear, 12)))
+            : ClampToHistoryRange(new DateOnly(now.Year, now.Month, now.Day));
+        if (_chartFromDate.HasValue && _chartToDate.HasValue && _chartFromDate > _chartToDate)
+            _chartFromDate = _chartToDate;
+    }
+
+    private DateTime? GetChartFromDateTime() => _chartFromDate?.ToDateTime(TimeOnly.MinValue);
+    private DateTime? GetChartToDateTime()   => _chartToDate?.ToDateTime(TimeOnly.MinValue);
+
+    private Task OnChartFromDateChanged(DateTime? value)
+    {
+        _chartFromDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : _historyMinDate;
+        if (_chartToDate.HasValue && _chartFromDate.HasValue && _chartFromDate.Value > _chartToDate.Value)
+            _chartToDate = _chartFromDate;
+        return Task.CompletedTask;
+    }
+
+    private Task OnChartToDateChanged(DateTime? value)
+    {
+        _chartToDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : _historyMaxDate;
+        if (_chartFromDate.HasValue && _chartToDate.HasValue && _chartToDate.Value < _chartFromDate.Value)
+            _chartFromDate = _chartToDate;
+        return Task.CompletedTask;
+    }
+
+    private void OnChartCategoriesChanged(IReadOnlyCollection<int>? categoryIds)
+    {
+        _chartSelectedCategoryIds = categoryIds?.ToHashSet() ?? [];
+    }
+
+    private async Task LoadChartDataAsync(CancellationToken ct)
+    {
+        if (_chartFromDate is null || _chartToDate is null) return;
+        try
+        {
+            var months = GetChartMonths();
+            var years  = months.Select(m => m.Year).Distinct();
+            _chartYearStats.Clear();
+            foreach (var year in years)
+                _chartYearStats[year] = await ExpenseService.GetYearStatisticsAsync(year, ct);
+
+            BuildBarChartData();
+            BuildLineChartData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private IReadOnlyList<(int Year, int Month)> GetChartMonths()
+    {
+        if (_chartFromDate is null || _chartToDate is null) return [];
+        var result = new List<(int, int)>();
+        var d   = new DateOnly(_chartFromDate.Value.Year, _chartFromDate.Value.Month, 1);
+        var end = new DateOnly(_chartToDate.Value.Year,   _chartToDate.Value.Month,   1);
+        while (d <= end)
+        {
+            result.Add((d.Year, d.Month));
+            d = d.AddMonths(1);
+        }
+        return result;
+    }
+
+    private YearMonthlyFinanceDto? GetFinanceForMonth(int year, int month)
+        => _chartYearStats.TryGetValue(year, out var stats)
+            ? stats.MonthlyFinance.FirstOrDefault(x => x.Month == month)
+            : null;
+
+    private void BuildBarChartData()
+    {
+        var months  = GetChartMonths();
+        _barLabels  = months.Select(m => $"{_polishMonthsShort[m.Month - 1]} '{m.Year % 100:00}").ToArray();
+
+        var spent   = months.Select(m => GetFinanceForMonth(m.Year, m.Month)?.SpentAmount   ?? 0m).ToArray();
+        var planned = months.Select(m => GetFinanceForMonth(m.Year, m.Month)?.PlannedAmount ?? 0m).ToArray();
+
+        _barDatasets =
+        [
+            new ChartDataset("Wydane",      spent,   null,      null,      "bar"),
+            new ChartDataset("Zaplanowane", planned, "#0EA5E9", "#0EA5E9", "line"),
+        ];
+    }
+
+    private void BuildLineChartData()
+    {
+        var months = GetChartMonths();
+
+        // (year, month, categoryId) -> amount
+        var lookup = new Dictionary<(int Year, int Month, int CategoryId), decimal>();
+        foreach (var (_, stats) in _chartYearStats)
+        {
+            for (var i = 0; i < stats.PopulatedMonths.Count; i++)
+            {
+                var month = stats.PopulatedMonths[i];
+                foreach (var cat in stats.CategoryBreakdown)
+                {
+                    var amount = i < cat.MonthlySpent.Count ? cat.MonthlySpent[i] : 0m;
+                    if (amount > 0)
+                        lookup[(stats.Year, month, cat.CategoryId)] = amount;
+                }
+            }
+        }
+
+        var monthSet  = months.ToHashSet();
+        var catTotals = new Dictionary<int, (string Name, decimal Total)>();
+        foreach (var ((year, month, catId), amount) in lookup)
+        {
+            if (!monthSet.Contains((year, month))) continue;
+            if (_chartSelectedCategoryIds.Count > 0 && !_chartSelectedCategoryIds.Contains(catId)) continue;
+            var name = GetChartCategoryName(catId);
+            catTotals[catId] = catTotals.TryGetValue(catId, out var prev)
+                ? (prev.Name, prev.Total + amount)
+                : (name, amount);
+        }
+
+        var catColorMap = _categories.ToDictionary(c => c.Id, c => c.Color);
+
+        var limit = _chartSelectedCategoryIds.Count > 0 ? int.MaxValue : 5;
+        _lineDatasets = catTotals
+            .OrderByDescending(x => x.Value.Total)
+            .Take(limit)
+            .Select(kvp =>
+            {
+                var data = months
+                    .Select(m => lookup.GetValueOrDefault((m.Year, m.Month, kvp.Key), 0m))
+                    .ToArray();
+                var color = catColorMap.GetValueOrDefault(kvp.Key, "#6366F1");
+                return new ChartDataset(kvp.Value.Name, data, null, color, "line");
+            })
+            .ToArray();
+    }
+
+    private string GetChartCategoryName(int categoryId)
+    {
+        foreach (var (_, stats) in _chartYearStats)
+        {
+            var cat = stats.CategoryBreakdown.FirstOrDefault(c => c.CategoryId == categoryId);
+            if (cat is not null) return cat.CategoryName;
+        }
+        return _categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "Nieznana";
+    }
+
+    #endregion
 }

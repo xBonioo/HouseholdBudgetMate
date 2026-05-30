@@ -10,6 +10,7 @@ public partial class PlanPage
     private void ApplyKpiFromMonthPlan()
     {
         _kpi = _monthPlan?.Kpi ?? new MonthPlanKpiDto();
+        RecomputePieChartData();
     }
 
     private Color GetRemainingBarColor()

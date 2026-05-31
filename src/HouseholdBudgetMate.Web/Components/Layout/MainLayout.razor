@@ -145,9 +145,12 @@ else
 
             @* ── Always-visible action button ── *@
             <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Add"
-                       Class="quick-add-button" Href="@($"{CurrentMonthHref}?addExpense=true")">
+                       Class="quick-add-button d-none d-sm-flex" Href="@($"{CurrentMonthHref}?addExpense=true")">
                 Dodaj wydatek
             </MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Secondary" Variant="Variant.Filled"
+                           Class="quick-add-button d-flex d-sm-none" Href="@($"{CurrentMonthHref}?addExpense=true")"
+                           aria-label="Dodaj wydatek" />
 
             @* ── Dark mode toggle ── *@
             <MudTooltip Text="@(_isDarkMode ? "Jasny motyw" : "Ciemny motyw")" Placement="Placement.Bottom">

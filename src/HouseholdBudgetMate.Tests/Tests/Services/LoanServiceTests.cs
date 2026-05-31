@@ -144,7 +144,7 @@ public sealed class LoanServiceTests
         AssertInstallment(loan, new DateOnly(2038, 2, 15), 1871.90m, 2711.58m);
         AssertInstallment(loan, new DateOnly(2040, 3, 15), 2261.08m, 2322.40m);
         AssertInstallment(loan, new DateOnly(2054, 4, 15), 4534.09m, 49.39m);
-        AssertInstallment(loan, new DateOnly(2054, 5, 15), 6396.22m, 27.97m);
+        AssertInstallment(loan, new DateOnly(2054, 5, 15), 6396.52m, 27.97m);
 
         static void AssertInstallment(
             LoanDto loan,
@@ -153,7 +153,7 @@ public sealed class LoanServiceTests
             decimal expectedInterest)
         {
             var installment = loan.Installments.Single(x => x.DueDate == dueDate);
-            const decimal tolerance = 0.50m;
+            const decimal tolerance = 0.01m;
             Assert.InRange(installment.PrincipalAmount, expectedPrincipal - tolerance, expectedPrincipal + tolerance);
             Assert.InRange(installment.InterestAmount, expectedInterest - tolerance, expectedInterest + tolerance);
         }

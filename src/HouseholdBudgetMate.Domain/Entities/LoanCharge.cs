@@ -10,6 +10,7 @@ public sealed class LoanCharge : ATimestampable, IEntityId
     public int ChargeType { get; set; }
     public int FrequencyType { get; set; }
     public decimal Amount { get; set; }
+    public bool IsPercentageBased { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public bool IsActive { get; set; } = true;

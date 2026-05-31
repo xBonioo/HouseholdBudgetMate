@@ -40,6 +40,10 @@ public partial class PlanPage : IAsyncDisposable
             _expandedExpenseIds.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
             _selectedExpenseIdsForCopy.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
 
+            // Reset category filter so stale IDs from previous months don't linger.
+            _pieSelectedCategoryIds = [];
+            RecomputePieChartData();
+
             ApplyKpiFromMonthPlan();
             EnsureDefaultSelections();
             SyncMonthScopedDateDefaults();
@@ -55,7 +59,7 @@ public partial class PlanPage : IAsyncDisposable
                 // Apply query-driven edit mode only once to avoid reopening edit after every reload.
                 NavigationManager.NavigateTo($"/plan/{Year}/{Month}", replace: true);
             }
-            else if (AddExpense && !_isCreateExpenseFormVisible)
+            else if (AddExpense && !_isCreateExpenseFormVisible && !IsMonthClosed)
             {
                 _isCreateExpenseFormVisible = true;
                 NavigationManager.NavigateTo($"/plan/{Year}/{Month}#create-expense-anchor", replace: true);

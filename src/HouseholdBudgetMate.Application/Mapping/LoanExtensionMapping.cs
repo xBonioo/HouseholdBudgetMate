@@ -16,6 +16,8 @@ public static class LoanExtensionMapping
             InterestMode = ParseInterestMode(loan.InterestMode),
             WiborPeriodType = ParseWiborPeriodType(loan.WiborPeriodType),
             Principal = loan.Principal,
+            OriginalPrincipal = loan.OriginalPrincipal,
+            GracePeriodMonths = loan.GracePeriodMonths,
             RemainingPrincipal = decimal.Round(
                 loan.Installments
                     .Where(x => !x.IsPaid)
@@ -46,7 +48,13 @@ public static class LoanExtensionMapping
             Installments = loan.Installments
                 .OrderByDescending(x => x.Year)
                 .ThenByDescending(x => x.Month)
-                .Select(x => x.MapToDto(loan.Charges))
+                .Select(x =>
+                {
+                    var outstandingBalance = loan.Installments
+                        .Where(i => i.DueDate >= x.DueDate)
+                        .Sum(i => i.PrincipalAmount);
+                    return x.MapToDto(loan.Charges, outstandingBalance);
+                })
                 .ToList()
         };
     }
@@ -61,6 +69,7 @@ public static class LoanExtensionMapping
             ChargeType = ParseChargeType(charge.ChargeType),
             FrequencyType = ParseFrequencyType(charge.FrequencyType),
             Amount = charge.Amount,
+            IsPercentageBased = charge.IsPercentageBased,
             StartDate = charge.StartDate,
             EndDate = charge.EndDate,
             IsActive = charge.IsActive
@@ -78,12 +87,14 @@ public static class LoanExtensionMapping
         };
     }
 
-    public static LoanInstallmentDto MapToDto(this LoanInstallment installment, IEnumerable<LoanCharge> charges)
+    public static LoanInstallmentDto MapToDto(this LoanInstallment installment, IEnumerable<LoanCharge> charges, decimal outstandingBalance)
     {
         var chargesAmount = charges
             .Where(x => x.IsActive)
             .Where(x => IsChargeDueInMonth(x, installment.Year, installment.Month))
-            .Sum(x => x.Amount);
+            .Sum(x => x.IsPercentageBased
+                ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
+                : x.Amount);
 
         return new LoanInstallmentDto
         {

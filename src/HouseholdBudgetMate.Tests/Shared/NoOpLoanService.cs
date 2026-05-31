@@ -36,6 +36,9 @@ public sealed class NoOpLoanService : ILoanService
     public Task SetLoanInstallmentPaidAsync(SetLoanInstallmentPaidRequest request, CancellationToken cancellationToken)
         => Task.CompletedTask;
 
+    public Task OverrideLoanInstallmentAsync(OverrideLoanInstallmentRequest request, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+
     public Task SyncLoanInstallmentsForMonthAsync(int year, int month, CancellationToken cancellationToken)
         => Task.CompletedTask;
 }

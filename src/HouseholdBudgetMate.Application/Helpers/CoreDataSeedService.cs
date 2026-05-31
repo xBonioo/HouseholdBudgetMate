@@ -16,15 +16,16 @@ public sealed class CoreDataSeedService(
 {
     private static readonly IReadOnlyList<CategorySeedDefinition> DefaultCategories =
     [
-        new("Zakupy", "#4CAF50", true),
-        new("Samochód", "#1E88E5", true),
-        new("Zdrowie", "#E53935", false),
-        new("Rozrywka", "#8E24AA", true),
-        new("Dom", "#FB8C00", false),
-        new("Inne", "#0473ff", false),
-        new("Pies", "#000080", false),
-        new("Rozwój", "#ff0000", false),
-        new("Hobby", "#DD99F0", false),
+        new("Zakupy", "#F2C94C", true),
+        new("Samochód", "#56CCF2", true),
+        new("Zdrowie", "#219653", false),
+        new("Rozrywka", "#BB6BD9", true),
+        new("Dom", "#2F80ED", false),
+        new("Inne", "#828282", false),
+        new("Pies", "#F2994A", false),
+        new("Rozwój", "#27AE60", false),
+        new("Hobby", "#9B51E0", false),
+        new("Kredyt", "#EB5757", false),
     ];
 
     private static readonly IReadOnlyList<TagSeedDefinition> DefaultTags =

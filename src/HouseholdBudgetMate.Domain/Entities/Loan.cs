@@ -11,6 +11,8 @@ public sealed class Loan : ATimestampable, IEntityId
     public int InterestMode { get; set; }
     public int? WiborPeriodType { get; set; }
     public decimal Principal { get; set; }
+    public decimal? OriginalPrincipal { get; set; }
+    public int? GracePeriodMonths { get; set; }
     public decimal InterestRate { get; set; }
     public decimal? MarginRate { get; set; }
     public int RepaymentDayOfMonth { get; set; }

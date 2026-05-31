@@ -63,6 +63,8 @@ public sealed class LoanService(
             InterestMode = (int)request.InterestMode,
             WiborPeriodType = request.WiborPeriodType is null ? null : (int)request.WiborPeriodType,
             Principal = request.Principal,
+            OriginalPrincipal = request.OriginalPrincipal,
+            GracePeriodMonths = request.GracePeriodMonths,
             InterestRate = request.InterestRate,
             MarginRate = request.MarginRate,
             RepaymentDayOfMonth = request.RepaymentDayOfMonth,
@@ -110,6 +112,8 @@ public sealed class LoanService(
         loan.Name = request.Name;
         loan.TagId = request.TagId;
         loan.IsActive = request.IsActive;
+        loan.OriginalPrincipal = request.OriginalPrincipal;
+        loan.GracePeriodMonths = request.GracePeriodMonths;
 
         var hasPaidInstallments = loan.Installments.Any(x => x.IsPaid);
         if (hasPaidInstallments)
@@ -335,6 +339,7 @@ public sealed class LoanService(
             ChargeType = (int)request.ChargeType,
             FrequencyType = (int)request.FrequencyType,
             Amount = request.Amount,
+            IsPercentageBased = request.IsPercentageBased,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             IsActive = request.IsActive
@@ -364,6 +369,7 @@ public sealed class LoanService(
         charge.ChargeType = (int)request.ChargeType;
         charge.FrequencyType = (int)request.FrequencyType;
         charge.Amount = request.Amount;
+        charge.IsPercentageBased = request.IsPercentageBased;
         charge.StartDate = request.StartDate;
         charge.EndDate = request.EndDate;
         charge.IsActive = request.IsActive;
@@ -449,6 +455,32 @@ public sealed class LoanService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task OverrideLoanInstallmentAsync(OverrideLoanInstallmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var installment = await dbContext.LoanInstallments
+                              .Include(x => x.Expense)
+                              .FirstOrDefaultAsync(x => x.Id == request.InstallmentId, cancellationToken)
+                          ?? throw new NotFoundException("Loan installment not found.");
+
+        installment.PrincipalAmount = request.PrincipalAmount;
+        installment.InterestAmount = request.InterestAmount;
+        installment.Amount = request.PrincipalAmount + request.InterestAmount + request.ChargesAmount;
+
+        if (installment.Expense is not null)
+        {
+            installment.Expense.PlannedAmount = installment.Amount;
+            if (installment.IsPaid)
+            {
+                installment.Expense.ActualAmount = installment.Amount;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task SyncLoanInstallmentsForMonthAsync(int year, int month, CancellationToken cancellationToken)
     {
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
@@ -467,6 +499,8 @@ public sealed class LoanService(
         var installments = await dbContext.LoanInstallments
             .Include(x => x.Loan)
             .ThenInclude(x => x.Charges)
+            .Include(x => x.Loan)
+            .ThenInclude(x => x.Installments)
             .Where(x => x.Year == year && x.Month == month)
             .Where(x => x.Loan.IsActive)
             .ToListAsync(cancellationToken);
@@ -508,10 +542,16 @@ public sealed class LoanService(
                 continue;
             }
 
+            var outstandingBalance = installment.Loan.Installments
+                .Where(x => x.DueDate >= installment.DueDate)
+                .Sum(x => x.PrincipalAmount);
+
             var chargeAmount = installment.Loan.Charges
                 .Where(x => x.IsActive)
                 .Where(x => IsChargeDueInMonth(x, year, month))
-                .Sum(x => x.Amount);
+                .Sum(x => x.IsPercentageBased
+                    ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
+                    : x.Amount);
 
             var totalAmount = installment.Amount + chargeAmount;
 
@@ -960,7 +1000,7 @@ public sealed class LoanService(
         var category = new Category
         {
             Name = "Kredyt",
-            Color = "#000000",
+            Color = "#EB5757",
             SupportsLineItems = false,
             IsDeleted = false
         };

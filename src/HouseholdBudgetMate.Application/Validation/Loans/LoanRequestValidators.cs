@@ -26,6 +26,16 @@ public sealed class CreateLoanRequestValidator : AbstractValidator<CreateLoanReq
             .GreaterThan(0)
             .WithMessage("Principal must be greater than zero.");
 
+        RuleFor(x => x.OriginalPrincipal)
+            .GreaterThan(0)
+            .When(x => x.OriginalPrincipal.HasValue)
+            .WithMessage("Original principal must be greater than zero.");
+
+        RuleFor(x => x.GracePeriodMonths)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.GracePeriodMonths.HasValue)
+            .WithMessage("Grace period months cannot be negative.");
+
         RuleFor(x => x.InterestRate)
             .GreaterThanOrEqualTo(0)
             .WithMessage("Interest rate cannot be negative.");
@@ -86,6 +96,16 @@ public sealed class UpdateLoanRequestValidator : AbstractValidator<UpdateLoanReq
         RuleFor(x => x.Principal)
             .GreaterThan(0)
             .WithMessage("Principal must be greater than zero.");
+
+        RuleFor(x => x.OriginalPrincipal)
+            .GreaterThan(0)
+            .When(x => x.OriginalPrincipal.HasValue)
+            .WithMessage("Original principal must be greater than zero.");
+
+        RuleFor(x => x.GracePeriodMonths)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.GracePeriodMonths.HasValue)
+            .WithMessage("Grace period months cannot be negative.");
 
         RuleFor(x => x.InterestRate)
             .GreaterThanOrEqualTo(0)

@@ -9,6 +9,8 @@ public class CreateLoanRequest
     public LoanInterestMode InterestMode { get; set; }
     public WiborPeriodType? WiborPeriodType { get; set; }
     public decimal Principal { get; set; }
+    public decimal? OriginalPrincipal { get; set; }
+    public int? GracePeriodMonths { get; set; }
     public decimal InterestRate { get; set; }
     public decimal? MarginRate { get; set; }
     public DateOnly? InitialRateEffectiveFrom { get; set; }

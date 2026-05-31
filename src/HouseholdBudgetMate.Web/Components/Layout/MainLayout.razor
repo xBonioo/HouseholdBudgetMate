@@ -291,8 +291,9 @@ else
 
             await LoadAndCacheMonthsAsync();
 
-            // Restore dark-mode preference from cookie
-            var darkCookie = await JS.InvokeAsync<string?>("householdBudgetMate.cookies.get", "hbm-dark");
+            // Restore dark-mode preference from cookie (per-user)
+            var darkCookieName = $"hbm-dark-{UserSessionService.CurrentUser?.Id}";
+            var darkCookie = await JS.InvokeAsync<string?>("householdBudgetMate.cookies.get", darkCookieName);
             if (darkCookie == "1")
             {
                 _isDarkMode = true;
@@ -486,6 +487,7 @@ else
     {
         _isDarkMode = !_isDarkMode;
         await JS.InvokeVoidAsync("document.documentElement.classList.toggle", "hbm-dark", _isDarkMode);
-        await JS.InvokeVoidAsync("householdBudgetMate.cookies.set", "hbm-dark", _isDarkMode ? "1" : "0", 365);
+        var darkCookieName = $"hbm-dark-{UserSessionService.CurrentUser?.Id}";
+        await JS.InvokeVoidAsync("householdBudgetMate.cookies.set", darkCookieName, _isDarkMode ? "1" : "0", 365);
     }
 }

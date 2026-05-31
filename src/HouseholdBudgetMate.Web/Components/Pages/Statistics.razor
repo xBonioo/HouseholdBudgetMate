@@ -195,6 +195,7 @@
                    SelectedValues="_selectedLifetimeCategoryIds"
                    SelectedValuesChanged="OnSelectedLifetimeCategoriesChanged"
                    ToStringFunc="GetCategorySelectText"
+                   MultiSelectionTextFunc="@(ids => string.Join(", ", ids.Select(id => int.TryParse(id, out var n) ? (GetCategorySelectText(n)) : id)))"
                    Class="hb-select-ellipsis">
             @foreach (var category in _categories.OrderBy(x => x.Name))
             {
@@ -280,7 +281,7 @@
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6">Podsumowanie roczne (rok @_selectedYear)</MudText>
+    <MudText Typo="Typo.h6">Podsumowanie roczne (rok @_selectedYear@((_selectedYear == DateTimeProvider.GetLocalDateOnly().Year) ? $" · sty–{DateTimeProvider.GetLocalDateOnly().ToString("MMM", _culture)}" : string.Empty))</MudText>
 
     @if (_statistics.MonthlyFinance.Count == 0)
     {
@@ -300,94 +301,6 @@
                 <MudTd DataLabel="Średnia na miesiąc" Style="white-space: nowrap;">@FormatMoney(item.MonthlyAverage)</MudTd>
             </RowTemplate>
         </MudTable>
-    }
-</MudPaper>
-
-<MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6">Filtry wykresów</MudText>
-    <MudGrid Class="mt-2" Spacing="2">
-        <MudItem xs="12" sm="6" md="3">
-            <MudDatePicker Label="Od"
-                           Date="@GetChartFromDateTime()"
-                           DateChanged="OnChartFromDateChanged"
-                           MinDate="@GetHistoryMinDateTime()"
-                           MaxDate="@GetHistoryMaxDateTime()"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense" />
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudDatePicker Label="Do"
-                           Date="@GetChartToDateTime()"
-                           DateChanged="OnChartToDateChanged"
-                           MinDate="@GetHistoryMinDateTime()"
-                           MaxDate="@GetHistoryMaxDateTime()"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense" />
-        </MudItem>
-        <MudItem xs="12" md="4">
-            <MudSelect T="int"
-                       MultiSelection="true"
-                       Label="Kategorie w trendzie"
-                       Variant="Variant.Outlined"
-                       Margin="Margin.Dense"
-                       SelectedValues="_chartSelectedCategoryIds"
-                       SelectedValuesChanged="OnChartCategoriesChanged"
-                       ToStringFunc="GetCategorySelectText"
-                       Clearable="true"
-                       Class="hb-select-ellipsis">
-                @foreach (var category in _categories.OrderBy(x => x.Name))
-                {
-                    <MudSelectItem T="int" Value="@category.Id">@category.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       OnClick="@(() => LoadChartDataAsync(CancellationToken.None))">
-                Zastosuj
-            </MudButton>
-        </MudItem>
-    </MudGrid>
-</MudPaper>
-
-<MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6">Miesięczne wydatki</MudText>
-    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
-        Słupki — wydane; linia — zaplanowane.
-    </MudText>
-    @if (_barLabels.Length == 0)
-    {
-        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do wykresu.</MudText>
-    }
-    else
-    {
-        <div class="mt-3">
-            <ChartCanvas ChartType="mixed"
-                         Labels="@_barLabels"
-                         Datasets="@_barDatasets"
-                         Height="320px" />
-        </div>
-    }
-</MudPaper>
-
-<MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6">Trend wydatków wg kategorii</MudText>
-    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
-        @(_chartSelectedCategoryIds.Count > 0 ? "Wybrane kategorie." : "Brak wybranych kategorii.")
-    </MudText>
-    @if (_lineDatasets.Length == 0)
-    {
-        <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak danych do wykresu.</MudText>
-    }
-    else
-    {
-        <div class="mt-3">
-            <ChartCanvas ChartType="line"
-                         Labels="@_barLabels"
-                         Datasets="@_lineDatasets"
-                         Height="320px" />
-        </div>
     }
 </MudPaper>
 
@@ -479,6 +392,70 @@
                 </RowTemplate>
             </MudTable>
         </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Wykresy</MudText>
+
+    <MudGrid Class="mt-2" Spacing="2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="Od"
+                           Date="@GetChartFromDateTime()"
+                           DateChanged="OnChartFromDateChanged"
+                           MinDate="@GetHistoryMinDateTime()"
+                           MaxDate="@GetHistoryMaxDateTime()"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="Do"
+                           Date="@GetChartToDateTime()"
+                           DateChanged="OnChartToDateChanged"
+                           MinDate="@GetHistoryMinDateTime()"
+                           MaxDate="@GetHistoryMaxDateTime()"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="@(() => LoadChartDataAsync(CancellationToken.None))">
+                Zastosuj
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    <MudDivider Class="my-4" />
+
+    <MudText Typo="Typo.subtitle1" Class="mb-1">Miesięczne wydatki</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted mb-2">Słupki — wydane; linia — zaplanowane.</MudText>
+    @if (_barLabels.Length == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted">Brak danych do wykresu.</MudText>
+    }
+    else
+    {
+        <ChartCanvas ChartType="mixed"
+                     Labels="@_barLabels"
+                     Datasets="@_barDatasets"
+                     Height="320px" />
+    }
+
+    <MudDivider Class="my-4" />
+
+    <MudText Typo="Typo.subtitle1" Class="mb-1">Trend wydatków wg kategorii</MudText>
+    <MudText Typo="Typo.body2" Class="hb-muted mb-2">Kliknij kategorię na legendzie, żeby ją ukryć.</MudText>
+    @if (_lineDatasets.Length == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted">Brak danych do wykresu.</MudText>
+    }
+    else
+    {
+        <ChartCanvas ChartType="line"
+                     Labels="@_barLabels"
+                     Datasets="@_lineDatasets"
+                     Height="320px" />
     }
 </MudPaper>
 
@@ -698,11 +675,29 @@
 
     private IReadOnlyList<YearSummaryRow> GetYearSummaryRows()
     {
-        var monthsCount = _statistics.MonthlyFinance.Count == 0 ? 1 : _statistics.MonthlyFinance.Count;
+        var today = DateTimeProvider.GetLocalDateOnly();
+        int monthsCount;
+        IEnumerable<YearMonthlyFinanceDto> relevantMonths;
+        if (_selectedYear == today.Year)
+        {
+            monthsCount = today.Month;
+            relevantMonths = _statistics.MonthlyFinance.Where(x => x.Month <= today.Month);
+        }
+        else if (_selectedYear < today.Year)
+        {
+            monthsCount = 12;
+            relevantMonths = _statistics.MonthlyFinance;
+        }
+        else
+        {
+            monthsCount = 1;
+            relevantMonths = _statistics.MonthlyFinance;
+        }
 
-        var totalIncome = _statistics.MonthlyFinance.Sum(x => x.IncomeAmount);
-        var totalSpent = _statistics.MonthlyFinance.Sum(x => x.SpentAmount);
-        var totalSaved = _statistics.MonthlyFinance.Sum(x => x.SavedAmount);
+        var rows = relevantMonths.ToList();
+        var totalIncome = rows.Sum(x => x.IncomeAmount);
+        var totalSpent = rows.Sum(x => x.SpentAmount);
+        var totalSaved = rows.Sum(x => x.SavedAmount);
 
         return
         [
@@ -861,6 +856,9 @@
         ResetLifetimeRangeToSelectedYear();
         _historySearchFromDate ??= _historyMinDate;
         _historySearchToDate ??= _historyMaxDate;
+
+        // Pre-select all categories
+        _selectedLifetimeCategoryIds = _categories.Select(c => c.Id).ToHashSet();
     }
 
     private DateTime? GetHistoryMinDateTime()

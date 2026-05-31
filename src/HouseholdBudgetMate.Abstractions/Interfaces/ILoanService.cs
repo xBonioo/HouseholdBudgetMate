@@ -15,5 +15,6 @@ public interface ILoanService
     Task DeleteLoanChargeAsync(DeleteLoanChargeRequest request, CancellationToken cancellationToken);
     Task DeleteLoanAsync(DeleteLoanRequest request, CancellationToken cancellationToken);
     Task SetLoanInstallmentPaidAsync(SetLoanInstallmentPaidRequest request, CancellationToken cancellationToken);
+    Task OverrideLoanInstallmentAsync(OverrideLoanInstallmentRequest request, CancellationToken cancellationToken);
     Task SyncLoanInstallmentsForMonthAsync(int year, int month, CancellationToken cancellationToken);
 }

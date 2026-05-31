@@ -963,23 +963,9 @@ else
 {
     var pieCategories = GetPieAvailableCategories();
     <MudPaper Class="pa-4 hb-panel mt-3">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-            <MudText Typo="Typo.h6">
-                Wydatki wg kategorii — @(new DateTime(Year, Month, 1).ToString("MMMM yyyy", Culture))
-            </MudText>
-            <MudSelect T="int" MultiSelection="true"
-                       Label="Kategorie"
-                       SelectedValues="_pieSelectedCategoryIds"
-                       SelectedValuesChanged="OnPieCategoriesChanged"
-                       MultiSelectionTextFunc="@(ids => string.Join(", ", ids.Select(id => int.TryParse(id, out var n) ? (pieCategories.FirstOrDefault(c => c.Id == n).Name ?? id) : id)))"
-                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                       Style="max-width:320px">
-                @foreach (var cat in pieCategories)
-                {
-                    <MudSelectItem T="int" Value="@cat.Id">@cat.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </MudStack>
+        <MudText Typo="Typo.h6" Class="mb-3">
+            Wydatki wg kategorii — @(new DateTime(Year, Month, 1).ToString("MMMM yyyy", Culture))
+        </MudText>
         @if (_pieDatasets.Length > 0)
         {
             <ChartCanvas ChartType="pie"

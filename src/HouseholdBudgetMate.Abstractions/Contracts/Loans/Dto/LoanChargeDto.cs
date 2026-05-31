@@ -10,6 +10,7 @@ public sealed class LoanChargeDto
     public LoanChargeType ChargeType { get; set; }
     public LoanChargeFrequencyType FrequencyType { get; set; }
     public decimal Amount { get; set; }
+    public bool IsPercentageBased { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public bool IsActive { get; set; }

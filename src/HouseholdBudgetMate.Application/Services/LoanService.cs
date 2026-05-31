@@ -747,14 +747,16 @@ public sealed class LoanService(
                 currentAnnualRate = loan.InterestRate;
             }
 
+            var daysInMonth = DateTime.DaysInMonth(due.Year, due.Month);
+            var monthlyRate = currentAnnualRate / 36500m * daysInMonth;
+
             if (shouldRecalculateInstallment)
             {
-                var monthlyRateForInstallment = currentAnnualRate / 12m / 100m;
+                var pmtRate = currentAnnualRate / 12m / 100m;
                 var remainingMonths = dueDates.Count - i;
-                currentInstallment = CalculateInstallment(remaining, monthlyRateForInstallment, remainingMonths);
+                currentInstallment = CalculateInstallment(remaining, pmtRate, remainingMonths);
             }
 
-            var monthlyRate = currentAnnualRate / 12m / 100m;
             var interest = decimal.Round(remaining * monthlyRate, 2, MidpointRounding.AwayFromZero);
             var principalPart = decimal.Round(currentInstallment - interest, 2, MidpointRounding.AwayFromZero);
 
@@ -827,17 +829,19 @@ public sealed class LoanService(
             var due = dueDates[i];
             var loanMonthIndex = ((due.Year - loan.StartDate.Year) * 12) + due.Month - loan.StartDate.Month;
 
+            var daysInMonth = DateTime.DaysInMonth(due.Year, due.Month);
+
             if (i == 0 || loanMonthIndex % periodMonths == 0)
             {
                 var referenceRate = GetReferenceRateForDate(entries, due);
                 currentAnnualRate = referenceRate + loan.MarginRate.Value;
-                var monthlyRateForInstallment = currentAnnualRate / 12m / 100m;
+                var pmtRate = currentAnnualRate / 12m / 100m;
                 var remainingMonths = months - i;
-                currentInstallment = CalculateInstallment(remaining, monthlyRateForInstallment, remainingMonths);
+                currentInstallment = CalculateInstallment(remaining, pmtRate, remainingMonths);
             }
 
-            var monthlyRate = currentAnnualRate / 12m / 100m;
-            var interest = decimal.Round(remaining * monthlyRate, 2, MidpointRounding.AwayFromZero);
+            var interestRate = currentAnnualRate / 36500m * daysInMonth;
+            var interest = decimal.Round(remaining * interestRate, 2, MidpointRounding.AwayFromZero);
             var principalPart = decimal.Round(currentInstallment - interest, 2, MidpointRounding.AwayFromZero);
 
             if (i == months - 1)

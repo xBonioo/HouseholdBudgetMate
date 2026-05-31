@@ -690,19 +690,19 @@ public sealed class LoanService(
 
         if (loan.LoanType == (int)LoanType.Mortgage && loan.InterestMode == (int)LoanInterestMode.Fixed)
         {
-            return BuildMortgageFixedThenVariableSchedule(loan, principal, dueDates);
+            return BuildMortgageFixedThenVariableSchedule(loan, principal, dueDates, segmentStart);
         }
 
         return loan.InterestMode switch
         {
             (int)LoanInterestMode.Fixed => BuildFixedSchedule(principal, dueDates, loan.InterestRate),
-            (int)LoanInterestMode.VariableWibor => BuildVariableSchedule(loan, principal, dueDates),
+            (int)LoanInterestMode.VariableWibor => BuildVariableSchedule(loan, principal, dueDates, segmentStart),
             _ => throw new BadRequestException("Unsupported loan interest mode.")
         };
     }
 
     private static List<ScheduleRowDto> BuildMortgageFixedThenVariableSchedule(Loan loan, decimal principal,
-        IReadOnlyList<DateOnly> dueDates)
+        IReadOnlyList<DateOnly> dueDates, DateOnly segmentStart)
     {
         if (!loan.MarginRate.HasValue || !loan.WiborPeriodType.HasValue)
         {
@@ -747,8 +747,14 @@ public sealed class LoanService(
                 currentAnnualRate = loan.InterestRate;
             }
 
-            var daysInMonth = DateTime.DaysInMonth(due.Year, due.Month);
-            var monthlyRate = currentAnnualRate / 36500m * daysInMonth;
+            var prevDate = i == 0 ? segmentStart : dueDates[i - 1];
+            var daysInPeriod = due.DayNumber - prevDate.DayNumber;
+            if (i == 0 && daysInPeriod <= 0)
+            {
+                prevDate = due.AddMonths(-1);
+                daysInPeriod = due.DayNumber - prevDate.DayNumber;
+            }
+            var monthlyRate = currentAnnualRate / 36500m * daysInPeriod;
 
             if (shouldRecalculateInstallment)
             {
@@ -758,11 +764,27 @@ public sealed class LoanService(
             }
 
             var interest = decimal.Round(remaining * monthlyRate, 2, MidpointRounding.AwayFromZero);
-            var principalPart = decimal.Round(currentInstallment - interest, 2, MidpointRounding.AwayFromZero);
+            decimal principalPart;
 
             if (i == dueDates.Count - 1)
             {
                 principalPart = remaining;
+            }
+            else
+            {
+                // Broken-period (spezzato) convention: when the first installment covers fewer days
+                // than the standard full-month period, capital is calculated using standard-period
+                // interest so the amortization schedule is not skewed by the short first period.
+                var standardDays = DateTime.DaysInMonth(prevDate.Year, prevDate.Month);
+                if (i == 0 && daysInPeriod < standardDays)
+                {
+                    var standardInterest = remaining * currentAnnualRate / 36500m * standardDays;
+                    principalPart = decimal.Round(currentInstallment - standardInterest, 2, MidpointRounding.AwayFromZero);
+                }
+                else
+                {
+                    principalPart = decimal.Round(currentInstallment - interest, 2, MidpointRounding.AwayFromZero);
+                }
             }
 
             var amount = decimal.Round(principalPart + interest, 2, MidpointRounding.AwayFromZero);
@@ -804,7 +826,7 @@ public sealed class LoanService(
     }
 
     private static List<ScheduleRowDto> BuildVariableSchedule(Loan loan, decimal principal,
-        IReadOnlyList<DateOnly> dueDates)
+        IReadOnlyList<DateOnly> dueDates, DateOnly segmentStart)
     {
         if (!loan.MarginRate.HasValue || !loan.WiborPeriodType.HasValue)
         {
@@ -817,40 +839,75 @@ public sealed class LoanService(
             throw new BadRequestException("Variable mortgage requires at least one WIBOR rate entry.");
         }
 
-        var periodMonths = loan.WiborPeriodType.Value;
         var months = dueDates.Count;
         var remaining = principal;
         var rows = new List<ScheduleRowDto>(months);
         decimal currentInstallment = 0;
         decimal currentAnnualRate = 0;
+        decimal accumulatedPrincipalRoundingDelta = 0;
 
         for (var i = 0; i < months; i++)
         {
             var due = dueDates[i];
-            var loanMonthIndex = ((due.Year - loan.StartDate.Year) * 12) + due.Month - loan.StartDate.Month;
 
-            var daysInMonth = DateTime.DaysInMonth(due.Year, due.Month);
-
-            if (i == 0 || loanMonthIndex % periodMonths == 0)
+            var prevDate = i == 0 ? segmentStart : dueDates[i - 1];
+            var daysInPeriod = due.DayNumber - prevDate.DayNumber;
+            if (i == 0 && daysInPeriod <= 0)
             {
-                var referenceRate = GetReferenceRateForDate(entries, due);
-                currentAnnualRate = referenceRate + loan.MarginRate.Value;
+                prevDate = due.AddMonths(-1);
+                daysInPeriod = due.DayNumber - prevDate.DayNumber;
+            }
+
+            var referenceRate = GetReferenceRateForDate(entries, due);
+            var annualRate = referenceRate + loan.MarginRate.Value;
+            var shouldRecalculateInstallment = i == 0 || annualRate != currentAnnualRate;
+            currentAnnualRate = annualRate;
+
+            if (shouldRecalculateInstallment)
+            {
                 var pmtRate = currentAnnualRate / 12m / 100m;
                 var remainingMonths = months - i;
                 currentInstallment = CalculateInstallment(remaining, pmtRate, remainingMonths);
             }
 
-            var interestRate = currentAnnualRate / 36500m * daysInMonth;
-            var interest = decimal.Round(remaining * interestRate, 2, MidpointRounding.AwayFromZero);
-            var principalPart = decimal.Round(currentInstallment - interest, 2, MidpointRounding.AwayFromZero);
+            var interestRate = currentAnnualRate / 36500m * daysInPeriod;
+            var rawInterest = remaining * interestRate;
+            var interest = decimal.Round(rawInterest, 2, MidpointRounding.AwayFromZero);
+            decimal principalPartRaw;
+            decimal principalPart;
 
             if (i == months - 1)
             {
-                principalPart = remaining;
+                principalPart = decimal.Round(remaining + accumulatedPrincipalRoundingDelta,
+                    2, MidpointRounding.AwayFromZero);
+            }
+            else
+            {
+                // Broken-period (spezzato) convention: when the first installment covers fewer days
+                // than the standard full-month period, capital is calculated using standard-period
+                // interest so the amortization schedule is not skewed by the short first period.
+                var standardDays = DateTime.DaysInMonth(prevDate.Year, prevDate.Month);
+                if (i == 0 && daysInPeriod < standardDays)
+                {
+                    var standardInterest = remaining * currentAnnualRate / 36500m * standardDays;
+                    principalPartRaw = currentInstallment - standardInterest;
+                    principalPart = decimal.Round(principalPartRaw, 2, MidpointRounding.ToEven);
+                    accumulatedPrincipalRoundingDelta += principalPartRaw - principalPart;
+                }
+                else
+                {
+                    principalPartRaw = currentInstallment - interest;
+                    principalPart = decimal.Round(principalPartRaw, 2, MidpointRounding.ToEven);
+                    accumulatedPrincipalRoundingDelta += principalPartRaw - principalPart;
+                }
             }
 
             var amount = decimal.Round(principalPart + interest, 2, MidpointRounding.AwayFromZero);
             remaining = decimal.Round(remaining - principalPart, 2, MidpointRounding.AwayFromZero);
+            if (i == months - 1)
+            {
+                remaining = 0;
+            }
 
             rows.Add(new ScheduleRowDto(due.Year, due.Month, due, amount, principalPart, interest));
         }

@@ -477,17 +477,12 @@
                 <MudItem xs="12">
                     <MudTextField T="string" @bind-Value="_editInstallmentPrincipalInput"
                                   Label="Kapitał" Variant="Variant.Outlined"
-                                  HelperText="Kwota spłaty kapitału"/>
+                                  HelperText="@($"Obecna: {_editingInstallment?.PrincipalAmount.ToString("0.00", _culture)} PLN")"/>
                 </MudItem>
                 <MudItem xs="12">
                     <MudTextField T="string" @bind-Value="_editInstallmentInterestInput"
                                   Label="Odsetki" Variant="Variant.Outlined"
-                                  HelperText="Kwota odsetek"/>
-                </MudItem>
-                <MudItem xs="12">
-                    <MudTextField T="string" @bind-Value="_editInstallmentChargesInput"
-                                  Label="Koszty" Variant="Variant.Outlined"
-                                  HelperText="Prowizje, ubezpieczenia i inne opłaty"/>
+                                  HelperText="@($"Obecne: {_editingInstallment?.InterestAmount.ToString("0.00", _culture)} PLN")"/>
                 </MudItem>
             </MudGrid>
         }
@@ -556,7 +551,6 @@
     private bool _editDialogOpen;
     private string _editInstallmentPrincipalInput = string.Empty;
     private string _editInstallmentInterestInput = string.Empty;
-    private string _editInstallmentChargesInput = string.Empty;
 
     private readonly CreateLoanRequest _createModel = new()
     {
@@ -973,9 +967,8 @@
     private void StartEditInstallment(LoanInstallmentDto installment)
     {
         _editingInstallment = installment;
-        _editInstallmentPrincipalInput = installment.PrincipalAmount.ToString("0.00", _culture);
-        _editInstallmentInterestInput = installment.InterestAmount.ToString("0.00", _culture);
-        _editInstallmentChargesInput = (installment.Amount - installment.PrincipalAmount - installment.InterestAmount).ToString("0.00", _culture);
+        _editInstallmentPrincipalInput = string.Empty;
+        _editInstallmentInterestInput = string.Empty;
         _editDialogOpen = true;
     }
 
@@ -985,7 +978,6 @@
         _editingInstallment = null;
         _editInstallmentPrincipalInput = string.Empty;
         _editInstallmentInterestInput = string.Empty;
-        _editInstallmentChargesInput = string.Empty;
     }
 
     private async Task SaveInstallmentOverrideAsync()
@@ -1004,11 +996,7 @@
             return;
         }
 
-        if (!LocalizedDecimalParser.TryParse(_editInstallmentChargesInput, out var charges))
-        {
-            Snackbar.Add("Nieprawidłowa kwota kosztów.", Severity.Warning);
-            return;
-        }
+        var existingCharges = _editingInstallment.Amount - _editingInstallment.PrincipalAmount - _editingInstallment.InterestAmount;
 
         try
         {
@@ -1017,14 +1005,13 @@
                 InstallmentId = _editingInstallment.Id,
                 PrincipalAmount = principal,
                 InterestAmount = interest,
-                ChargesAmount = charges
+                ChargesAmount = existingCharges
             }, CancellationToken.None);
 
             _editDialogOpen = false;
             _editingInstallment = null;
             _editInstallmentPrincipalInput = string.Empty;
             _editInstallmentInterestInput = string.Empty;
-            _editInstallmentChargesInput = string.Empty;
             await LoadAsync();
             Snackbar.Add("Zaktualizowano ratę.", Severity.Success);
         }

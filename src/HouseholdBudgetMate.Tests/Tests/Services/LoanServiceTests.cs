@@ -1,4 +1,5 @@
 ﻿using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests;
+using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto;
 using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
@@ -100,6 +101,62 @@ public sealed class LoanServiceTests
         await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var monthPlans = await verifyContext.MonthPlans.ToListAsync();
         Assert.Empty(monthPlans);
+    }
+
+    /// <summary>
+    /// Verifies that interest is calculated using actual days between payment dates (actual/365 convention),
+    /// not the number of days in the payment month.
+    /// Real mortgage example: 800 000 PLN, WIBOR 1M 3.8% + margin 1.52% = 5.32%, StartDate 19.05.2026,
+    /// first payment 15.06.2026, 336 months.
+    /// Second installment (15.07.2026): interest period = Jun 15 → Jul 15 = 30 days.
+    /// Expected interest ≈ 3493.85 PLN (799 031.20 × 5.32% / 365 × 30).
+    /// Fifth installment (15.10.2026): interest period = Sep 15 → Oct 15 = 30 days.
+    /// Expected interest ≈ 3480 PLN.
+    /// </summary>
+    [Fact]
+    public async Task CreateLoanAsync_VariableWibor_Should_Use_ActualDays_Between_Due_Dates_For_Interest()
+    {
+        var service = CreateService();
+
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka test",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        AssertInstallment(loan, new DateOnly(2026, 6, 15), 968.80m, 3614.68m);
+        AssertInstallment(loan, new DateOnly(2026, 7, 15), 1089.63m, 3493.85m);
+        AssertInstallment(loan, new DateOnly(2026, 10, 15), 1102.97m, 3480.51m);
+        AssertInstallment(loan, new DateOnly(2026, 11, 15), 991.94m, 3591.54m);
+        AssertInstallment(loan, new DateOnly(2028, 1, 15), 1060.84m, 3522.64m);
+        AssertInstallment(loan, new DateOnly(2031, 9, 15), 1307.25m, 3276.23m);
+        AssertInstallment(loan, new DateOnly(2034, 5, 15), 1617.86m, 2965.62m);
+        AssertInstallment(loan, new DateOnly(2038, 2, 15), 1871.90m, 2711.58m);
+        AssertInstallment(loan, new DateOnly(2040, 3, 15), 2261.08m, 2322.40m);
+        AssertInstallment(loan, new DateOnly(2054, 4, 15), 4534.09m, 49.39m);
+        AssertInstallment(loan, new DateOnly(2054, 5, 15), 6396.22m, 27.97m);
+
+        static void AssertInstallment(
+            LoanDto loan,
+            DateOnly dueDate,
+            decimal expectedPrincipal,
+            decimal expectedInterest)
+        {
+            var installment = loan.Installments.Single(x => x.DueDate == dueDate);
+            const decimal tolerance = 0.50m;
+            Assert.InRange(installment.PrincipalAmount, expectedPrincipal - tolerance, expectedPrincipal + tolerance);
+            Assert.InRange(installment.InterestAmount, expectedInterest - tolerance, expectedInterest + tolerance);
+        }
     }
 
     /// <summary>

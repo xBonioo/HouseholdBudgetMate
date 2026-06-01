@@ -50,6 +50,17 @@ public sealed class MonthlyBudgetingLoopUiTests
     }
 
     [Fact]
+    public void Statistics_Should_Derive_Year_Summary_Range_From_Monthly_Finance_Data()
+    {
+        var statisticsPage = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Statistics.razor");
+
+        statisticsPage.Should().Contain("GetYearSummaryTitle()");
+        statisticsPage.Should().Contain("GetYearSummaryPeriod()");
+        statisticsPage.Should().Contain("Math.Max(startMonth, today.Month)");
+        statisticsPage.Should().NotContain("sty–{DateTimeProvider.GetLocalDateOnly()");
+    }
+
+    [Fact]
     public void Acceptance_Evidence_Should_Record_Controlled_Service_Scenario()
     {
         var evidence = ReadRepoFile("context/changes/verify-monthly-safe-to-spend-loop/acceptance-evidence.md");

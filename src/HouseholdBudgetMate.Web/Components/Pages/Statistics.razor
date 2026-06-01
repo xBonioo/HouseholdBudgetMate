@@ -281,7 +281,7 @@
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6">Podsumowanie roczne (rok @_selectedYear@((_selectedYear == DateTimeProvider.GetLocalDateOnly().Year) ? $" · sty–{DateTimeProvider.GetLocalDateOnly().ToString("MMM", _culture)}" : string.Empty))</MudText>
+    <MudText Typo="Typo.h6">@GetYearSummaryTitle()</MudText>
 
     @if (_statistics.MonthlyFinance.Count == 0)
     {
@@ -668,32 +668,54 @@
         return new DateTime(year, month, 1).ToString("MMM", _culture);
     }
 
+    private string GetMonthName(int month)
+    {
+        return _culture.DateTimeFormat.GetMonthName(month);
+    }
+
     private string FormatMoney(decimal value)
     {
         return $"{value.ToString("0.00", _culture)}\u00A0zł";
     }
 
-    private IReadOnlyList<YearSummaryRow> GetYearSummaryRows()
+    private string GetYearSummaryTitle()
     {
-        var today = DateTimeProvider.GetLocalDateOnly();
-        int monthsCount;
-        IEnumerable<YearMonthlyFinanceDto> relevantMonths;
-        if (_selectedYear == today.Year)
+        var period = GetYearSummaryPeriod();
+        var rangeLabel = period.MonthsCount > 0
+            ? $" · {GetMonthName(period.StartMonth)}–{GetMonthName(period.EndMonth)}"
+            : string.Empty;
+
+        return $"Podsumowanie roczne (rok {_selectedYear}{rangeLabel})";
+    }
+
+    private YearSummaryPeriod GetYearSummaryPeriod()
+    {
+        var months = _statistics.MonthlyFinance
+            .Select(x => x.Month)
+            .Where(x => x is >= 1 and <= 12)
+            .OrderBy(x => x)
+            .ToList();
+
+        if (months.Count == 0)
         {
-            monthsCount = today.Month;
-            relevantMonths = _statistics.MonthlyFinance.Where(x => x.Month <= today.Month);
-        }
-        else if (_selectedYear < today.Year)
-        {
-            monthsCount = 12;
-            relevantMonths = _statistics.MonthlyFinance;
-        }
-        else
-        {
-            monthsCount = 1;
-            relevantMonths = _statistics.MonthlyFinance;
+            return new YearSummaryPeriod(1, 1, 0);
         }
 
+        var today = DateTimeProvider.GetLocalDateOnly();
+        var startMonth = months[0];
+        var endMonth = _selectedYear == today.Year
+            ? Math.Max(startMonth, today.Month)
+            : months[^1];
+
+        return new YearSummaryPeriod(startMonth, endMonth, endMonth - startMonth + 1);
+    }
+
+    private IReadOnlyList<YearSummaryRow> GetYearSummaryRows()
+    {
+        var period = GetYearSummaryPeriod();
+        var monthsCount = Math.Max(period.MonthsCount, 1);
+        var relevantMonths = _statistics.MonthlyFinance
+            .Where(x => x.Month >= period.StartMonth && x.Month <= period.EndMonth);
         var rows = relevantMonths.ToList();
         var totalIncome = rows.Sum(x => x.IncomeAmount);
         var totalSpent = rows.Sum(x => x.SpentAmount);
@@ -1003,6 +1025,11 @@
     }
 
     private sealed record YearSummaryRow(string Label, decimal Total, decimal MonthlyAverage);
+
+    private readonly record struct YearSummaryPeriod(
+        int StartMonth,
+        int EndMonth,
+        int MonthsCount);
 
     #region Charts — user-defined date range
 

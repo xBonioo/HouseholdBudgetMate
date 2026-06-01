@@ -292,9 +292,9 @@ public partial class Accounts
             _selectedMonthPlan?.SavingsTransfers.Sum(x => x.Amount) ?? 0,
             _selectedMonthPlan?.SavingsTransfers.Count ?? 0);
 
-        var activeLoans = _loans.Where(x => x.IsActive).ToList();
+        var activeLoans = GetActiveLoansForSelectedMonth();
         _debtSummary = new DebtSummary(
-            activeLoans.Sum(x => x.RemainingPrincipal),
+            activeLoans.Sum(GetRemainingPrincipalForSelectedMonth),
             activeLoans.Count);
 
         var budgetHealthItems = BuildBudgetHealthItems().ToList();
@@ -346,6 +346,53 @@ public partial class Accounts
 
                 return new BudgetHealthItem(category.Name, limit, spent, limit - spent);
             });
+    }
+
+    private IReadOnlyList<LoanDto> GetActiveLoansForSelectedMonth()
+    {
+        var monthStart = new DateOnly(_selectedYear, _selectedMonth, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        return _loans
+            .Where(loan => loan.IsActive)
+            .Where(loan => IsLoanVisibleInSelectedMonth(loan, monthStart, monthEnd))
+            .ToList();
+    }
+
+    private static bool IsLoanVisibleInSelectedMonth(
+        LoanDto loan,
+        DateOnly monthStart,
+        DateOnly monthEnd)
+    {
+        var firstRateEntryDate = loan.RateEntries
+            .OrderBy(rate => rate.EffectiveFrom)
+            .Select(rate => (DateOnly?)rate.EffectiveFrom)
+            .FirstOrDefault();
+
+        if (!firstRateEntryDate.HasValue)
+        {
+            return false;
+        }
+
+        var hasStartedBySelectedMonth = firstRateEntryDate.Value <= monthEnd;
+
+        var hasNotEndedBeforeSelectedMonth = !loan.Installments.Any()
+            || loan.Installments.Any(installment => installment.DueDate >= monthStart);
+
+        return hasStartedBySelectedMonth && hasNotEndedBeforeSelectedMonth;
+    }
+
+    private decimal GetRemainingPrincipalForSelectedMonth(LoanDto loan)
+    {
+        var monthStart = new DateOnly(_selectedYear, _selectedMonth, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        return decimal.Round(
+            loan.Installments
+                .Where(installment => installment.DueDate > monthEnd)
+                .Sum(installment => installment.PrincipalAmount),
+            2,
+            MidpointRounding.AwayFromZero);
     }
 
     private AccountBalanceRow ToAccountBalanceRow(AccountDto account)
@@ -714,13 +761,18 @@ public partial class Accounts
 
     private bool IsApplicableForSelectedMonthBalance(AccountDto account)
     {
+        var nextMonthStartUtc = new DateTime(_selectedYear, _selectedMonth, 1, 0, 0, 0, DateTimeKind.Utc)
+            .AddMonths(1);
+        if (account.ActiveFromUtc is not null && account.ActiveFromUtc >= nextMonthStartUtc)
+        {
+            return false;
+        }
+
         if (!account.IsArchived)
         {
             return true;
         }
 
-        var nextMonthStartUtc = new DateTime(_selectedYear, _selectedMonth, 1, 0, 0, 0, DateTimeKind.Utc)
-            .AddMonths(1);
         return (account.ArchivedAtUtc ?? account.UpdatedAtUtc) >= nextMonthStartUtc;
     }
 

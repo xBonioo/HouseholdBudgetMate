@@ -832,14 +832,7 @@ public sealed class ExpenseService(
                 (currentSavingsMoney - previousSavingsMoney);
         }
 
-        var financeMonths = expenseRows
-            .GroupBy(x => x.Month)
-            .Where(group => group.Sum(x => x.PlannedAmount) > 0 || group.Sum(x => x.ActualAmount) > 0)
-            .Select(group => group.Key)
-            .OrderBy(x => x)
-            .ToList();
-
-        var monthlyFinance = financeMonths
+        var monthlyFinance = populatedMonths
             .Select(monthNumber =>
             {
                 expensesByMonth.TryGetValue(monthNumber, out var expenseData);

@@ -55,7 +55,8 @@ public sealed class AccountService(
                 ? await dbContext.Accounts.MaxAsync(x => x.Order, cancellationToken) + 1
                 : 1,
             Name = request.Name,
-            Type = (int)request.Type
+            Type = (int)request.Type,
+            ActiveFromUtc = dateTimeProvider.GetUtcDateTime()
         };
 
         dbContext.Accounts.Add(account);
@@ -126,8 +127,25 @@ public sealed class AccountService(
                           .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                       ?? throw new NotFoundException("Account not found.");
 
-        account.IsArchived = request.IsArchived;
-        account.ArchivedAtUtc = request.IsArchived ? dateTimeProvider.GetUtcDateTime() : null;
+        if (request.IsArchived)
+        {
+            if (!account.IsArchived)
+            {
+                account.ArchivedAtUtc = dateTimeProvider.GetUtcDateTime();
+            }
+
+            account.IsArchived = true;
+        }
+        else
+        {
+            if (account.IsArchived)
+            {
+                account.ActiveFromUtc = dateTimeProvider.GetUtcDateTime();
+            }
+
+            account.IsArchived = false;
+            account.ArchivedAtUtc = null;
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

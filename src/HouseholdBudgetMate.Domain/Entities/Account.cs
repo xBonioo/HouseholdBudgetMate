@@ -10,6 +10,7 @@ public sealed class Account : ATimestampable, IEntityId
     public string Name { get; set; } = null!;
     public int Type { get; set; }
     public bool IsArchived { get; set; }
+    public DateTime? ActiveFromUtc { get; set; }
     public DateTime? ArchivedAtUtc { get; set; }
 
     public ICollection<AccountMonthBalance> MonthBalances { get; set; } = new List<AccountMonthBalance>();

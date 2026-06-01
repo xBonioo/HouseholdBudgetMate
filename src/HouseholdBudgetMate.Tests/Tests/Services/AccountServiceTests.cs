@@ -96,6 +96,7 @@ public sealed class AccountServiceTests
 
         Assert.Equal("Savings Account", result.Name);
         Assert.Equal(AccountType.Savings, result.Type);
+        Assert.Equal(DefaultNowUtc, result.ActiveFromUtc);
         Assert.Single(result.MonthBalances);
         Assert.Equal(5000m, result.MonthBalances[0].ClosingBalance);
         Assert.Equal(DefaultNowUtc.Year, result.MonthBalances[0].Year);
@@ -377,7 +378,8 @@ public sealed class AccountServiceTests
     }
 
     /// <summary>
-    /// Verifies that SetAccountArchivedAsync clears IsArchived and nulls ArchivedAtUtc when IsArchived=false.
+    /// Verifies that SetAccountArchivedAsync clears IsArchived, nulls ArchivedAtUtc,
+    /// and records a new active-from timestamp when IsArchived=false.
     /// </summary>
     [Fact]
     public async Task SetAccountArchivedAsync_Should_Clear_Archive_Flag()
@@ -406,6 +408,7 @@ public sealed class AccountServiceTests
 
         Assert.False(verified.IsArchived);
         Assert.Null(verified.ArchivedAtUtc);
+        Assert.Equal(DefaultNowUtc, verified.ActiveFromUtc);
     }
 
     /// <summary>

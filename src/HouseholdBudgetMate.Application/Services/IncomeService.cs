@@ -400,6 +400,7 @@ public sealed class IncomeService(
     {
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
         var today = dateTimeProvider.GetLocalDateOnly();
+        var selectedMonthStartUtc = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
         var nextMonthStartUtc = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
         var previousMonthDate = new DateTime(year, month, 1).AddMonths(-1);
         var previousYear = previousMonthDate.Year;
@@ -415,6 +416,7 @@ public sealed class IncomeService(
         var accounts = await dbContext.Accounts
             .AsNoTracking()
             .Where(x => x.Type != (int)AccountType.Savings
+                        && (x.ActiveFromUtc == null || x.ActiveFromUtc < nextMonthStartUtc)
                         && (!x.IsArchived
                             || (x.ArchivedAtUtc ?? x.UpdatedAtUtc) >= nextMonthStartUtc))
             .Include(x => x.MonthBalances)
@@ -437,6 +439,11 @@ public sealed class IncomeService(
                     accountBaseTotal += historicalBalance.ClosingBalance;
                 }
 
+                continue;
+            }
+
+            if (account.ActiveFromUtc is not null && account.ActiveFromUtc >= selectedMonthStartUtc)
+            {
                 continue;
             }
 

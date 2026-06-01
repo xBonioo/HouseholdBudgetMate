@@ -179,7 +179,7 @@ public partial class PlanPage
             return;
         }
 
-        var confirmation = await ConfirmAsync("Usunďż˝ďż˝ wydatek?");
+        var confirmation = await ConfirmAsync("Usunąć wydatek?");
         if (!confirmation)
         {
             return;
@@ -190,7 +190,7 @@ public partial class PlanPage
             await ExpenseService.DeleteExpenseAsync(new DeleteExpenseRequest { Id = expenseId },
                 CancellationToken.None);
             await LoadAsync();
-            Snackbar.Add("Usuniďż˝to wydatek.", Severity.Success);
+            Snackbar.Add("Usunięto wydatek.", Severity.Success);
         }
         catch (Exception ex)
         {
@@ -263,13 +263,13 @@ public partial class PlanPage
     {
         if (_selectedExpenseIdsForCopy.Count == 0)
         {
-            Snackbar.Add("Wybierz co najmniej jednďż˝ pozycjďż˝ do skopiowania.", Severity.Warning);
+            Snackbar.Add("Wybierz co najmniej jedną pozycję do skopiowania.", Severity.Warning);
             return;
         }
 
         var nextMonth = new DateTime(Year, Month, 1).AddMonths(1);
         var confirmation = await ConfirmAsync(
-            $"Skopiowaďż˝ {_selectedExpenseIdsForCopy.Count} pozycji do {nextMonth.ToString("MMMM yyyy", Culture)}?");
+            $"Skopiować {_selectedExpenseIdsForCopy.Count} pozycji do {nextMonth.ToString("MMMM yyyy", Culture)}?");
         if (!confirmation)
         {
             return;
@@ -296,7 +296,7 @@ public partial class PlanPage
 
             if (copiedCount == 0)
             {
-                Snackbar.Add("Nie skopiowano ďż˝adnej pozycji.", Severity.Info);
+                Snackbar.Add("Nie skopiowano żadnej pozycji.", Severity.Info);
                 return;
             }
 

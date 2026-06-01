@@ -26,6 +26,8 @@ public sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(x => x.IsArchived)
             .IsRequired();
 
+        builder.Property(x => x.ActiveFromUtc);
+
         builder.Property(x => x.CreatedAtUtc)
             .IsRequired();
 

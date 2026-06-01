@@ -33,6 +33,9 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<DateTime?>("ArchivedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ActiveFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 

@@ -1396,6 +1396,33 @@ public sealed class IncomeServiceTests
     }
 
     /// <summary>
+    /// GetLiveBalanceAsync does not require a previous-month closing balance for a non-savings
+    /// account that became active during the selected month.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Not_Require_Previous_Month_Balance_For_Account_Activated_In_Selected_Month()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.Accounts.Add(new Account
+            {
+                Name = "Przywrocone w kwietniu",
+                Type = (int)AccountType.Bank,
+                ActiveFromUtc = DefaultNowUtc
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(0m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
     /// GetLiveBalanceAsync computes a closed historical month from the latest stored prior
     /// balances and does not retroactively require missing immediately preceding-month rows.
     /// </summary>

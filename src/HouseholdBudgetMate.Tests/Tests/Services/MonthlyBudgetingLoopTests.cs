@@ -1,4 +1,6 @@
+using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
+using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
 using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Security;
@@ -33,11 +35,19 @@ public sealed class MonthlyBudgetingLoopTests
         Assert.Equal(VisibleUserId, currentUser.UserId);
         Assert.Equal(User.DefaultUserId, currentUser.BudgetOwnerUserId);
 
-        var initial = await services.IncomeService.GetLiveBalanceAsync(Year, Month, CancellationToken.None);
-        Assert.True(initial.HasCompleteBalanceBase);
-        Assert.Equal(3000m, initial.AccountsBaseTotal);
-        Assert.Equal(5000m, initial.IncomesTotal);
-        Assert.Equal(8000m, initial.CurrentBalance);
+        var initial = await ReadLoopStateAsync(services);
+        AssertLoopState(initial, liveBalance: 8000m, planRemaining: 0m, savingsTransfersTotal: 0m);
+        Assert.Equal(3000m, initial.LiveBalance.AccountsBaseTotal);
+        Assert.Equal(5000m, initial.LiveBalance.IncomesTotal);
+        AssertDashboardProjection(
+            initial.Dashboard,
+            transactionCount: 1,
+            unplannedSpent: 0m,
+            categoryRemaining: null,
+            plannedAmount: 0m,
+            spentAmount: 0m,
+            incomeAmount: 5000m);
+        AssertNoStatisticsMonth(initial.Statistics);
 
         var plannedExpense = await services.ExpenseService.CreateExpenseAsync(new CreateExpenseRequest
         {
@@ -54,6 +64,15 @@ public sealed class MonthlyBudgetingLoopTests
         AssertLoopState(afterPlannedExpense, liveBalance: 8000m, planRemaining: 1200m, savingsTransfersTotal: 0m);
         Assert.Equal(1200m, afterPlannedExpense.Month.Kpi.PlannedTotal);
         Assert.Equal(0m, afterPlannedExpense.Month.Kpi.SpentTotal);
+        AssertDashboardProjection(
+            afterPlannedExpense.Dashboard,
+            transactionCount: 1,
+            unplannedSpent: 0m,
+            categoryRemaining: 1200m,
+            plannedAmount: 1200m,
+            spentAmount: 0m,
+            incomeAmount: 5000m);
+        AssertNoStatisticsMonth(afterPlannedExpense.Statistics);
 
         await services.ExpenseService.UpdateExpenseAsync(new UpdateExpenseRequest
         {
@@ -68,6 +87,20 @@ public sealed class MonthlyBudgetingLoopTests
         var afterRealSpend = await ReadLoopStateAsync(services);
         AssertLoopState(afterRealSpend, liveBalance: 7550m, planRemaining: 750m, savingsTransfersTotal: 0m);
         Assert.Equal(450m, afterRealSpend.Month.Kpi.SpentTotal);
+        AssertDashboardProjection(
+            afterRealSpend.Dashboard,
+            transactionCount: 2,
+            unplannedSpent: 0m,
+            categoryRemaining: 750m,
+            plannedAmount: 1200m,
+            spentAmount: 450m,
+            incomeAmount: 5000m);
+        AssertStatisticsProjection(
+            afterRealSpend.Statistics,
+            plannedAmount: 1200m,
+            spentAmount: 450m,
+            unplannedSpentAmount: 0m,
+            savingsTransferredAmount: 0m);
 
         await services.ExpenseService.CreateExpenseAsync(new CreateExpenseRequest
         {
@@ -83,6 +116,20 @@ public sealed class MonthlyBudgetingLoopTests
         var afterUnexpectedExpense = await ReadLoopStateAsync(services);
         AssertLoopState(afterUnexpectedExpense, liveBalance: 7425m, planRemaining: 750m, savingsTransfersTotal: 0m);
         Assert.Equal(575m, afterUnexpectedExpense.Month.Kpi.SpentTotal);
+        AssertDashboardProjection(
+            afterUnexpectedExpense.Dashboard,
+            transactionCount: 3,
+            unplannedSpent: 125m,
+            categoryRemaining: 750m,
+            plannedAmount: 1200m,
+            spentAmount: 575m,
+            incomeAmount: 5000m);
+        AssertStatisticsProjection(
+            afterUnexpectedExpense.Statistics,
+            plannedAmount: 1200m,
+            spentAmount: 575m,
+            unplannedSpentAmount: 125m,
+            savingsTransferredAmount: 0m);
 
         await services.ExpenseService.CreateMonthSavingsTransferItemAsync(new CreateMonthSavingsTransferItemRequest
         {
@@ -95,6 +142,20 @@ public sealed class MonthlyBudgetingLoopTests
         var afterFutureSavingsTransfer = await ReadLoopStateAsync(services);
         AssertLoopState(afterFutureSavingsTransfer, liveBalance: 7425m, planRemaining: 750m, savingsTransfersTotal: 0m);
         Assert.Single(afterFutureSavingsTransfer.Month.SavingsTransfers);
+        AssertDashboardProjection(
+            afterFutureSavingsTransfer.Dashboard,
+            transactionCount: 3,
+            unplannedSpent: 125m,
+            categoryRemaining: 750m,
+            plannedAmount: 1200m,
+            spentAmount: 575m,
+            incomeAmount: 5000m);
+        AssertStatisticsProjection(
+            afterFutureSavingsTransfer.Statistics,
+            plannedAmount: 1200m,
+            spentAmount: 575m,
+            unplannedSpentAmount: 125m,
+            savingsTransferredAmount: 600m);
 
         await services.ExpenseService.CreateMonthSavingsTransferItemAsync(new CreateMonthSavingsTransferItemRequest
         {
@@ -107,6 +168,20 @@ public sealed class MonthlyBudgetingLoopTests
         var afterDueSavingsTransfer = await ReadLoopStateAsync(services);
         AssertLoopState(afterDueSavingsTransfer, liveBalance: 7125m, planRemaining: 750m, savingsTransfersTotal: 300m);
         Assert.Equal(2, afterDueSavingsTransfer.Month.SavingsTransfers.Count);
+        AssertDashboardProjection(
+            afterDueSavingsTransfer.Dashboard,
+            transactionCount: 4,
+            unplannedSpent: 125m,
+            categoryRemaining: 750m,
+            plannedAmount: 1200m,
+            spentAmount: 575m,
+            incomeAmount: 5000m);
+        AssertStatisticsProjection(
+            afterDueSavingsTransfer.Statistics,
+            plannedAmount: 1200m,
+            spentAmount: 575m,
+            unplannedSpentAmount: 125m,
+            savingsTransferredAmount: 900m);
 
         await services.ExpenseService.CloseMonthAsync(Year, Month, CancellationToken.None);
 
@@ -143,6 +218,20 @@ public sealed class MonthlyBudgetingLoopTests
         AssertLoopState(finalState, liveBalance: 7075m, planRemaining: 800m, savingsTransfersTotal: 300m);
         Assert.Equal(1300m, finalState.Month.Kpi.PlannedTotal);
         Assert.Equal(625m, finalState.Month.Kpi.SpentTotal);
+        AssertDashboardProjection(
+            finalState.Dashboard,
+            transactionCount: 4,
+            unplannedSpent: 125m,
+            categoryRemaining: 800m,
+            plannedAmount: 1300m,
+            spentAmount: 625m,
+            incomeAmount: 5000m);
+        AssertStatisticsProjection(
+            finalState.Statistics,
+            plannedAmount: 1300m,
+            spentAmount: 625m,
+            unplannedSpentAmount: 125m,
+            savingsTransferredAmount: 900m);
     }
 
     [Fact]
@@ -267,7 +356,10 @@ public sealed class MonthlyBudgetingLoopTests
     {
         var month = await services.ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
         var liveBalance = await services.IncomeService.GetLiveBalanceAsync(Year, Month, CancellationToken.None);
-        return new LoopState(month, liveBalance);
+        var dashboard = await services.ExpenseService.GetDashboardSummaryAsync(Year, Month, CancellationToken.None);
+        var statistics = await services.ExpenseService.GetYearStatisticsAsync(Year, CancellationToken.None);
+
+        return new LoopState(month, liveBalance, dashboard, statistics);
     }
 
     private static void AssertLoopState(
@@ -283,6 +375,64 @@ public sealed class MonthlyBudgetingLoopTests
         Assert.Equal(savingsTransfersTotal, state.LiveBalance.SavingsTransfersTotal);
     }
 
+    private static void AssertDashboardProjection(
+        DashboardSummaryDto dashboard,
+        int transactionCount,
+        decimal unplannedSpent,
+        decimal? categoryRemaining,
+        decimal plannedAmount,
+        decimal spentAmount,
+        decimal incomeAmount)
+    {
+        Assert.Equal(Year, dashboard.Year);
+        Assert.Equal(Month, dashboard.Month);
+        Assert.Equal(transactionCount, dashboard.TransactionCount);
+        Assert.Equal(unplannedSpent, dashboard.UnplannedSpentTotal);
+
+        var timelineMonth = Assert.Single(dashboard.SavingsTimeline, x => x.Month == Month);
+        Assert.Equal(plannedAmount, timelineMonth.PlannedAmount);
+        Assert.Equal(spentAmount, timelineMonth.SpentAmount);
+        Assert.Equal(incomeAmount, timelineMonth.IncomeAmount);
+        Assert.Equal(0m, timelineMonth.SavedAmount);
+
+        if (categoryRemaining.HasValue)
+        {
+            var category = Assert.Single(dashboard.CategoryRemainingItems);
+            Assert.Equal("Dom", category.CategoryName);
+            Assert.Equal(categoryRemaining.Value, category.RemainingAmount);
+        }
+        else
+        {
+            Assert.Empty(dashboard.CategoryRemainingItems);
+        }
+    }
+
+    private static void AssertStatisticsProjection(
+        YearStatisticsDto statistics,
+        decimal plannedAmount,
+        decimal spentAmount,
+        decimal unplannedSpentAmount,
+        decimal savingsTransferredAmount)
+    {
+        var month = Assert.Single(statistics.MonthlyFinance, x => x.Month == Month);
+
+        Assert.Equal(Year, statistics.Year);
+        Assert.Contains(Month, statistics.PopulatedMonths);
+        Assert.Equal(5000m, month.IncomeAmount);
+        Assert.Equal(plannedAmount, month.PlannedAmount);
+        Assert.Equal(spentAmount, month.SpentAmount);
+        Assert.Equal(unplannedSpentAmount, month.UnplannedSpentAmount);
+        Assert.Equal(savingsTransferredAmount, month.SavingsTransferredAmount);
+        Assert.Equal(0m, month.SavedAmount);
+    }
+
+    private static void AssertNoStatisticsMonth(YearStatisticsDto statistics)
+    {
+        Assert.Equal(Year, statistics.Year);
+        Assert.DoesNotContain(Month, statistics.PopulatedMonths);
+        Assert.DoesNotContain(statistics.MonthlyFinance, x => x.Month == Month);
+    }
+
     private static DbContextOptions<ApplicationDbContext> NewOptions()
     {
         return new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -293,8 +443,10 @@ public sealed class MonthlyBudgetingLoopTests
     private sealed record LoopServices(ExpenseService ExpenseService, IncomeService IncomeService);
 
     private sealed record LoopState(
-        HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto.MonthPlanDto Month,
-        HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto.LiveBalanceDto LiveBalance);
+        MonthPlanDto Month,
+        LiveBalanceDto LiveBalance,
+        DashboardSummaryDto Dashboard,
+        YearStatisticsDto Statistics);
 
     private sealed class ScopedInMemoryDbContextFactory(
         DbContextOptions<ApplicationDbContext> options,

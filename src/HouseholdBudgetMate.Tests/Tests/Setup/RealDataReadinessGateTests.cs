@@ -56,6 +56,24 @@ public sealed class RealDataReadinessGateTests
         renderYaml.Should().Contain("databases:\n  - name: household-budget-mate-db");
     }
 
+    [Fact]
+    public void AdminConfig_Should_Keep_App_Checks_Separate_From_Manual_Evidence()
+    {
+        var adminConfig = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/AdminConfig.razor");
+
+        adminConfig.Should().Contain("Real data readiness");
+        adminConfig.Should().Contain("Checklist dla wejścia w realne dane: automatyczne kontrole aplikacji oraz ręczne evidence przed");
+        adminConfig.Should().Contain("App checks ready");
+        adminConfig.Should().Contain("App checks need attention");
+        adminConfig.Should().Contain("Automatyczne kontrole");
+        adminConfig.Should().Contain("Ręczne evidence");
+        adminConfig.Should().Contain("Zapisuj w:");
+        adminConfig.Should().Contain("Free Render jest zaakceptowanym ryzykiem pilota MVP");
+        adminConfig.Should().Contain("Decyzja real-data wymaga ręcznego `pg_dump`, restore smoke testu i przeglądu migracji.");
+        adminConfig.Should().NotContain("real data approved");
+        adminConfig.Should().NotContain("all clear");
+    }
+
     private static void AssertTableStatus(string markdown, string rowMarker, string expectedStatus)
     {
         var row = markdown

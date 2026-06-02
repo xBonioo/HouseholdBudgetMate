@@ -20,9 +20,11 @@ public sealed class RealDataReadinessServiceTests
 
         var report = await service.GetReportAsync(CancellationToken.None);
 
-        report.IsAppCheckReady.Should().BeTrue();
+        report.IsAppCheckReady.Should().BeTrue("manual evidence remains separate from automated app approval");
         report.EvidencePath.Should().Contain("readiness-evidence.md");
+        report.ManualItems.Should().HaveCount(4);
         report.ManualItems.Select(x => x.Name).Should().Contain([
+            "Accepted Free Render risk",
             "Manual pg_dump",
             "Restore smoke test",
             "Migration review"

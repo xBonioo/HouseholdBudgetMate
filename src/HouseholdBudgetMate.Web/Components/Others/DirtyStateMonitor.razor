@@ -1,0 +1,99 @@
+@using System.Text.Json
+@using HouseholdBudgetMate.Web.Services
+@implements IDisposable
+
+@inject UnsavedChangesTracker UnsavedChangesTracker
+
+@code {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
+    private IDisposable? _registration;
+    private string? _baselineSnapshot;
+    private string? _currentSnapshot;
+    private object? _lastResetKey;
+    private bool _hasResetKey;
+    private bool _lastIsDirty;
+
+    [Parameter] public object? CurrentState { get; set; }
+    [Parameter] public object? ResetKey { get; set; }
+    [Parameter] public bool Enabled { get; set; } = true;
+    [Parameter] public string Label { get; set; } = "formularz";
+
+    protected override void OnInitialized()
+    {
+        _registration = UnsavedChangesTracker.Register(Label, IsDirty);
+    }
+
+    protected override void OnParametersSet()
+    {
+        _currentSnapshot = CreateSnapshot(CurrentState);
+        var resetKeyChanged = HasResetKeyChanged();
+
+        if (_baselineSnapshot is null || !Enabled || resetKeyChanged)
+        {
+            _baselineSnapshot = _currentSnapshot;
+        }
+
+        NotifyIfDirtyChanged();
+    }
+
+    public void Reset()
+    {
+        _currentSnapshot = CreateSnapshot(CurrentState);
+        _baselineSnapshot = _currentSnapshot;
+        NotifyIfDirtyChanged(force: true);
+    }
+
+    public void Reset(object? currentState)
+    {
+        CurrentState = currentState;
+        Reset();
+    }
+
+    private bool IsDirty()
+    {
+        return Enabled
+               && _baselineSnapshot is not null
+               && !string.Equals(_baselineSnapshot, _currentSnapshot, StringComparison.Ordinal);
+    }
+
+    private bool HasResetKeyChanged()
+    {
+        if (!_hasResetKey)
+        {
+            _hasResetKey = true;
+            _lastResetKey = ResetKey;
+            return true;
+        }
+
+        if (Equals(_lastResetKey, ResetKey))
+        {
+            return false;
+        }
+
+        _lastResetKey = ResetKey;
+        return true;
+    }
+
+    private void NotifyIfDirtyChanged(bool force = false)
+    {
+        var isDirty = IsDirty();
+        if (!force && isDirty == _lastIsDirty)
+        {
+            return;
+        }
+
+        _lastIsDirty = isDirty;
+        UnsavedChangesTracker.NotifyChanged();
+    }
+
+    private static string CreateSnapshot(object? state)
+    {
+        return JsonSerializer.Serialize(state, SerializerOptions);
+    }
+
+    public void Dispose()
+    {
+        _registration?.Dispose();
+    }
+}

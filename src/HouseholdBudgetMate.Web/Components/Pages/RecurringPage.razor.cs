@@ -10,6 +10,7 @@ using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Abstractions.Parsing;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Web.Components.Dialogs;
+using HouseholdBudgetMate.Web.Components.Others;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
@@ -69,6 +70,8 @@ public partial class RecurringPage
     private string? _createExpenseNameError;
     private string? _createExpenseAmountError;
     private string? _createExpenseCategoryError;
+    private DirtyStateMonitor? _dirtyStateMonitor;
+    private int _dirtyResetVersion;
 
     private string CurrentMonthPlanHref => $"/plan/{_currentYear}/{_currentMonth}";
 
@@ -111,6 +114,7 @@ public partial class RecurringPage
             EnsureCreateDefaults();
             RebuildPresentationModels();
             _hasLoaded = true;
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {
@@ -669,6 +673,31 @@ public partial class RecurringPage
     {
         return $"{value.ToString("0.00", _culture)} PLN";
     }
+
+    private void MarkDirtyStatePristine()
+    {
+        _dirtyResetVersion++;
+        _dirtyStateMonitor?.Reset(GetDirtyState());
+    }
+
+    private object GetDirtyState() => new
+    {
+        NewIncome = new
+        {
+            _newIncomeDefinition.Name,
+            Amount = _createIncomeAmountInput,
+            _newIncomeDefinition.DayOfMonth,
+            _newIncomeDefinition.AccountId
+        },
+        NewExpense = new
+        {
+            _newExpenseDefinition.Name,
+            _newExpenseDefinition.CategoryId,
+            _newExpenseDefinition.TagId,
+            Amount = _createExpenseAmountInput,
+            _newExpenseDefinition.ShowRemainingInUI
+        }
+    };
 
     private sealed record RecurringOverviewModel(
         decimal ActiveIncomeAmount = 0,

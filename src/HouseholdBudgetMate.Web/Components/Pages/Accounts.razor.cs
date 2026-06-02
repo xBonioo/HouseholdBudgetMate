@@ -11,6 +11,7 @@ using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Abstractions.Parsing;
 using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Web.Components.Dialogs;
+using HouseholdBudgetMate.Web.Components.Others;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 
@@ -59,6 +60,8 @@ public partial class Accounts
 
     private UpdateAccountRequest? _editModel;
     private string? _editNameError;
+    private DirtyStateMonitor? _dirtyStateMonitor;
+    private int _dirtyResetVersion;
 
     private int _selectedYear;
     private int _selectedMonth;
@@ -124,6 +127,7 @@ public partial class Accounts
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
             _hasLoaded = true;
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {
@@ -237,6 +241,7 @@ public partial class Accounts
             _liveBalance = await IncomeService.GetLiveBalanceAsync(_selectedYear, _selectedMonth, CancellationToken.None);
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {
@@ -456,6 +461,7 @@ public partial class Accounts
             Name = account.Name,
             Type = account.Type
         };
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveEditAsync()
@@ -496,6 +502,7 @@ public partial class Accounts
     {
         _editModel = null;
         _editNameError = null;
+        MarkDirtyStatePristine();
     }
 
     private async Task DeleteAccountAsync(AccountBalanceRow account)
@@ -820,6 +827,37 @@ public partial class Accounts
     }
 
     private readonly record struct MonthOption(int Value, string Label, string ShortLabel);
+
+    private void MarkDirtyStatePristine()
+    {
+        _dirtyResetVersion++;
+        _dirtyStateMonitor?.Reset(GetDirtyState());
+    }
+
+    private object GetDirtyState() => new
+    {
+        Period = new
+        {
+            _selectedYear,
+            _selectedMonth
+        },
+        Balances = _selectedMonthAmountInputs
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => new
+            {
+                AccountId = kvp.Key,
+                Input = kvp.Value
+            })
+            .ToList(),
+        EditAccount = _editModel is null
+            ? null
+            : new
+            {
+                _editModel.Id,
+                _editModel.Name,
+                _editModel.Type
+            }
+    };
 
     private sealed record AccountsOverviewModel(
         decimal LiveBalance = 0,

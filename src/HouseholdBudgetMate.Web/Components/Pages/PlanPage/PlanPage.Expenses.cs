@@ -97,6 +97,7 @@ public partial class PlanPage
         }
 
         _isCreateExpenseFormVisible = !_isCreateExpenseFormVisible;
+        MarkDirtyStatePristine();
     }
 
     private Task StartEditAsync(ExpenseDto expense)
@@ -128,6 +129,7 @@ public partial class PlanPage
         _editExpenseActualAmountInput = FormatDecimalInput(_editExpense.ActualAmount);
 
         _expenseIdPendingScrollIntoView = expense.Id;
+        MarkDirtyStatePristine();
         return Task.CompletedTask;
     }
 
@@ -139,6 +141,7 @@ public partial class PlanPage
         _editExpenseRootTagId = null;
         _editExpensePlannedAmountInput = FormatDecimalInput(0);
         _editExpenseActualAmountInput = FormatDecimalInput(0);
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveEditAsync()

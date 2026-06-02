@@ -173,6 +173,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IAdminConfigurationService, AdminConfigurationService>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
+builder.Services.AddScoped<UnsavedChangesTracker>();
 
 builder.Services.AddScoped<IAppEventPublisher, LoggingAppEventPublisher>();
 builder.Services.AddScoped<CoreDataSeedService>();

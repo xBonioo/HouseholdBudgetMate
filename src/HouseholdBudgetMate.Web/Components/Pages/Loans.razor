@@ -14,13 +14,19 @@
 @inject IJSRuntime JsRuntime
 @inject ISnackbar Snackbar
 
+<DirtyStateMonitor @ref="_dirtyStateMonitor"
+                   CurrentState="GetDirtyState()"
+                   ResetKey="_dirtyResetVersion"
+                   Enabled="@(!_isLoading)"
+                   Label="kredyty"/>
+
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
 
 <MudPaper Class="hb-page-header">
     <MudText Typo="Typo.h4">Kredyty</MudText>
-    <MudText Typo="Typo.body2" Class="hb-muted">Gotówkowy = stałe oprocentowanie. Hipoteczny = zmienny WIBOR + marżą
+    <MudText Typo="Typo.body2" Class="hb-muted">Gotówkowy = stałe oprocentowanie. Hipoteczny = zmienny WIBOR + marża
         albo stałe 5 lat, potem WIBOR + marża.
     </MudText>
 </MudPaper>
@@ -468,6 +474,9 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <DirtyStateMonitor CurrentState="GetInstallmentDialogDirtyState()"
+                           Enabled="_editDialogOpen"
+                           Label="edycja raty"/>
         @if (_editingInstallment is not null)
         {
             <MudText Typo="Typo.body2" Class="mb-4 hb-muted">
@@ -500,6 +509,9 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <DirtyStateMonitor CurrentState="GetPrepaymentDialogDirtyState()"
+                           Enabled="_prepaymentDialogOpen"
+                           Label="nadplata raty"/>
         <MudGrid>
             <MudItem xs="12">
                 <MudTextField T="string" @bind-Value="_prepaymentAmountInput"
@@ -519,7 +531,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                   OnClick="() => { _prepaymentDialogOpen = false; _prepaymentInstallment = null; _prepaymentAmountInput = string.Empty; }">
+                   OnClick="CancelPrepayment">
             Anuluj
         </MudButton>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyPrepaymentAsync">Nadpłać</MudButton>
@@ -551,6 +563,8 @@
     private bool _editDialogOpen;
     private string _editInstallmentPrincipalInput = string.Empty;
     private string _editInstallmentInterestInput = string.Empty;
+    private DirtyStateMonitor? _dirtyStateMonitor;
+    private int _dirtyResetVersion;
 
     private readonly CreateLoanRequest _createModel = new()
     {
@@ -609,6 +623,7 @@
             {
                 _selectedLoan = _loans.FirstOrDefault(x => x.Id == _selectedLoan.Id);
             }
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {
@@ -801,6 +816,7 @@
     {
         _selectedLoan = _loans.FirstOrDefault(x => x.Id == loanId);
         _selectedLoanViewMode = LoanViewMode.Schedule;
+        MarkDirtyStatePristine();
     }
 
     private void StartEdit(LoanDto loan)
@@ -825,6 +841,7 @@
         _editEndDate = _selectedLoan.EndDate.ToDateTime(TimeOnly.MinValue);
 
         ResetLoanChargeForm(_selectedLoan.Id);
+        MarkDirtyStatePristine();
     }
 
     private async Task CreateLoanChargeAsync()
@@ -970,6 +987,7 @@
         _editInstallmentPrincipalInput = string.Empty;
         _editInstallmentInterestInput = string.Empty;
         _editDialogOpen = true;
+        MarkDirtyStatePristine();
     }
 
     private void CancelEditInstallment()
@@ -978,6 +996,7 @@
         _editingInstallment = null;
         _editInstallmentPrincipalInput = string.Empty;
         _editInstallmentInterestInput = string.Empty;
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveInstallmentOverrideAsync()
@@ -1026,6 +1045,15 @@
         _prepaymentInstallment = installment;
         _prepaymentAmountInput = string.Empty;
         _prepaymentDialogOpen = true;
+        MarkDirtyStatePristine();
+    }
+
+    private void CancelPrepayment()
+    {
+        _prepaymentDialogOpen = false;
+        _prepaymentInstallment = null;
+        _prepaymentAmountInput = string.Empty;
+        MarkDirtyStatePristine();
     }
 
     private async Task ApplyPrepaymentAsync()
@@ -1091,6 +1119,83 @@
         _newLoanChargeStartDate = DateTime.Today;
         _newLoanChargeEndDate = null;
     }
+
+    private void MarkDirtyStatePristine()
+    {
+        _dirtyResetVersion++;
+        _dirtyStateMonitor?.Reset(GetDirtyState());
+    }
+
+    private object GetDirtyState() => new
+    {
+        CreateLoan = new
+        {
+            _createModel.Name,
+            _createModel.LoanType,
+            _createModel.TagId,
+            Principal = _createPrincipalInput,
+            _createAlreadyRepaying,
+            OriginalPrincipal = _createOriginalPrincipalInput,
+            _createModel.GracePeriodMonths,
+            Rate = _createRateInput,
+            _createModel.InterestMode,
+            _createModel.WiborPeriodType,
+            Margin = _createMarginRateInput,
+            InitialWibor = _createInitialWiborInput,
+            _createStartDate,
+            _createEndDate,
+            _createModel.RepaymentDayOfMonth
+        },
+        EditLoan = _selectedLoan is null || _selectedLoanViewMode != LoanViewMode.Edit
+            ? null
+            : new
+            {
+                _selectedLoan.Id,
+                _editModel.Name,
+                _editModel.TagId,
+                _editModel.IsActive,
+                OriginalPrincipal = _editOriginalPrincipalInput,
+                _editModel.GracePeriodMonths,
+                _editStartDate,
+                _editEndDate,
+                _editModel.RepaymentDayOfMonth
+            },
+        RateEntry = _selectedLoan is null || _selectedLoanViewMode != LoanViewMode.Edit || _selectedLoan.LoanType != LoanType.Mortgage
+            ? null
+            : new
+            {
+                _selectedLoan.Id,
+                _rateEffectiveFrom,
+                ReferenceRate = _newReferenceRateInput
+            },
+        LoanCharge = _selectedLoan is null || _selectedLoanViewMode != LoanViewMode.Edit
+            ? null
+            : new
+            {
+                _selectedLoan.Id,
+                _newLoanCharge.Name,
+                _newLoanCharge.ChargeType,
+                _newLoanCharge.FrequencyType,
+                Amount = _newLoanChargeAmountInput,
+                _newLoanCharge.IsPercentageBased,
+                _newLoanChargeStartDate,
+                _newLoanChargeEndDate
+            }
+    };
+
+    private object GetInstallmentDialogDirtyState() => new
+    {
+        InstallmentId = _editingInstallment?.Id,
+        Principal = _editInstallmentPrincipalInput,
+        Interest = _editInstallmentInterestInput
+    };
+
+    private object GetPrepaymentDialogDirtyState() => new
+    {
+        InstallmentId = _prepaymentInstallment?.Id,
+        Amount = _prepaymentAmountInput,
+        _prepaymentStrategy
+    };
 
     private IReadOnlyList<TagDto> GetLoanRootTags(int? selectedTagId)
     {

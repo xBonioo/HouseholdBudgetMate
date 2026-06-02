@@ -12,6 +12,12 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
+<DirtyStateMonitor @ref="_dirtyStateMonitor"
+                   CurrentState="GetDirtyState()"
+                   ResetKey="_dirtyResetVersion"
+                   Enabled="@(!_isLoading)"
+                   Label="kategorie"/>
+
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
     <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true"/>
 </MudOverlay>
@@ -450,6 +456,8 @@
     private static readonly CultureInfo Culture = new("pl-PL");
     private string _newCategoryEnvelopeLimitInput = string.Empty;
     private string _editCategoryEnvelopeLimitInput = string.Empty;
+    private DirtyStateMonitor? _dirtyStateMonitor;
+    private int _dirtyResetVersion;
 
     private static readonly Regex HexColorRegex = new("^#(?:[0-9a-fA-F]{6})$", RegexOptions.Compiled);
 
@@ -471,6 +479,7 @@
         {
             _categories = (await CategoryService.GetAllAsync(CancellationToken.None)).ToList();
             _expandedCategoryIds.RemoveWhere(categoryId => _categories.All(x => x.Id != categoryId));
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {
@@ -545,6 +554,7 @@
         _editCategoryEnvelopeLimitInput = category.EnvelopeLimit.HasValue
             ? category.EnvelopeLimit.Value.ToString("0.##", Culture)
             : string.Empty;
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveCategoryEditAsync()
@@ -591,6 +601,7 @@
     {
         _editCategory = null;
         _editCategoryEnvelopeLimitInput = string.Empty;
+        MarkDirtyStatePristine();
     }
 
     private async Task DeleteCategoryAsync(CategoryDto category)
@@ -666,6 +677,7 @@
             ParentTagId = tag.ParentTagId,
             SupportsLineItemsOverride = tag.SupportsLineItemsOverride
         };
+        MarkDirtyStatePristine();
     }
 
     private IReadOnlyList<TagDto> GetRootTagOptions(int categoryId, int? excludeTagId)
@@ -747,6 +759,7 @@
     private void CancelTagEdit()
     {
         _editTag = null;
+        MarkDirtyStatePristine();
     }
 
     private async Task DeleteTagAsync(int tagId)
@@ -774,6 +787,7 @@
         {
             _expandedCategoryIds.Remove(categoryId);
             _editTag = null;
+            MarkDirtyStatePristine();
         }
     }
 
@@ -798,4 +812,50 @@
     {
         return $"{amount.ToString("N2", Culture)} zł";
     }
+
+    private void MarkDirtyStatePristine()
+    {
+        _dirtyResetVersion++;
+        _dirtyStateMonitor?.Reset(GetDirtyState());
+    }
+
+    private object GetDirtyState() => new
+    {
+        NewCategory = new
+        {
+            _newCategory.Name,
+            _newCategory.Color,
+            Limit = _newCategoryEnvelopeLimitInput,
+            _newCategory.SupportsLineItems
+        },
+        EditCategory = _editCategory is null
+            ? null
+            : new
+            {
+                _editCategory.Id,
+                _editCategory.Name,
+                _editCategory.Color,
+                Limit = _editCategoryEnvelopeLimitInput,
+                _editCategory.SupportsLineItems
+            },
+        EditTag = _editTag is null
+            ? null
+            : new
+            {
+                _editTag.Id,
+                _editTag.Name,
+                _editTag.ParentTagId,
+                _editTag.SupportsLineItemsOverride
+            },
+        NewTags = _tagCreateModels
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => new
+            {
+                CategoryId = kvp.Key,
+                kvp.Value.Name,
+                kvp.Value.ParentTagId,
+                kvp.Value.SupportsLineItemsOverride
+            })
+            .ToList()
+    };
 }

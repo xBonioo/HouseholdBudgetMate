@@ -7,6 +7,7 @@
 
 <MudDialog>
     <DialogContent>
+        <DirtyStateMonitor CurrentState="GetDirtyState()" Label="nowe konto"/>
         <ActionForm OnSubmit="Save">
         <MudStack Spacing="3">
             <div>
@@ -97,4 +98,10 @@
         MudDialog.Cancel();
     }
 
+    private object GetDirtyState() => new
+    {
+        Model.Name,
+        Model.Type,
+        Balance = _balanceInput
+    };
 }

@@ -2,6 +2,7 @@
 
 <MudDialog>
     <DialogContent>
+        <DirtyStateMonitor CurrentState="GetDirtyState()" Label="@Label"/>
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle1">@Label</MudText>
             <MudTextField T="string"
@@ -140,4 +141,9 @@
 
         return new string(value.Where(char.IsDigit).Take(MaxLength).ToArray());
     }
+
+    private object GetDirtyState() => new
+    {
+        Pin = _pin
+    };
 }

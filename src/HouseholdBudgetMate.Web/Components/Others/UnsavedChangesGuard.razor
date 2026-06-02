@@ -1,0 +1,63 @@
+@using HouseholdBudgetMate.Web.Services
+@using Microsoft.AspNetCore.Components.Routing
+@using MudBlazor
+@implements IDisposable
+
+@inject UnsavedChangesTracker UnsavedChangesTracker
+@inject IDialogService DialogService
+
+<NavigationLock ConfirmExternalNavigation="@UnsavedChangesTracker.HasUnsavedChanges"
+                OnBeforeInternalNavigation="ConfirmInternalNavigationAsync"/>
+
+@code {
+    private const string Message = "Masz niezapisane zmiany. Opuszczenie tej strony może spowodować ich utratę. Kontynuować?";
+    protected override void OnInitialized()
+    {
+        UnsavedChangesTracker.Changed += HandleUnsavedChangesChanged;
+    }
+
+    private async Task ConfirmInternalNavigationAsync(LocationChangingContext context)
+    {
+        if (!UnsavedChangesTracker.HasUnsavedChanges)
+        {
+            return;
+        }
+
+        var confirmed = await ConfirmNavigationAsync();
+        if (!confirmed)
+        {
+            context.PreventNavigation();
+        }
+    }
+
+    private async Task<bool> ConfirmNavigationAsync()
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(ConfirmDialog.Message)] = Message
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Niezapisane zmiany", parameters, options);
+        var result = await dialog.Result;
+
+        return result is { Canceled: false };
+    }
+
+    private void HandleUnsavedChangesChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        UnsavedChangesTracker.Changed -= HandleUnsavedChangesChanged;
+    }
+}

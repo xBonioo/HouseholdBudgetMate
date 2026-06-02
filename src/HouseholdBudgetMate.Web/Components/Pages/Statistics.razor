@@ -387,7 +387,7 @@
                     @for (var index = 0; index < _statistics.AccountBalanceMonths.Count; index++)
                     {
                         var monthIndex = index;
-                        <MudTd Style="white-space: nowrap;">@FormatMoney(item.MonthlyClosingBalances.ElementAtOrDefault(monthIndex))</MudTd>
+                        <MudTd Style="white-space: nowrap;">@FormatOptionalMoney(item.MonthlyClosingBalances.ElementAtOrDefault(monthIndex))</MudTd>
                     }
                 </RowTemplate>
             </MudTable>
@@ -676,6 +676,11 @@
     private string FormatMoney(decimal value)
     {
         return $"{value.ToString("0.00", _culture)}\u00A0zł";
+    }
+
+    private string FormatOptionalMoney(decimal? value)
+    {
+        return value.HasValue ? FormatMoney(value.Value) : "-";
     }
 
     private string GetYearSummaryTitle()

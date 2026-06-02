@@ -5,6 +5,7 @@ using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
+using HouseholdBudgetMate.Web.Components.Others;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;
@@ -141,6 +142,8 @@ public partial class PlanPage : ComponentBase
     #region Navigation / UX
 
     private int? _expenseIdPendingScrollIntoView;
+    private DirtyStateMonitor? _dirtyStateMonitor;
+    private int _dirtyResetVersion;
 
     #endregion
 
@@ -207,6 +210,91 @@ public partial class PlanPage : ComponentBase
         public double ProgressPercent { get; init; }
         public Color Color { get; init; }
     }
+
+    private void MarkDirtyStatePristine()
+    {
+        _dirtyResetVersion++;
+        _dirtyStateMonitor?.Reset(GetDirtyState());
+    }
+
+    private object GetDirtyState() => new
+    {
+        SavingsTransfer = new
+        {
+            _newSavingsTransfer.TransferDate,
+            Amount = _newSavingsTransferAmountInput
+        },
+        EditSavingsTransfer = _editSavingsTransfer is null
+            ? null
+            : new
+            {
+                _editSavingsTransfer.Id,
+                _editSavingsTransferDate,
+                Amount = _editSavingsTransferAmountInput
+            },
+        NewIncome = new
+        {
+            _newIncome.Name,
+            _newIncome.AccountId,
+            Amount = _newIncomeAmountInput,
+            _newIncome.ExpectedDayOfMonth
+        },
+        EditIncome = _editIncome is null
+            ? null
+            : new
+            {
+                _editIncome.Id,
+                _editIncome.Name,
+                _editIncome.AccountId,
+                Amount = _editIncomeAmountInput,
+                _editIncomeDate
+            },
+        NewExpense = new
+        {
+            _newExpense.Name,
+            _newExpense.CategoryId,
+            _newExpenseRootTagId,
+            _newExpense.TagId,
+            PlannedAmount = _newExpensePlannedAmountInput,
+            ActualAmount = _newExpenseActualAmountInput,
+            _newExpense.ShowRemainingInUI
+        },
+        EditExpense = _editExpense is null
+            ? null
+            : new
+            {
+                _editExpense.Id,
+                _editExpense.Name,
+                _editExpense.CategoryId,
+                _editExpenseRootTagId,
+                _editExpense.TagId,
+                PlannedAmount = _editExpensePlannedAmountInput,
+                ActualAmount = _editExpenseActualAmountInput,
+                _editExpense.ShowRemainingInUI
+            },
+        NewLineItems = _lineItemCreateModels
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => new
+            {
+                ExpenseId = kvp.Key,
+                kvp.Value.Description,
+                Amount = _lineItemCreateAmountInputs.GetValueOrDefault(kvp.Key),
+                kvp.Value.OccurredAt,
+                kvp.Value.TagId
+            })
+            .ToList(),
+        EditLineItem = _editLineItem is null
+            ? null
+            : new
+            {
+                ExpenseId = _editLineItemExpenseId,
+                _editLineItem.Id,
+                _editLineItem.Description,
+                Amount = _editLineItemAmountInput,
+                _editLineItemDate,
+                _editLineItem.TagId
+            }
+    };
 
     #endregion
 }

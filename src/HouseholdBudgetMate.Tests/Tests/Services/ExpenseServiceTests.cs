@@ -1352,6 +1352,85 @@ public sealed class ExpenseServiceTests
     }
 
     /// <summary>
+    /// Verifies that AccountBalances uses null for months before an account became active
+    /// so the UI can render the cell as not applicable instead of as a zero balance.
+    /// </summary>
+    [Fact]
+    public async Task GetYearStatisticsAsync_Should_Mark_Months_Before_Account_Activation_As_Not_Applicable()
+    {
+        int restoredAccountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Transport", Color = "#1E88E5" };
+            var baseAccount = new Account { Name = "Bank", Type = (int)AccountType.Bank, Order = 1 };
+            var restoredAccount = new Account
+            {
+                Name = "Millenium",
+                Type = (int)AccountType.Bank,
+                Order = 2,
+                ActiveFromUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+            };
+
+            context.Categories.Add(category);
+            context.Accounts.AddRange(baseAccount, restoredAccount);
+            await context.SaveChangesAsync();
+
+            restoredAccountId = restoredAccount.Id;
+
+            foreach (var month in new[] { 1, 3 })
+            {
+                var monthPlan = new MonthPlan { Year = 2026, Month = month };
+                context.MonthPlans.Add(monthPlan);
+                await context.SaveChangesAsync();
+
+                context.Expenses.Add(new Expense
+                {
+                    MonthPlanId = monthPlan.Id,
+                    Order = 1,
+                    Name = $"Paliwo {month}",
+                    CategoryId = category.Id,
+                    PlannedAmount = 100m,
+                    ActualAmount = 100m,
+                    ShowRemainingInUI = true
+                });
+            }
+
+            context.AccountMonthBalances.AddRange(
+                new AccountMonthBalance
+                {
+                    AccountId = baseAccount.Id,
+                    Year = 2026,
+                    Month = 1,
+                    ClosingBalance = 1000m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = baseAccount.Id,
+                    Year = 2026,
+                    Month = 3,
+                    ClosingBalance = 900m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = restoredAccount.Id,
+                    Year = 2026,
+                    Month = 3,
+                    ClosingBalance = 500m
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.GetYearStatisticsAsync(2026, CancellationToken.None);
+
+        Assert.Equal([1, 3], result.AccountBalanceMonths);
+        var restoredAccountRow = Assert.Single(result.AccountBalances, x => x.AccountId == restoredAccountId);
+        Assert.Equal([null, 500m], restoredAccountRow.MonthlyClosingBalances);
+    }
+
+    /// <summary>
     /// Seeds an expense with line items tagged to a child tag; the parent expense uses the parent tag.
     /// Verifies that GetYearStatisticsAsync rolls up line-item amounts to both child and parent tag statistics.
     /// </summary>

@@ -1423,6 +1423,99 @@ public sealed class IncomeServiceTests
     }
 
     /// <summary>
+    /// GetLiveBalanceAsync includes the previous-month closing balance for an account
+    /// activated during the selected month when that balance was explicitly recorded.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Include_Previous_Month_Balance_For_Account_Activated_In_Selected_Month_When_Recorded()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var baseAccount = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            var restoredAccount = new Account
+            {
+                Name = "Millenium",
+                Type = (int)AccountType.Bank,
+                ActiveFromUtc = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc)
+            };
+            context.Accounts.AddRange(baseAccount, restoredAccount);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.AddRange(
+                new AccountMonthBalance
+                {
+                    AccountId = baseAccount.Id,
+                    Year = 2026,
+                    Month = 3,
+                    ClosingBalance = 205.81m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = restoredAccount.Id,
+                    Year = 2026,
+                    Month = 3,
+                    ClosingBalance = 104.88m
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(310.69m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
+    /// GetLiveBalanceAsync sums recorded previous-month non-savings balances even when
+    /// an account was archived at the beginning of the selected month.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Include_Previous_Month_Balance_For_Account_Archived_In_Selected_Month_When_Recorded()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var baseAccount = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            var archivedAccount = new Account
+            {
+                Name = "Zamkniete konto",
+                Type = (int)AccountType.Bank,
+                IsArchived = true,
+                ArchivedAtUtc = DefaultNowUtc
+            };
+            context.Accounts.AddRange(baseAccount, archivedAccount);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.AddRange(
+                new AccountMonthBalance
+                {
+                    AccountId = baseAccount.Id,
+                    Year = 2026,
+                    Month = 3,
+                    ClosingBalance = 205.81m
+                },
+                new AccountMonthBalance
+                {
+                    AccountId = archivedAccount.Id,
+                    Year = 2026,
+                    Month = 3,
+                    ClosingBalance = 104.88m
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.True(liveBalance.HasCompleteBalanceBase);
+        Assert.Empty(liveBalance.MissingBalanceAccountNames);
+        Assert.Equal(310.69m, liveBalance.AccountsBaseTotal);
+    }
+
+    /// <summary>
     /// GetLiveBalanceAsync computes a closed historical month from the latest stored prior
     /// balances and does not retroactively require missing immediately preceding-month rows.
     /// </summary>

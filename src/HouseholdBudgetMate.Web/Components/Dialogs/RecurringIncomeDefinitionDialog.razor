@@ -7,6 +7,7 @@
 
 <MudDialog>
     <DialogContent>
+        <DirtyStateMonitor CurrentState="GetDirtyState()" Label="edycja cyklicznego wplywu"/>
         <ActionForm OnSubmit="Save">
         <MudStack Spacing="3">
             <div>
@@ -136,4 +137,13 @@
     {
         return errors.Any(error => !string.IsNullOrWhiteSpace(error));
     }
+
+    private object GetDirtyState() => new
+    {
+        Model.Name,
+        Amount = _amountInput,
+        Model.DayOfMonth,
+        Model.AccountId,
+        Model.IsActive
+    };
 }

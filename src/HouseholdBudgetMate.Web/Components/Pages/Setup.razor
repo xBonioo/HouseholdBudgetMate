@@ -9,6 +9,10 @@
 @inject RuntimeConfigurationState RuntimeConfigurationState
 @inject NavigationManager NavigationManager
 
+<DirtyStateMonitor @ref="_dirtyStateMonitor"
+                   CurrentState="GetDirtyState()"
+                   Label="pierwsza konfiguracja"/>
+
 <MudPaper Class="pa-4 hb-panel">
     <MudText Typo="Typo.h4">Pierwsza konfiguracja aplikacji</MudText>
     <MudText Typo="Typo.body2" Class="mt-1 mb-4">
@@ -84,6 +88,7 @@
 @code {
     private readonly SetupInputModel _model = new();
     private EditContext _editContext = null!;
+    private DirtyStateMonitor? _dirtyStateMonitor;
     private bool _isSaving;
     private string? _errorMessage;
 
@@ -118,6 +123,7 @@
                 return;
             }
 
+            _dirtyStateMonitor?.Reset(GetDirtyState());
             NavigationManager.NavigateTo("/", forceLoad: true);
         }
         finally
@@ -132,4 +138,17 @@
             ? HouseholdMode.SharedBudget
             : HouseholdMode.SeparateBudget;
     }
+
+    private object GetDirtyState() => new
+    {
+        _model.Host,
+        _model.Port,
+        _model.Username,
+        _model.Password,
+        _model.Database,
+        _model.AppUsername,
+        _model.AppPin,
+        _model.HouseholdMode,
+        _model.SharedWithUserIds
+    };
 }

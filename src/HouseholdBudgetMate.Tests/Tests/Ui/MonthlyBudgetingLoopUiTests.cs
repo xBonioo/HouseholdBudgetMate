@@ -39,7 +39,10 @@ public sealed class MonthlyBudgetingLoopUiTests
         dashboard.Should().Contain("Pozostało w planie");
         dashboard.Should().Contain("Live balance");
         dashboard.Should().Contain("Płynność miesiąca");
+        dashboard.Should().Contain("Saldo poprzedniego miesiąca");
+        dashboard.Should().Contain("AccountsBaseTotal");
         dashboard.Should().Contain("IncomeService.GetLiveBalanceAsync");
+        dashboard.Should().NotContain("CalculateCheckingAccountsBalance");
 
         accountsMarkup.Should().Contain("Live balance");
         accountsCode.Should().Contain("IncomeService.GetLiveBalanceAsync");

@@ -49,6 +49,7 @@ public partial class PlanPage
         };
         _editSavingsTransferDate = item.TransferDate;
         _editSavingsTransferAmountInput = FormatDecimalInput(item.Amount);
+        MarkDirtyStatePristine();
     }
 
     private void CancelSavingsTransferEdit()
@@ -56,6 +57,7 @@ public partial class PlanPage
         _editSavingsTransfer = null;
         _editSavingsTransferDate = new DateOnly(Year, Month, 1);
         _editSavingsTransferAmountInput = FormatDecimalInput(0);
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveSavingsTransferEditAsync()

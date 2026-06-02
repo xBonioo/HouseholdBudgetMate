@@ -2,6 +2,12 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Categories
 @using MudBlazor
 
+<DirtyStateMonitor @ref="_dirtyStateMonitor"
+                   CurrentState="GetDirtyState()"
+                   ResetKey="_dirtyResetVersion"
+                   Enabled="@(!_isInitialLoading && _loadError is null)"
+                   Label="cykliczne"/>
+
 <div class="recurring-dashboard">
     @if (!string.IsNullOrWhiteSpace(_loadError))
     {

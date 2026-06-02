@@ -7,6 +7,10 @@
 @inject ILocalAccessGrantService LocalAccessGrantService
 @inject NavigationManager NavigationManager
 
+<DirtyStateMonitor @ref="_dirtyStateMonitor"
+                   CurrentState="GetDirtyState()"
+                   Label="odzyskiwanie dostepu"/>
+
 <MudPaper Class="pa-4 hb-panel">
     <MudText Typo="Typo.h4">Odzyskiwanie dostępu administratora</MudText>
     <MudText Typo="Typo.body2" Class="mt-1 mb-4">
@@ -34,6 +38,7 @@
 @code {
     private string _username = string.Empty;
     private string _pin = string.Empty;
+    private DirtyStateMonitor? _dirtyStateMonitor;
     private bool _isSaving;
     private string? _errorMessage;
 
@@ -72,6 +77,7 @@
                 return;
             }
 
+            _dirtyStateMonitor?.Reset(GetDirtyState());
             NavigationManager.NavigateTo("/", forceLoad: true);
         }
         finally
@@ -79,4 +85,10 @@
             _isSaving = false;
         }
     }
+
+    private object GetDirtyState() => new
+    {
+        _username,
+        _pin
+    };
 }

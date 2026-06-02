@@ -443,6 +443,10 @@ public sealed class ExpenseService(
             .Select(x => new AccountBalanceSnapshot(
                 x.AccountId,
                 x.Account.Type,
+                x.Account.ActiveFromUtc,
+                x.Account.IsArchived,
+                x.Account.ArchivedAtUtc,
+                x.Account.UpdatedAtUtc,
                 x.Year,
                 x.Month,
                 x.ClosingBalance))
@@ -803,6 +807,10 @@ public sealed class ExpenseService(
             .Select(x => new AccountBalanceSnapshot(
                 x.AccountId,
                 x.Account.Type,
+                x.Account.ActiveFromUtc,
+                x.Account.IsArchived,
+                x.Account.ArchivedAtUtc,
+                x.Account.UpdatedAtUtc,
                 x.Year,
                 x.Month,
                 x.ClosingBalance))
@@ -868,7 +876,11 @@ public sealed class ExpenseService(
             .Select(x => new
             {
                 x.Id,
-                x.Name
+                x.Name,
+                x.ActiveFromUtc,
+                x.IsArchived,
+                x.ArchivedAtUtc,
+                x.UpdatedAtUtc
             })
             .ToListAsync(cancellationToken);
 
@@ -885,9 +897,13 @@ public sealed class ExpenseService(
             .Select(account =>
             {
                 var monthlyBalances = accountBalanceMonths
-                    .Select(monthNumber => GetClosingBalanceForAccountInMonth(
+                    .Select(monthNumber => GetClosingBalanceForApplicableAccountInMonth(
                         accountBalanceSnapshots,
                         account.Id,
+                        account.ActiveFromUtc,
+                        account.IsArchived,
+                        account.ArchivedAtUtc,
+                        account.UpdatedAtUtc,
                         year,
                         monthNumber))
                     .ToList();
@@ -899,7 +915,7 @@ public sealed class ExpenseService(
                     MonthlyClosingBalances = monthlyBalances
                 };
             })
-            .Where(x => x.MonthlyClosingBalances.Any(balance => balance != 0m))
+            .Where(x => x.MonthlyClosingBalances.Any(balance => balance.HasValue))
             .ToList();
 
         return new YearStatisticsDto
@@ -2094,16 +2110,47 @@ public sealed class ExpenseService(
                 .FirstOrDefault());
     }
 
-    private static decimal GetClosingBalanceForAccountInMonth(
+    private static decimal? GetClosingBalanceForApplicableAccountInMonth(
         IReadOnlyList<AccountBalanceSnapshot> balances,
         int accountId,
+        DateTime? activeFromUtc,
+        bool isArchived,
+        DateTime? archivedAtUtc,
+        DateTime updatedAtUtc,
         int year,
         int month)
     {
-        return balances
+        var closingBalance = balances
             .Where(x => x.AccountId == accountId && x.Year == year && x.Month == month)
             .Select(x => x.ClosingBalance)
+            .Cast<decimal?>()
             .FirstOrDefault();
+
+        if (closingBalance.HasValue)
+        {
+            return closingBalance;
+        }
+
+        return IsAccountApplicableForMonth(activeFromUtc, isArchived, archivedAtUtc, updatedAtUtc, year, month)
+            ? 0m
+            : null;
+    }
+
+    private static bool IsAccountApplicableForMonth(
+        DateTime? activeFromUtc,
+        bool isArchived,
+        DateTime? archivedAtUtc,
+        DateTime updatedAtUtc,
+        int year,
+        int month)
+    {
+        var nextMonthStartUtc = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
+        if (activeFromUtc is not null && activeFromUtc >= nextMonthStartUtc)
+        {
+            return false;
+        }
+
+        return !isArchived || (archivedAtUtc ?? updatedAtUtc) >= nextMonthStartUtc;
     }
 
     private static TagHierarchySnapshot ResolveRootAndSubTag(
@@ -2166,7 +2213,16 @@ public sealed class ExpenseService(
         return depth;
     }
 
-    private sealed record AccountBalanceSnapshot(int AccountId, int AccountType, int Year, int Month, decimal ClosingBalance);
+    private sealed record AccountBalanceSnapshot(
+        int AccountId,
+        int AccountType,
+        DateTime? ActiveFromUtc,
+        bool IsArchived,
+        DateTime? ArchivedAtUtc,
+        DateTime UpdatedAtUtc,
+        int Year,
+        int Month,
+        decimal ClosingBalance);
     private sealed record ExpenseYearSnapshot(
         int ExpenseId,
         int CategoryId,

@@ -413,10 +413,17 @@ public sealed class IncomeService(
             .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
         var isClosedMonth = monthPlan?.IsClosed == true;
 
+        var precedingMonthBalanceByAccountId = isClosedMonth
+            ? new Dictionary<int, decimal>()
+            : await dbContext.AccountMonthBalances
+                .AsNoTracking()
+                .Where(x => x.Year == previousYear && x.Month == previousMonth)
+                .Where(x => x.Account.Type != (int)AccountType.Savings)
+                .ToDictionaryAsync(x => x.AccountId, x => x.ClosingBalance, cancellationToken);
+
         var accounts = await dbContext.Accounts
             .AsNoTracking()
             .Where(x => x.Type != (int)AccountType.Savings
-                        && (x.ActiveFromUtc == null || x.ActiveFromUtc < nextMonthStartUtc)
                         && (!x.IsArchived
                             || (x.ArchivedAtUtc ?? x.UpdatedAtUtc) >= nextMonthStartUtc))
             .Include(x => x.MonthBalances)
@@ -424,6 +431,11 @@ public sealed class IncomeService(
 
         decimal accountBaseTotal = 0;
         var missingBalanceAccountNames = new List<string>();
+        if (!isClosedMonth)
+        {
+            accountBaseTotal = precedingMonthBalanceByAccountId.Values.Sum();
+        }
+
         foreach (var account in accounts)
         {
             if (isClosedMonth)
@@ -442,21 +454,16 @@ public sealed class IncomeService(
                 continue;
             }
 
-            if (account.ActiveFromUtc is not null && account.ActiveFromUtc >= selectedMonthStartUtc)
+            if (!precedingMonthBalanceByAccountId.ContainsKey(account.Id))
             {
-                continue;
-            }
+                if (account.ActiveFromUtc is not null && account.ActiveFromUtc >= selectedMonthStartUtc)
+                {
+                    continue;
+                }
 
-            var precedingMonthBalance = account.MonthBalances
-                .FirstOrDefault(x => x.Year == previousYear && x.Month == previousMonth);
-
-            if (precedingMonthBalance is null)
-            {
                 missingBalanceAccountNames.Add(account.Name);
                 continue;
             }
-
-            accountBaseTotal += precedingMonthBalance.ClosingBalance;
         }
 
         var incomesTotal = await dbContext.Incomes

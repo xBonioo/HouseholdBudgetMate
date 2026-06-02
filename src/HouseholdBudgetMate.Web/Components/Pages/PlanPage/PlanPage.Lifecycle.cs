@@ -64,6 +64,8 @@ public partial class PlanPage : IAsyncDisposable
                 _isCreateExpenseFormVisible = true;
                 NavigationManager.NavigateTo($"/plan/{Year}/{Month}#create-expense-anchor", replace: true);
             }
+
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {

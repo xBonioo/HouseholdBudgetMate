@@ -15,6 +15,8 @@ public partial class PlanPage
             {
                 CancelLineItemEdit();
             }
+
+            MarkDirtyStatePristine();
         }
     }
 
@@ -88,6 +90,7 @@ public partial class PlanPage
         _editLineItemDate = lineItem.OccurredAt;
         _editLineItemExpenseId = expenseId;
         _editLineItemAmountInput = FormatDecimalInput(lineItem.Amount);
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveLineItemEditAsync()
@@ -130,6 +133,7 @@ public partial class PlanPage
         _editLineItemAmountInput = FormatDecimalInput(0);
         _editLineItemDate = DateOnly.FromDateTime(DateTime.Today);
         _editLineItemExpenseId = null;
+        MarkDirtyStatePristine();
     }
 
     private async Task DeleteLineItemAsync(int lineItemId, int expenseId)

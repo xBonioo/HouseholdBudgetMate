@@ -18,6 +18,12 @@
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
 
+<DirtyStateMonitor @ref="_dirtyStateMonitor"
+                   CurrentState="GetDirtyState()"
+                   ResetKey="_dirtyResetVersion"
+                   Enabled="IsAdminSession"
+                   Label="administracja"/>
+
 @if (!IsAdminSession)
 {
     <MudPaper Class="pa-4 hb-panel">
@@ -320,6 +326,8 @@ else
     private readonly Dictionary<string, string> _userOwners = [];
     private readonly Dictionary<string, bool> _userAdmins = [];
     private RealDataReadinessReport? _readinessReport;
+    private DirtyStateMonitor? _dirtyStateMonitor;
+    private int _dirtyResetVersion;
 
     private string _newUsername = string.Empty;
     private string _newUserPin = string.Empty;
@@ -356,6 +364,7 @@ else
             await LoadUsersAsync();
             LoadDatabaseFields();
             _readinessReport = await RealDataReadinessService.GetReportAsync(CancellationToken.None);
+            MarkDirtyStatePristine();
         }
         catch (Exception ex)
         {
@@ -419,6 +428,7 @@ else
             _newUserPin = string.Empty;
             _newUserMode = HouseholdMode.SeparateBudget;
             await LoadUsersAsync();
+            MarkDirtyStatePristine();
             ShowSuccess("Profil dodany.");
         });
     }
@@ -445,6 +455,7 @@ else
                 CancellationToken.None);
 
             await LoadUsersAsync();
+            MarkDirtyStatePristine();
             ShowSuccess("Profil zapisany.");
         });
     }
@@ -537,6 +548,7 @@ else
             }
 
             ShowSuccess("Połączenie z bazą zapisane.");
+            MarkDirtyStatePristine();
         });
     }
 
@@ -575,4 +587,39 @@ else
         _statusMessage = message;
         _statusSeverity = Severity.Error;
     }
+
+    private void MarkDirtyStatePristine()
+    {
+        _dirtyResetVersion++;
+        _dirtyStateMonitor?.Reset(GetDirtyState());
+    }
+
+    private object GetDirtyState() => new
+    {
+        NewUser = new
+        {
+            _newUsername,
+            _newUserPin,
+            _newUserMode,
+            _newUserBudgetOwnerId
+        },
+        Users = _users
+            .OrderBy(user => user.Id, StringComparer.Ordinal)
+            .Select(user => new
+            {
+                user.Id,
+                Mode = _userModes.GetValueOrDefault(user.Id),
+                Owner = _userOwners.GetValueOrDefault(user.Id),
+                IsAdmin = _userAdmins.GetValueOrDefault(user.Id)
+            })
+            .ToList(),
+        Database = new
+        {
+            _dbHost,
+            _dbPort,
+            _dbUsername,
+            _dbPassword,
+            _dbName
+        }
+    };
 }

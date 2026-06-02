@@ -130,6 +130,7 @@ public partial class PlanPage
 
         _editIncomeDate = income.ExpectedDayOfMonth;
         _editIncomeAmountInput = FormatDecimalInput(income.Amount);
+        MarkDirtyStatePristine();
     }
 
     private void CancelIncomeEdit()
@@ -137,6 +138,7 @@ public partial class PlanPage
         _editIncome = null;
         _editIncomeDate = new DateOnly(Year, Month, 1);
         _editIncomeAmountInput = FormatDecimalInput(0);
+        MarkDirtyStatePristine();
     }
 
     private async Task SaveIncomeEditAsync()

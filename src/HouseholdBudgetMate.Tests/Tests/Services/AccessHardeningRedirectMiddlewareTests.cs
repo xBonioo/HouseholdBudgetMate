@@ -48,6 +48,47 @@ public sealed class AccessHardeningRedirectMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_Should_Redirect_Local_Request_To_Access_Recovery_When_Recovery_Is_Required()
+    {
+        var context = CreateContext("/", IPAddress.Loopback);
+        var hardening = new Mock<IAccessHardeningService>();
+        hardening.Setup(x => x.IsRequiredAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var recovery = new Mock<IAccessRecoveryService>();
+        var grants = new LocalAccessGrantService();
+        var middleware = new AccessHardeningRedirectMiddleware(_ => Task.CompletedTask);
+
+        recovery.Setup(x => x.IsRecoveryRequired).Returns(true);
+
+        await middleware.InvokeAsync(context, hardening.Object, recovery.Object, grants);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status302Found);
+        var location = context.Response.Headers.Location.Single();
+        location.Should().StartWith("/access-recovery?grant=");
+        var grant = Uri.UnescapeDataString(location[(location.IndexOf('=') + 1)..]);
+        grants.IsValid(grant, LocalAccessPurposes.AccessRecovery).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task InvokeAsync_Should_Deny_Remote_Request_When_Recovery_Is_Required()
+    {
+        var context = CreateContext("/", IPAddress.Parse("203.0.113.10"));
+        var hardening = new Mock<IAccessHardeningService>();
+        hardening.Setup(x => x.IsRequiredAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var recovery = new Mock<IAccessRecoveryService>();
+        recovery.Setup(x => x.IsRecoveryRequired).Returns(true);
+        var middleware = new AccessHardeningRedirectMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(
+            context,
+            hardening.Object,
+            recovery.Object,
+            new LocalAccessGrantService());
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        context.Response.Headers.Location.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task InvokeAsync_Should_Use_Direct_Address_Instead_Of_Spoofed_Forwarded_Loopback()
     {
         var context = CreateContext("/access-recovery", IPAddress.Parse("203.0.113.10"));

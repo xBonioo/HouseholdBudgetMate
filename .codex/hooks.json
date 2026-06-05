@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dotnet format",
+            "timeout": 60000
+          },
+          {
+            "type": "command",
+            "command": "dotnet build --no-restore",
+            "timeout": 60000
+          }
+        ]
+      }
+    ]
+  }
+}

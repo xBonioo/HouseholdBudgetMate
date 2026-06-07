@@ -4,10 +4,10 @@ namespace HouseholdBudgetMate.Abstractions.Enums;
 
 public enum FileContextType
 {
-    [Display(Name = "Przykład")] 
+    [Display(Name = "Przykład")]
     Example,
 
 
-    [Display(Name = "Nieznane")] 
+    [Display(Name = "Nieznane")]
     Unknown = 99
 }

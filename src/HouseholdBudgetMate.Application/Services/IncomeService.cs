@@ -21,7 +21,7 @@ public sealed class IncomeService(
 {
     private static readonly YearMonthRequestValidator YearMonthValidator = new();
     private static readonly DateInMonthRequestValidator DateInMonthValidator = new();
-    
+
     private static readonly CreateRegularIncomeDefinitionRequestValidator CreateRegularDefinitionValidator = new();
     private static readonly CreateIncomeRequestValidator CreateIncomeValidator = new();
     private static readonly UpdateRegularIncomeDefinitionRequestValidator UpdateRegularDefinitionValidator = new();

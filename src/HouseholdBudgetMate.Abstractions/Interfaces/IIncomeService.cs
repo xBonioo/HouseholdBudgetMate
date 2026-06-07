@@ -8,7 +8,7 @@ public interface IIncomeService
     Task<IReadOnlyList<IncomeDto>> GetMonthIncomesAsync(int year, int month, CancellationToken cancellationToken);
     Task<LiveBalanceDto> GetLiveBalanceAsync(int year, int month, CancellationToken cancellationToken);
     Task<IReadOnlyList<RegularIncomeDefinitionDto>> GetRegularDefinitionsAsync(CancellationToken cancellationToken);
- 
+
     Task<IncomeDto> CreateIncomeAsync(CreateIncomeRequest request, CancellationToken cancellationToken);
 
     Task<RegularIncomeDefinitionDto> CreateRegularDefinitionAsync(CreateRegularIncomeDefinitionRequest request,

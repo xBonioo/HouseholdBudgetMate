@@ -40,7 +40,7 @@ public static class DateTimeExtensions
 
         return polandDateTimeOffset.DateTime;
     }
-    
+
     /// <summary>
     /// Extension to convert UTC time to Poland time
     /// </summary>
@@ -53,7 +53,7 @@ public static class DateTimeExtensions
         {
             return null;
         }
-        
+
         return dateTime.Value.UtcToPolandTime();
     }
 }

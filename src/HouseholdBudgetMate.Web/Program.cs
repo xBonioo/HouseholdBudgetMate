@@ -20,6 +20,7 @@ using HouseholdBudgetMate.Web.Components;
 using Microsoft.AspNetCore.Localization;
 using MudBlazor.Services;
 
+// Hook-check comment.
 var executableDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
 var applicationBaseDirectory = AppContext.BaseDirectory;
 var appDataDirectory = WritableAppDataPathResolver.Resolve("HouseholdBudgetMate");
@@ -233,7 +234,7 @@ try
     app.UseSerilogRequestLoggingWithThreshold();
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
-    
+
     // Setup redirect is needed for installed/local-container mode when no DB env var is configured.
     // Render provides DATABASE_URL, so it skips setup and migrates automatically.
     if (usesRuntimeSetup)
@@ -242,7 +243,7 @@ try
     }
 
     app.UseMiddleware<AccessHardeningRedirectMiddleware>();
-    
+
     // Configure the HTTP request pipeline.
     if (!app.Environment.IsDevelopment())
     {

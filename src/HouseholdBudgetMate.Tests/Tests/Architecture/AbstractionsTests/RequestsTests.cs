@@ -25,7 +25,7 @@ public sealed class RequestsTests
             : ""
         );
     }
-    
+
     [Fact]
     public void RequestsAreInProperFolder()
     {

@@ -1,11 +1,14 @@
 using FluentAssertions;
 using HouseholdBudgetMate.Application.Kernel.Configurations;
 using HouseholdBudgetMate.Application.Kernel.Logging;
+using HouseholdBudgetMate.Application.Kernel.Timing;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HouseholdBudgetMate.Tests.Tests.Services;
@@ -37,6 +40,31 @@ public sealed class OperationalLogCleanupServiceTests
         logs.Should().ContainSingle();
         logs[0].Message.Should().Be("new-log");
         (await dbContext.AuditLogs.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task StartAsync_Should_Propagate_When_Cleanup_Dependency_Fails()
+    {
+        using var provider = new ServiceCollection()
+            .AddSingleton<IDbContextFactory<ApplicationDbContext>>(new ThrowingDbContextFactory())
+            .AddSingleton(new ApplicationConfiguration
+            {
+                LogCleanupTask = true,
+                LogRetentionDays = 30
+            })
+            .AddSingleton<IDateTimeProvider>(new StaticDateTimeProvider(NowUtc))
+            .AddSingleton<ILogger<OperationalLogCleanupService>>(NullLogger<OperationalLogCleanupService>.Instance)
+            .AddSingleton<OperationalLogCleanupService>()
+            .BuildServiceProvider();
+
+        var hostedService = new OperationalLogCleanupHostedService(
+            provider,
+            NullLogger<OperationalLogCleanupHostedService>.Instance);
+
+        Func<Task> act = () => hostedService.StartAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("sensitive connection failure");
     }
 
     [Fact]
@@ -101,5 +129,18 @@ public sealed class OperationalLogCleanupServiceTests
             ChangedAtUtc = NowUtc.AddDays(-365)
         });
         await dbContext.SaveChangesAsync();
+    }
+
+    private sealed class ThrowingDbContextFactory : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext()
+        {
+            throw new InvalidOperationException("sensitive connection failure");
+        }
+
+        public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("sensitive connection failure");
+        }
     }
 }

@@ -87,6 +87,7 @@ public sealed class OperationalLogCleanupHostedService(
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogError(ex, "Operational log cleanup failed.");
+            throw;
         }
     }
 

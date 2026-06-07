@@ -56,7 +56,7 @@ public sealed class CoreDataSeedService(
         new("Samochód", "Orlen", "Samochód"),
         new("Samochód", "Plus", "Samochód"),
         new("Samochód", "Auchan", "Samochód"),
-        
+
         new("Samochód", "Serwis"),
         new("Samochód", "Ubezpieczenie"),
         new("Samochód", "Mechanik"),
@@ -65,7 +65,7 @@ public sealed class CoreDataSeedService(
         new("Zdrowie", "Suple"),
         new("Zdrowie", "Lekarz"),
         new("Zdrowie", "Inne"),
-        
+
         new("Rozrywka", "Miasto"),
         new("Rozrywka", "Jedzenie na mieście"),
         new("Rozrywka", "Hobby"),
@@ -444,12 +444,12 @@ public sealed class CoreDataSeedService(
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var accounts = DefaultAccounts.Select(x => new Account
-            {
-                Name = x.Name,
-                Type = (int)x.Type,
-                Order = x.Order,
-                IsArchived = false
-            })
+        {
+            Name = x.Name,
+            Type = (int)x.Type,
+            Order = x.Order,
+            IsArchived = false
+        })
             .Where(x => !existingAccountNamesSet.Contains(x.Name))
             .ToList();
 
@@ -491,11 +491,11 @@ public sealed class CoreDataSeedService(
             candidates.Add(new AccountMonthBalance
             {
                 AccountId = ingAccountId,
-                Year = now.Year-1,
+                Year = now.Year - 1,
                 Month = 12,
                 ClosingBalance = 1000m
             });
-                
+
             for (int i = 1; i <= 12; i++)
             {
                 candidates.Add(new AccountMonthBalance
@@ -505,8 +505,8 @@ public sealed class CoreDataSeedService(
                     Month = i,
                     ClosingBalance = 1000m
                 });
-                
-                if (i == previousMonth.Month) 
+
+                if (i == previousMonth.Month)
                     break;
             }
         }

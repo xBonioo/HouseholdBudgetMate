@@ -33,5 +33,5 @@ public static class CategoryExtensionMapping
             SupportsLineItemsOverride = tag.SupportsLineItemsOverride
         };
     }
-    
+
 }

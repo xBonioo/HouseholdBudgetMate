@@ -23,12 +23,12 @@ public sealed class ConfigurationsTests
                 .And().BePublic()
             .GetResult();
 
-        result.IsSuccessful.Should().BeTrue(result.FailingTypes is not null 
-            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName)) 
+        result.IsSuccessful.Should().BeTrue(result.FailingTypes is not null
+            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName))
             : ""
         );
     }
-    
+
     [Fact]
     public void AreNotInherit()
     {
@@ -42,8 +42,8 @@ public sealed class ConfigurationsTests
             .MeetCustomRule(new HasNoInheritance())
             .GetResult();
 
-        result.IsSuccessful.Should().BeTrue(result.FailingTypes is not null 
-            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName)) 
+        result.IsSuccessful.Should().BeTrue(result.FailingTypes is not null
+            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName))
             : ""
         );
     }

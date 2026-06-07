@@ -21,12 +21,12 @@ public sealed class ResultsTests
                 .And().BePublic()
             .GetResult();
 
-        result.IsSuccessful.Should().BeTrue(result.FailingTypes is not null 
-            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName)) 
+        result.IsSuccessful.Should().BeTrue(result.FailingTypes is not null
+            ? string.Join("\n", result.FailingTypes.Select(x => x.FullName))
             : ""
         );
     }
-    
+
     // [Fact]
     // public void ResultsExtendsServiceResult()
     // {
@@ -43,7 +43,7 @@ public sealed class ResultsTests
     //         : ""
     //     );
     // }
-    
+
     [Fact]
     public void ResultsAreInProperFolder()
     {

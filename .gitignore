@@ -489,5 +489,11 @@ $RECYCLE.BIN/
 
 
 .agents/
+.codex/
 .github/
-context/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

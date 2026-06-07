@@ -27,7 +27,7 @@ public sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
 
         builder.Property(x => x.ShowRemainingInUI)
             .IsRequired();
-        
+
         builder.HasQueryFilter(x => !x.IsDeleted);
         builder.Property(x => x.IsDeleted)
             .IsRequired();

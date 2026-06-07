@@ -12,7 +12,7 @@ public enum AccountType
 
     [Display(Name = "Oszczędność")]
     Savings = 3,
-    
+
     [Display(Name = "Inne")]
     Other = 99
 }

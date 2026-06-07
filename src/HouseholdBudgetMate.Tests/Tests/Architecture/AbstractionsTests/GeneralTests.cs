@@ -28,7 +28,7 @@ public sealed class GeneralTests
             .Should()
             .OnlyHaveDependenciesOn(typeof(IServiceResult).Namespace, "System")
             .GetResult();
-        
+
         Assert.True(result.IsSuccessful, result.FailingTypes is not null
             ? string.Join("\n", result.FailingTypes.Select(x => x.FullName))
             : ""

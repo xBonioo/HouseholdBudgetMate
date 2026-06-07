@@ -1,0 +1,29 @@
+- generic [ref=e1]:
+  - dialog "Logowanie" [ref=e5]:
+    - heading "Logowanie" [level=6] [ref=e7]
+    - generic [ref=e9]:
+      - generic [ref=e11]:
+        - group [ref=e12]:
+          - heading "Wybierz użytkownika" [level=6] [ref=e13]
+          - paragraph [ref=e14]: Wybierz profil, a aplikacja pokaże właściwy budżet.
+          - generic [ref=e17]:
+            - generic [ref=e18] [cursor=pointer]:
+              - generic [ref=e19]: Kamil (administrator)
+              - img [ref=e21]
+              - group "Użytkownik"
+            - generic: Użytkownik
+          - generic [ref=e25]:
+            - generic [ref=e26]:
+              - textbox "PIN*" [ref=e27]
+              - button [ref=e29] [cursor=pointer]:
+                - img [ref=e31]
+              - group "PIN"
+            - generic: PIN*
+        - button [ref=e34] [cursor=pointer]
+      - generic [ref=e35]:
+        - button "Wejdź" [disabled]:
+          - generic: Wejdź
+  - group [ref=e38]:
+    - progressbar [ref=e39]:
+      - img [ref=e40]
+    - paragraph [ref=e43]: Przygotowuję profil użytkownika...

@@ -58,7 +58,7 @@ public sealed class FileService(IStoragePathProvider storageProvider) : IFileSer
 
         return errors;
     }
-    
+
 
     private static List<string> ValidateFile(FileUploadDto? file)
     {

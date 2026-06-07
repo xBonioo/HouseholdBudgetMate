@@ -6,17 +6,17 @@ public enum ServiceResultStatusCode
     /// The 200 OK status code means that the request was processed successfully.
     /// </summary>
     Ok = 200,
-    
+
     /// <summary>
     /// The 201 Created status code means that the request was successfully fulfilled and resulted in one or possibly multiple new resources being created.
     /// </summary>
     Created = 201,
-    
+
     /// <summary>
     /// The 202 Accepted status code means that the request has been accepted for processing, but the processing has not been finished yet.
     /// </summary>
     Accepted = 202,
-    
+
     /// <summary>
     /// The 204 No Content status code means that while the server has successfully fulfilled the request, there is no available content for this request.
     /// </summary>
@@ -69,7 +69,7 @@ public enum ServiceResultStatusCode
     /// The 416 Range Not Satisfiable status code means that the range specified in the request can't be fulfilled.
     /// </summary>
     OutOfRange = 416,
-        
+
     /// <summary>
     /// The 422 Unprocessable Entity status code means that while the request was well-formed, the server was unable to follow it, due to semantic errors.
     /// </summary>
@@ -89,7 +89,7 @@ public enum ServiceResultStatusCode
     /// The 429 Too Many Requests response code means that in the given time, the user has sent too many requests.
     /// </summary>
     TooManyRequests = 429,
-        
+
     /// <summary>
     /// The 499 Client Closed Request response code means that client wasn't waiting for the request to finish and disconnected. 
     /// </summary>

@@ -75,7 +75,7 @@ public static class SerilogExtensions
             {
                 if (httpContext.Request.Path.StartsWithSegments("/_blazor"))
                     return LogEventLevel.Debug;
-                
+
                 if (ex != null || httpContext.Response.StatusCode >= 500)
                     return LogEventLevel.Error;
 

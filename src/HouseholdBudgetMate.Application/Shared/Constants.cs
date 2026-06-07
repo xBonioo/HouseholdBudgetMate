@@ -7,7 +7,7 @@ public static class Constants
 
     public const string RequestPathFiles = "/files";
     public const string FolderNameFiles = "files";
-    
+
     private const string Pdf = ".pdf";
     private const string Jpg = ".jpg";
     private const string Jpeg = ".jpeg";
@@ -19,6 +19,6 @@ public static class Constants
 
     public static readonly IReadOnlyCollection<string> AllowedExtensions =
         [Pdf, Jpg, Jpeg, Png, Doc, Docx, Xls, Xlsx];
-    
+
     public const int CacheDurationInMinutes = 30;
 }

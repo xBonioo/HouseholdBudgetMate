@@ -43,7 +43,7 @@ public sealed class ApplicationConfiguration
     ///     Execute database migrations on application start.
     /// </summary>
     public bool MigrateDatabaseOnStart { get; init; }
-    
+
     /// <summary>
     ///     Clean up database of old logs.
     /// </summary>
@@ -53,7 +53,7 @@ public sealed class ApplicationConfiguration
     ///     Number of days to keep operational logs in the Logs table.
     /// </summary>
     public int LogRetentionDays { get; init; } = 30;
-    
+
     /// <summary>
     ///     Seed data to database.
     /// </summary>

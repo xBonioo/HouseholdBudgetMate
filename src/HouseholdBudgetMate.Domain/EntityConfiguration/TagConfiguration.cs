@@ -22,7 +22,7 @@ public sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
             .WithMany(x => x.ChildTags)
             .HasForeignKey(x => x.ParentTagId)
             .OnDelete(DeleteBehavior.SetNull);
-        
+
         builder.HasQueryFilter(x => !x.IsDeleted);
         builder.Property(x => x.IsDeleted)
             .IsRequired();

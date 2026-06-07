@@ -24,17 +24,17 @@ public static class AppTheme
         },
         PaletteDark = new PaletteDark
         {
-            Primary             = "#6366F1",
-            Secondary           = "#38BDF8",
-            Success             = "#34D399",
-            Warning             = "#FCD34D",
-            Error               = "#F87171",
-            Background          = "#0F172A",
-            Surface             = "#1E293B",
-            AppbarBackground    = "#0F172A",
-            AppbarText          = "#F8FAFC",
-            TextPrimary         = "#F8FAFC",
-            TextSecondary       = "#94A3B8"
+            Primary = "#6366F1",
+            Secondary = "#38BDF8",
+            Success = "#34D399",
+            Warning = "#FCD34D",
+            Error = "#F87171",
+            Background = "#0F172A",
+            Surface = "#1E293B",
+            AppbarBackground = "#0F172A",
+            AppbarText = "#F8FAFC",
+            TextPrimary = "#F8FAFC",
+            TextSecondary = "#94A3B8"
         },
         LayoutProperties = new LayoutProperties
         {

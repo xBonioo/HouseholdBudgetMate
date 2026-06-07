@@ -7,6 +7,7 @@ using HouseholdBudgetMate.Application.Mapping;
 using HouseholdBudgetMate.Application.Validation;
 using HouseholdBudgetMate.Application.Validation.Categories;
 using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,7 +15,8 @@ namespace HouseholdBudgetMate.Application.Services;
 
 public sealed class CategoryService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
-    IDateTimeProvider dateTimeProvider) : ICategoryService
+    IDateTimeProvider dateTimeProvider,
+    CurrentUserContext currentUserContext) : ICategoryService
 {
     private static readonly CreateCategoryRequestValidator CreateCategoryValidator = new();
     private static readonly CreateTagRequestValidator CreateTagValidator = new();
@@ -44,6 +46,7 @@ public sealed class CategoryService(
         var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
         await EnsureCategoryNameUniqueAsync(dbContext, normalizedName, null, cancellationToken);
 
@@ -68,6 +71,8 @@ public sealed class CategoryService(
         var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
+
         var category = await dbContext.Categories
                            .Include(x => x.Tags)
                            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
@@ -90,6 +95,7 @@ public sealed class CategoryService(
         DeleteCategoryValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
         var category = await dbContext.Categories
                            .Include(x => x.Tags)
@@ -114,6 +120,7 @@ public sealed class CategoryService(
         var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
         var categoryExists = await dbContext.Categories.AnyAsync(x => x.Id == request.CategoryId, cancellationToken);
         if (!categoryExists)
@@ -144,6 +151,7 @@ public sealed class CategoryService(
         var normalizedName = request.Name.ToUpperInvariant();
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
         var tag = await dbContext.Tags
                       .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
@@ -173,6 +181,7 @@ public sealed class CategoryService(
         DeleteTagValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
 
         var tag = await dbContext.Tags
                       .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
@@ -263,6 +272,29 @@ public sealed class CategoryService(
         if (parentTag.ParentTagId.HasValue)
         {
             throw new BadRequestException("Only one level of tag hierarchy is supported.");
+        }
+    }
+
+    private async Task EnsureCurrentUserIsAdminAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(currentUserContext.UserId))
+        {
+            throw new ForbiddenException("Admin permissions are required.");
+        }
+
+        var isAdmin = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id == currentUserContext.UserId
+                     && x.Id != User.DefaultUserId
+                     && x.IsAdmin,
+                cancellationToken);
+
+        if (!isAdmin)
+        {
+            throw new ForbiddenException("Admin permissions are required.");
         }
     }
 }

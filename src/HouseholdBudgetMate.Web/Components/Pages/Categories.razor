@@ -6,16 +6,18 @@
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Abstractions.Parsing
 @using HouseholdBudgetMate.Web.Components.Dialogs
+@using HouseholdBudgetMate.Web.Services
 @using MudBlazor
 
 @inject ICategoryService CategoryService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IUserSessionService UserSessionService
 
 <DirtyStateMonitor @ref="_dirtyStateMonitor"
                    CurrentState="GetDirtyState()"
                    ResetKey="_dirtyResetVersion"
-                   Enabled="@(!_isLoading)"
+                   Enabled="@(!_isLoading && IsAdminSession)"
                    Label="kategorie"/>
 
 <MudOverlay Visible="@_isLoading" Absolute="true" DarkBackground="true">
@@ -28,7 +30,7 @@
             <div class="categories-header-content">
                 <div>
                     <MudText Typo="Typo.h4" Class="categories-title">Kategorie</MudText>
-                    <MudText Typo="Typo.body2" Class="hb-muted">Dodawaj kategorie, tagi i podtagi używane w planie budżetu.</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">@GetHeaderDescription()</MudText>
                 </div>
 
                 <div class="categories-header-stats">
@@ -41,8 +43,8 @@
         <MudPaper Class="hb-panel categories-panel mt-4">
             <div class="categories-toolbar">
                 <div>
-                    <MudText Typo="Typo.h6">Nowa kategoria</MudText>
-                    <MudText Typo="Typo.body2" Class="hb-muted">Nazwa i kolor wystarczą. Limit oraz pozycje są opcjonalne.</MudText>
+                    <MudText Typo="Typo.h6">@(IsAdminSession ? "Nowa kategoria" : "Podgląd kategorii")</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">@GetToolbarDescription()</MudText>
                 </div>
 
                 <MudTextField @bind-Value="_searchText"
@@ -55,8 +57,10 @@
                               aria-label="Szukaj kategorii lub tagu"/>
             </div>
 
-            <ActionForm OnSubmit="CreateCategoryAsync">
-                <MudGrid Class="categories-create-grid">
+            @if (IsAdminSession)
+            {
+                <ActionForm OnSubmit="CreateCategoryAsync">
+                    <MudGrid Class="categories-create-grid">
                     <MudItem xs="12" md="3">
                         <MudTextField
                             @bind-Value="_newCategory.Name"
@@ -100,8 +104,15 @@
                             Dodaj
                         </MudButton>
                     </MudItem>
-                </MudGrid>
-            </ActionForm>
+                    </MudGrid>
+                </ActionForm>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
+                    Kategorie i tagi może zmieniać tylko administrator.
+                </MudAlert>
+            }
         </MudPaper>
 
         @{
@@ -114,7 +125,7 @@
                 <div class="categories-empty-state">
                     <MudIcon Icon="@Icons.Material.Filled.Category" Color="Color.Primary"/>
                     <MudText Typo="Typo.subtitle1">Brak kategorii</MudText>
-                    <MudText Typo="Typo.body2" Class="hb-muted">Dodaj pierwszą kategorię, aby zacząć porządkować wydatki.</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">@GetEmptyCategoriesDescription()</MudText>
                 </div>
             </MudPaper>
         }
@@ -124,7 +135,7 @@
                 <div class="categories-empty-state">
                     <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Default"/>
                     <MudText Typo="Typo.subtitle1">Brak wyników</MudText>
-                    <MudText Typo="Typo.body2" Class="hb-muted">Zmień filtr lub dodaj nową kategorię.</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">@GetEmptySearchDescription()</MudText>
                 </div>
             </MudPaper>
         }
@@ -134,7 +145,7 @@
                 @foreach (var category in filteredCategories)
                 {
                     <MudPaper Class="pa-4 hb-panel category-card">
-                        @if (_editCategory is not null && _editCategory.Id == category.Id)
+                        @if (_editCategory is not null && _editCategory.Id == category.Id && IsAdminSession)
                         {
                             <ActionForm OnSubmit="SaveCategoryEditAsync">
                                 <div class="category-edit-layout">
@@ -206,16 +217,19 @@
                                                OnClick="() => ToggleCategoryTags(category.Id)">
                                         @(IsCategoryExpanded(category.Id) ? "Zwiń tagi" : "Tagi")
                                     </MudButton>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                                   Color="Color.Primary"
-                                                   aria-label="@($"Edytuj kategorię {category.Name}")"
-                                                   title="@($"Edytuj kategorię {category.Name}")"
-                                                   OnClick="() => BeginCategoryEdit(category)"/>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                   Color="Color.Error"
-                                                   aria-label="@($"Usuń kategorię {category.Name}")"
-                                                   title="@($"Usuń kategorię {category.Name}")"
-                                                   OnClick="() => DeleteCategoryAsync(category)"/>
+                                    @if (IsAdminSession)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                       Color="Color.Primary"
+                                                       aria-label="@($"Edytuj kategorię {category.Name}")"
+                                                       title="@($"Edytuj kategorię {category.Name}")"
+                                                       OnClick="() => BeginCategoryEdit(category)"/>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Color="Color.Error"
+                                                       aria-label="@($"Usuń kategorię {category.Name}")"
+                                                       title="@($"Usuń kategorię {category.Name}")"
+                                                       OnClick="() => DeleteCategoryAsync(category)"/>
+                                    }
                                 </div>
                             </div>
 
@@ -254,7 +268,7 @@
                                     {
                                         <MudPaper Class="pa-2 hb-panel tag-inline-row tag-inline-row-root">
                                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                                                @if (_editTag is not null && _editTag.Id == rootTag.Id)
+                                                @if (_editTag is not null && _editTag.Id == rootTag.Id && IsAdminSession)
                                                 {
                                                     <ActionForm OnSubmit="SaveTagEditAsync">
                                                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="tag-inline-main">
@@ -299,18 +313,21 @@
                                                     </MudStack>
                                                 }
 
-                                                <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                                                   Color="Color.Primary"
-                                                                   aria-label="@($"Edytuj tag {rootTag.Name}")"
-                                                                   title="@($"Edytuj tag {rootTag.Name}")"
-                                                                   OnClick="() => BeginTagEdit(rootTag)"/>
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                                   Color="Color.Error"
-                                                                   aria-label="@($"Usuń tag {rootTag.Name}")"
-                                                                   title="@($"Usuń tag {rootTag.Name}")"
-                                                                   OnClick="() => DeleteTagAsync(rootTag.Id)"/>
-                                                </MudStack>
+                                                @if (IsAdminSession)
+                                                {
+                                                    <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                       Color="Color.Primary"
+                                                                       aria-label="@($"Edytuj tag {rootTag.Name}")"
+                                                                       title="@($"Edytuj tag {rootTag.Name}")"
+                                                                       OnClick="() => BeginTagEdit(rootTag)"/>
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                       Color="Color.Error"
+                                                                       aria-label="@($"Usuń tag {rootTag.Name}")"
+                                                                       title="@($"Usuń tag {rootTag.Name}")"
+                                                                       OnClick="() => DeleteTagAsync(rootTag.Id)"/>
+                                                    </MudStack>
+                                                }
                                             </MudStack>
                                         </MudPaper>
 
@@ -321,7 +338,7 @@
                                                 {
                                                     <MudPaper Class="pa-2 hb-panel tag-inline-row tag-inline-row-child">
                                                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                                                            @if (_editTag is not null && _editTag.Id == childTag.Id)
+                                                            @if (_editTag is not null && _editTag.Id == childTag.Id && IsAdminSession)
                                                             {
                                                                 <ActionForm OnSubmit="SaveTagEditAsync">
                                                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="tag-inline-main">
@@ -366,18 +383,21 @@
                                                                 </MudStack>
                                                             }
 
-                                                            <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
-                                                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                                                               Color="Color.Primary"
-                                                                               aria-label="@($"Edytuj tag {childTag.Name}")"
-                                                                               title="@($"Edytuj tag {childTag.Name}")"
-                                                                               OnClick="() => BeginTagEdit(childTag)"/>
-                                                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                                               Color="Color.Error"
-                                                                               aria-label="@($"Usuń tag {childTag.Name}")"
-                                                                               title="@($"Usuń tag {childTag.Name}")"
-                                                                               OnClick="() => DeleteTagAsync(childTag.Id)"/>
-                                                            </MudStack>
+                                                            @if (IsAdminSession)
+                                                            {
+                                                                <MudStack Row="true" Spacing="1" Class="tag-inline-actions">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                                   Color="Color.Primary"
+                                                                                   aria-label="@($"Edytuj tag {childTag.Name}")"
+                                                                                   title="@($"Edytuj tag {childTag.Name}")"
+                                                                                   OnClick="() => BeginTagEdit(childTag)"/>
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                                   Color="Color.Error"
+                                                                                   aria-label="@($"Usuń tag {childTag.Name}")"
+                                                                                   title="@($"Usuń tag {childTag.Name}")"
+                                                                                   OnClick="() => DeleteTagAsync(childTag.Id)"/>
+                                                                </MudStack>
+                                                            }
                                                         </MudStack>
                                                     </MudPaper>
                                                 }
@@ -386,49 +406,52 @@
                                     }
                                 }
 
-                                <ActionForm OnSubmit="() => CreateTagAsync(category.Id)">
-                                    <MudStack Row="true"
-                                              Spacing="2"
-                                              AlignItems="AlignItems.Center"
-                                              Wrap="Wrap.Wrap"
-                                              Class="tag-create-row">
-                                        <MudTextField
-                                            @bind-Value="GetTagCreateModel(category.Id).Name"
-                                            Label="Nowy tag lub podtag"
-                                            Variant="Variant.Outlined"
-                                            Margin="Margin.Dense"
-                                            Class="tag-create-name"/>
-                                        <MudSelect T="int?"
-                                                   @bind-Value="GetTagCreateModel(category.Id).ParentTagId"
-                                                   Label="Tag główny"
-                                                   Variant="Variant.Outlined"
-                                                   Margin="Margin.Dense"
-                                                   ToStringFunc="GetParentTagSelectText"
-                                                   Class="hb-select-ellipsis">
-                                            <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
-                                            @foreach (var rootTag in GetRootTagOptions(category.Id, null))
-                                            {
-                                                <MudSelectItem T="int?" Value="@rootTag.Id">@rootTag.Name</MudSelectItem>
-                                            }
-                                        </MudSelect>
-                                        <MudSelect T="bool?"
-                                                   @bind-Value="GetTagCreateModel(category.Id).SupportsLineItemsOverride"
-                                                   Label="Pozycje"
-                                                   Variant="Variant.Outlined"
-                                                   Margin="Margin.Dense">
-                                            <MudSelectItem T="bool?" Value="@((bool?)null)">Dziedzicz</MudSelectItem>
-                                            <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
-                                            <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
-                                        </MudSelect>
-                                        <MudButton
-                                            Variant="Variant.Outlined"
-                                            Color="Color.Primary"
-                                            StartIcon="@Icons.Material.Filled.Add"
-                                            ButtonType="ButtonType.Submit">
-                                            Dodaj tag
-                                        </MudButton>
-                                    </MudStack>
-                                </ActionForm>
+                                @if (IsAdminSession)
+                                {
+                                    <ActionForm OnSubmit="() => CreateTagAsync(category.Id)">
+                                        <MudStack Row="true"
+                                                  Spacing="2"
+                                                  AlignItems="AlignItems.Center"
+                                                  Wrap="Wrap.Wrap"
+                                                  Class="tag-create-row">
+                                            <MudTextField
+                                                @bind-Value="GetTagCreateModel(category.Id).Name"
+                                                Label="Nowy tag lub podtag"
+                                                Variant="Variant.Outlined"
+                                                Margin="Margin.Dense"
+                                                Class="tag-create-name"/>
+                                            <MudSelect T="int?"
+                                                       @bind-Value="GetTagCreateModel(category.Id).ParentTagId"
+                                                       Label="Tag główny"
+                                                       Variant="Variant.Outlined"
+                                                       Margin="Margin.Dense"
+                                                       ToStringFunc="GetParentTagSelectText"
+                                                       Class="hb-select-ellipsis">
+                                                <MudSelectItem T="int?" Value="@((int?)null)">Brak</MudSelectItem>
+                                                @foreach (var rootTag in GetRootTagOptions(category.Id, null))
+                                                {
+                                                    <MudSelectItem T="int?" Value="@rootTag.Id">@rootTag.Name</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                            <MudSelect T="bool?"
+                                                       @bind-Value="GetTagCreateModel(category.Id).SupportsLineItemsOverride"
+                                                       Label="Pozycje"
+                                                       Variant="Variant.Outlined"
+                                                       Margin="Margin.Dense">
+                                                <MudSelectItem T="bool?" Value="@((bool?)null)">Dziedzicz</MudSelectItem>
+                                                <MudSelectItem T="bool?" Value="true">Tak</MudSelectItem>
+                                                <MudSelectItem T="bool?" Value="false">Nie</MudSelectItem>
+                                            </MudSelect>
+                                            <MudButton
+                                                Variant="Variant.Outlined"
+                                                Color="Color.Primary"
+                                                StartIcon="@Icons.Material.Filled.Add"
+                                                ButtonType="ButtonType.Submit">
+                                                Dodaj tag
+                                            </MudButton>
+                                        </MudStack>
+                                    </ActionForm>
+                                }
                             </MudStack>
                         }
                     </MudPaper>
@@ -465,6 +488,36 @@
         .Where(IsCategoryMatch)
         .OrderBy(x => x.Name)
         .ToList();
+
+    private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
+
+    private string GetHeaderDescription()
+    {
+        return IsAdminSession
+            ? "Dodawaj kategorie, tagi i podtagi używane w planie budżetu."
+            : "Przeglądaj kategorie, tagi i podtagi używane w planie budżetu.";
+    }
+
+    private string GetToolbarDescription()
+    {
+        return IsAdminSession
+            ? "Nazwa i kolor wystarczą. Limit oraz pozycje są opcjonalne."
+            : "Możesz wyszukiwać i rozwijać kategorie. Zmiany wprowadza administrator.";
+    }
+
+    private string GetEmptyCategoriesDescription()
+    {
+        return IsAdminSession
+            ? "Dodaj pierwszą kategorię, aby zacząć porządkować wydatki."
+            : "Administrator nie dodał jeszcze kategorii.";
+    }
+
+    private string GetEmptySearchDescription()
+    {
+        return IsAdminSession
+            ? "Zmień filtr lub dodaj nową kategorię."
+            : "Zmień filtr, aby znaleźć kategorię lub tag.";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -504,8 +557,24 @@
                || category.Tags.Any(t => t.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
     }
 
+    private bool EnsureAdminCanManageCategories()
+    {
+        if (IsAdminSession)
+        {
+            return true;
+        }
+
+        Snackbar.Add("Kategorie i tagi może zmieniać tylko administrator.", Severity.Warning);
+        return false;
+    }
+
     private async Task CreateCategoryAsync()
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_newCategory.Name))
         {
             Snackbar.Add("Podaj nazwę kategorii.", Severity.Warning);
@@ -542,6 +611,11 @@
 
     private void BeginCategoryEdit(CategoryDto category)
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         _editCategory = new UpdateCategoryRequest
         {
             Id = category.Id,
@@ -559,6 +633,11 @@
 
     private async Task SaveCategoryEditAsync()
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         if (_editCategory is null)
         {
             return;
@@ -606,6 +685,11 @@
 
     private async Task DeleteCategoryAsync(CategoryDto category)
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         if (!await ConfirmAsync("Usuń kategorię", $"Usunąć kategorię '{category.Name}'?"))
         {
             return;
@@ -639,6 +723,11 @@
 
     private async Task CreateTagAsync(int categoryId)
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         var model = GetTagCreateModel(categoryId);
 
         if (string.IsNullOrWhiteSpace(model.Name))
@@ -669,6 +758,11 @@
 
     private void BeginTagEdit(TagDto tag)
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         _editTag = new UpdateTagRequest
         {
             Id = tag.Id,
@@ -732,6 +826,11 @@
 
     private async Task SaveTagEditAsync()
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         if (_editTag is null)
         {
             return;
@@ -764,6 +863,11 @@
 
     private async Task DeleteTagAsync(int tagId)
     {
+        if (!EnsureAdminCanManageCategories())
+        {
+            return;
+        }
+
         try
         {
             await CategoryService.DeleteTagAsync(new DeleteTagRequest { Id = tagId }, CancellationToken.None);

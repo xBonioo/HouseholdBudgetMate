@@ -2,6 +2,8 @@
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Domain.Infrastructure;
+using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,12 +13,43 @@ public sealed class CategoryServiceTests
 {
     private readonly string _dbName = Guid.NewGuid().ToString();
     private static readonly DateTime DefaultNowUtc = new(2026, 5, 21, 0, 0, 0, DateTimeKind.Utc);
+    private const string AdministratorUserId = "category-admin";
 
-    private CategoryService CreateService(DateTime? nowUtc = null)
+    private CategoryService CreateService(DateTime? nowUtc = null, string userId = AdministratorUserId, bool isAdmin = true)
     {
         var factory = TestDbContextFactory.CreateFactory(_dbName);
+        SeedUser(factory, userId, isAdmin);
         var provider = new StaticDateTimeProvider(nowUtc ?? DefaultNowUtc);
-        return new CategoryService(factory, provider);
+        var currentUserContext = new CurrentUserContext
+        {
+            UserId = userId,
+            BudgetOwnerUserId = User.DefaultUserId
+        };
+
+        return new CategoryService(factory, provider, currentUserContext);
+    }
+
+    private static void SeedUser(IDbContextFactory<ApplicationDbContext> factory, string userId, bool isAdmin)
+    {
+        using var context = factory.CreateDbContext();
+        var user = context.Users.IgnoreQueryFilters().FirstOrDefault(x => x.Id == userId);
+        if (user is null)
+        {
+            context.Users.Add(new User
+            {
+                Id = userId,
+                Username = userId,
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId,
+                IsAdmin = isAdmin
+            });
+        }
+        else
+        {
+            user.IsAdmin = isAdmin;
+        }
+
+        context.SaveChanges();
     }
 
     // ── GetAllAsync ──────────────────────────────────────────────────────────
@@ -89,6 +122,25 @@ public sealed class CategoryServiceTests
 
         Assert.Single(result);
         Assert.Equal(2, result[0].Tags.Count);
+    }
+
+    /// <summary>
+    /// Verifies that standard users can inspect categories without edit permissions.
+    /// </summary>
+    [Fact]
+    public async Task GetAllAsync_Should_Allow_Standard_User_To_View_Categories()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.Categories.Add(new Category { Name = "Dom", Color = "#0000FF" });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService(userId: "category-member", isAdmin: false);
+        var result = await service.GetAllAsync(CancellationToken.None);
+
+        Assert.Single(result);
+        Assert.Equal("Dom", result[0].Name);
     }
 
     // ── CreateCategoryAsync ──────────────────────────────────────────────────
@@ -196,6 +248,21 @@ public sealed class CategoryServiceTests
             Name = "Jedzenie",
             Color = "#AABBCC",
             EnvelopeLimit = -1m
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that only administrators can create categories.
+    /// </summary>
+    [Fact]
+    public async Task CreateCategoryAsync_Should_Throw_Forbidden_When_User_Is_Not_Admin()
+    {
+        var service = CreateService(userId: "category-member", isAdmin: false);
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.CreateCategoryAsync(new CreateCategoryRequest
+        {
+            Name = "Kosmetyki",
+            Color = "#AABBCC"
         }, CancellationToken.None));
     }
 

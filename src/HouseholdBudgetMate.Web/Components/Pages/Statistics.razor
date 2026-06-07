@@ -305,6 +305,97 @@
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Plan roczny</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@_isSavingAnnualPlan"
+                   OnClick="SaveAnnualPlanAsync">
+            Zapisz plan roczny
+        </MudButton>
+    </MudStack>
+
+    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
+        Ustaw oczekiwane roczne wpływy i oszczędności, a poniżej porównaj je z faktycznymi sumami z tego roku.
+    </MudText>
+
+    <MudGrid Class="mt-3" Spacing="2">
+        <MudItem xs="12" md="6">
+            <MudNumericField T="decimal"
+                             @bind-Value="_annualPlanExpectedIncomeAmount"
+                             Label="Oczekiwane roczne wpływy"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             Min="0"/>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudNumericField T="decimal"
+                             @bind-Value="_annualPlanExpectedSavingsAmount"
+                             Label="Oczekiwane roczne oszczędności"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             Min="0"/>
+        </MudItem>
+    </MudGrid>
+
+    <div style="overflow-x: auto;">
+        <MudTable Items="GetAnnualPlanComparisonRows()" Dense="true" Hover="true" Class="mt-3">
+            <HeaderContent>
+                <MudTh>Metryka</MudTh>
+                <MudTh>Plan</MudTh>
+                <MudTh>Faktycznie</MudTh>
+                <MudTh>Różnica</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="item">
+                <MudTd DataLabel="Metryka">@item.Label</MudTd>
+                <MudTd DataLabel="Plan" Style="white-space: nowrap;">@FormatMoney(item.PlannedAmount)</MudTd>
+                <MudTd DataLabel="Faktycznie" Style="white-space: nowrap;">@FormatMoney(item.ActualAmount)</MudTd>
+                <MudTd DataLabel="Różnica" Style="white-space: nowrap;">@FormatMoney(item.Difference)</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </div>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6">Kandydaci alertów kategorii</MudText>
+
+    <MudText Typo="Typo.body2" Class="hb-muted mt-1">
+        To są kandydaci do przyszłych powiadomień. Nic nie jest wysyłane automatycznie.
+    </MudText>
+
+    @if (_statistics.DeviationAlertCandidates.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted mt-3">
+            Brak kandydatów alertów dla wybranego roku.
+        </MudText>
+    }
+    else
+    {
+        <div style="overflow-x: auto;">
+            <MudTable Items="_statistics.DeviationAlertCandidates" Dense="true" Hover="true" Class="mt-3">
+                <HeaderContent>
+                    <MudTh>Miesiąc</MudTh>
+                    <MudTh>Kategoria</MudTh>
+                    <MudTh>Bieżące</MudTh>
+                    <MudTh>Średnia historyczna</MudTh>
+                    <MudTh>Próg</MudTh>
+                    <MudTh>Powyżej progu</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd DataLabel="Miesiąc">@GetMonthShortLabelForYear(item.Year, item.Month)</MudTd>
+                    <MudTd DataLabel="Kategoria">@item.CategoryName</MudTd>
+                    <MudTd DataLabel="Bieżące" Style="white-space: nowrap;">@FormatMoney(item.CurrentSpentAmount)</MudTd>
+                    <MudTd DataLabel="Średnia historyczna" Style="white-space: nowrap;">@FormatMoney(item.HistoricalAverageAmount)</MudTd>
+                    <MudTd DataLabel="Próg" Style="white-space: nowrap;">@FormatPercent(item.ThresholdPercent)</MudTd>
+                    <MudTd DataLabel="Powyżej progu" Style="white-space: nowrap;">@FormatPercent(item.DeviationPercent)</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </div>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
     <MudText Typo="Typo.h6">Historia roczna: miesiąc × kategoria × kwota</MudText>
 
     @if (_statistics.CategoryBreakdown.Count == 0)
@@ -482,6 +573,9 @@
     private List<ExpenseHistorySearchResultDto> _historySearchResults = [];
     private CategoryRangeStatisticsDto _categoryRangeStatistics = new();
     private YearStatisticsDto _statistics = new();
+    private decimal _annualPlanExpectedIncomeAmount;
+    private decimal _annualPlanExpectedSavingsAmount;
+    private bool _isSavingAnnualPlan;
 
     private string GetCategorySelectText(int categoryId)
     {
@@ -552,6 +646,8 @@
                 _selectedCategoryId = null;
                 _expandedTagIds.Clear();
             }
+
+            SyncAnnualPlanInputs();
         }
         catch (Exception ex)
         {
@@ -562,6 +658,7 @@
                 AvailableYears = [_selectedYear],
                 PopulatedMonths = []
             };
+            SyncAnnualPlanInputs();
         }
         finally
         {
@@ -678,6 +775,11 @@
         return $"{value.ToString("0.00", _culture)}\u00A0zł";
     }
 
+    private string FormatPercent(decimal value)
+    {
+        return $"{value.ToString("0.0", _culture)}%";
+    }
+
     private string FormatOptionalMoney(decimal? value)
     {
         return value.HasValue ? FormatMoney(value.Value) : "-";
@@ -731,6 +833,58 @@
             new YearSummaryRow("Wpływy", totalIncome, totalIncome / monthsCount),
             new YearSummaryRow("Wydatki", totalSpent, totalSpent / monthsCount),
             new YearSummaryRow("Zaoszczędzone", totalSaved, totalSaved / monthsCount)
+        ];
+    }
+
+    private void SyncAnnualPlanInputs()
+    {
+        _annualPlanExpectedIncomeAmount = _statistics.AnnualPlan.ExpectedIncomeAmount;
+        _annualPlanExpectedSavingsAmount = _statistics.AnnualPlan.ExpectedSavingsAmount;
+    }
+
+    private async Task SaveAnnualPlanAsync()
+    {
+        if (_isSavingAnnualPlan)
+        {
+            return;
+        }
+
+        _isSavingAnnualPlan = true;
+
+        try
+        {
+            var savedPlan = await ExpenseService.UpsertAnnualPlanAsync(
+                new UpsertAnnualPlanRequest
+                {
+                    Year = _selectedYear,
+                    ExpectedIncomeAmount = _annualPlanExpectedIncomeAmount,
+                    ExpectedSavingsAmount = _annualPlanExpectedSavingsAmount
+                },
+                CancellationToken.None);
+
+            _statistics.AnnualPlan = savedPlan;
+            SyncAnnualPlanInputs();
+            Snackbar.Add("Plan roczny został zapisany.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isSavingAnnualPlan = false;
+        }
+    }
+
+    private IReadOnlyList<AnnualPlanComparisonRow> GetAnnualPlanComparisonRows()
+    {
+        var actualIncome = _statistics.MonthlyFinance.Sum(x => x.IncomeAmount);
+        var actualSavings = _statistics.MonthlyFinance.Sum(x => x.SavedAmount);
+
+        return
+        [
+            new AnnualPlanComparisonRow("Wpływy", _statistics.AnnualPlan.ExpectedIncomeAmount, actualIncome),
+            new AnnualPlanComparisonRow("Oszczędności", _statistics.AnnualPlan.ExpectedSavingsAmount, actualSavings)
         ];
     }
 
@@ -1030,6 +1184,11 @@
     }
 
     private sealed record YearSummaryRow(string Label, decimal Total, decimal MonthlyAverage);
+
+    private sealed record AnnualPlanComparisonRow(string Label, decimal PlannedAmount, decimal ActualAmount)
+    {
+        public decimal Difference => ActualAmount - PlannedAmount;
+    }
 
     private readonly record struct YearSummaryPeriod(
         int StartMonth,

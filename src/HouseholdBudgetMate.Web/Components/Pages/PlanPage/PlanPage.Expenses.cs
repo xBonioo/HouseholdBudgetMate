@@ -33,6 +33,50 @@ public partial class PlanPage
         return string.Empty;
     }
 
+    private void SelectExpenseCategoryFilter(int? categoryId)
+    {
+        _selectedExpenseCategoryFilterId = _selectedExpenseCategoryFilterId == categoryId
+            ? null
+            : categoryId;
+    }
+
+    private void SelectExpensePaymentFilter(ExpensePaymentFilter filter)
+    {
+        _selectedExpensePaymentFilter = _selectedExpensePaymentFilter == filter
+            ? ExpensePaymentFilter.All
+            : filter;
+    }
+
+    private bool MatchesExpenseCategoryFilter(ExpenseDto expense)
+    {
+        return !_selectedExpenseCategoryFilterId.HasValue
+               || expense.CategoryId == _selectedExpenseCategoryFilterId.Value;
+    }
+
+    private bool MatchesExpensePaymentFilter(ExpenseDto expense)
+    {
+        return _selectedExpensePaymentFilter switch
+        {
+            ExpensePaymentFilter.RemainingToPay => HasRemainingPayment(expense),
+            ExpensePaymentFilter.PaidOff => IsPaidOff(expense),
+            _ => true
+        };
+    }
+
+    private static bool HasRemainingPayment(ExpenseDto expense)
+    {
+        return expense.PlannedAmount > 0
+               && (expense.ActualAmount <= 0
+                   || expense.ShowRemainingInUI && expense.RemainingAmount > 0);
+    }
+
+    private static bool IsPaidOff(ExpenseDto expense)
+    {
+        return expense.PlannedAmount > 0
+               && expense.ActualAmount > 0
+               && (!expense.ShowRemainingInUI || expense.RemainingAmount <= 0);
+    }
+
     private static string FormatRemaining(bool showRemaining, decimal remaining)
     {
         return showRemaining ? $"{Math.Max(0, remaining).ToString("0.00", Culture)}zł" : "-";
@@ -64,8 +108,8 @@ public partial class PlanPage
 
         try
         {
-            if (!TryParseAmountOrWarn(_newExpensePlannedAmountInput, out var plannedAmount)
-                || !TryParseAmountOrWarn(_newExpenseActualAmountInput, out var actualAmount))
+            if (!TryParseNonNegativeAmountOrWarn(_newExpensePlannedAmountInput, out var plannedAmount)
+                || !TryParseNonNegativeAmountOrWarn(_newExpenseActualAmountInput, out var actualAmount))
             {
                 return;
             }
@@ -153,8 +197,8 @@ public partial class PlanPage
 
         try
         {
-            if (!TryParseAmountOrWarn(_editExpensePlannedAmountInput, out var plannedAmount)
-                || !TryParseAmountOrWarn(_editExpenseActualAmountInput, out var actualAmount))
+            if (!TryParseNonNegativeAmountOrWarn(_editExpensePlannedAmountInput, out var plannedAmount)
+                || !TryParseNonNegativeAmountOrWarn(_editExpenseActualAmountInput, out var actualAmount))
             {
                 return;
             }
@@ -208,6 +252,12 @@ public partial class PlanPage
             return;
         }
 
+        if (HasActiveExpenseFilters)
+        {
+            Snackbar.Add("Wyczyść filtry, aby zmienić kolejność wydatków.", Severity.Info);
+            return;
+        }
+
         var ordered = OrderedExpenses.ToList();
         var index = ordered.FindIndex(x => x.Id == expenseId);
 
@@ -245,7 +295,10 @@ public partial class PlanPage
         if (!_isCopyMode)
         {
             _selectedExpenseIdsForCopy.Clear();
+            return;
         }
+
+        ResetCopyTargetToNextMonth();
     }
 
     private Task SetExpenseCopySelection(int expenseId, bool isSelected)
@@ -270,9 +323,15 @@ public partial class PlanPage
             return;
         }
 
-        var nextMonth = new DateTime(Year, Month, 1).AddMonths(1);
+        if (IsCopyTargetSameAsSource)
+        {
+            Snackbar.Add("Wybierz inny miesiąc docelowy niż bieżący.", Severity.Warning);
+            return;
+        }
+
+        var targetMonthLabel = new DateTime(_copyTargetYear, _copyTargetMonth, 1).ToString("MMMM yyyy", Culture);
         var confirmation = await ConfirmAsync(
-            $"Skopiować {_selectedExpenseIdsForCopy.Count} pozycji do {nextMonth.ToString("MMMM yyyy", Culture)}?");
+            $"Skopiować {_selectedExpenseIdsForCopy.Count} pozycji do {targetMonthLabel}?");
         if (!confirmation)
         {
             return;
@@ -285,11 +344,13 @@ public partial class PlanPage
                 .Select(x => x.Id)
                 .ToList();
 
-            var copiedCount = await ExpenseService.CopySelectedExpensesToNextMonthAsync(
-                new CopySelectedExpensesToNextMonthRequest
+            var copiedCount = await ExpenseService.CopySelectedExpensesToMonthAsync(
+                new CopySelectedExpensesToMonthRequest
                 {
                     Year = Year,
                     Month = Month,
+                    TargetYear = _copyTargetYear,
+                    TargetMonth = _copyTargetMonth,
                     ExpenseIds = orderedSelectedExpenseIds
                 },
                 CancellationToken.None);
@@ -299,12 +360,129 @@ public partial class PlanPage
 
             if (copiedCount == 0)
             {
-                Snackbar.Add("Nie skopiowano żadnej pozycji.", Severity.Info);
+                Snackbar.Add("Nie skopiowano żadnej pozycji. Wybrane pozycje mogły zostać już uzupełnione automatycznie.", Severity.Info);
                 return;
             }
 
-            Snackbar.Add($"Skopiowano {copiedCount} pozycji do {nextMonth.ToString("MMMM yyyy", Culture)}.",
-                Severity.Success);
+            Snackbar.Add($"Skopiowano {copiedCount} pozycji do {targetMonthLabel}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private Task SetMonthPlanSuggestionSelectionAsync(int sourceExpenseId, bool isSelected)
+    {
+        var draft = _monthPlanSuggestionDrafts.FirstOrDefault(x => x.Suggestion.SourceExpenseId == sourceExpenseId);
+        if (draft is not null && draft.Suggestion.IsAvailable)
+        {
+            draft.IsSelected = isSelected;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task SetMonthPlanSuggestionAmountInputAsync(int sourceExpenseId, string? input)
+    {
+        var draft = _monthPlanSuggestionDrafts.FirstOrDefault(x => x.Suggestion.SourceExpenseId == sourceExpenseId);
+        if (draft is not null)
+        {
+            draft.PlannedAmountInput = input ?? string.Empty;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ApplyMonthPlanSuggestionsAsync()
+    {
+        if (!HasMonthPreparation)
+        {
+            return;
+        }
+
+        var selectedDrafts = _monthPlanSuggestionDrafts
+            .Where(x => x.IsSelected && x.Suggestion.IsAvailable)
+            .OrderBy(x => x.Suggestion.SourceExpenseId)
+            .ToList();
+
+        if (selectedDrafts.Count == 0)
+        {
+            Snackbar.Add("Wybierz co najmniej jedną propozycję do zastosowania.", Severity.Warning);
+            return;
+        }
+
+        var selectedRequests = new List<ApplyMonthPlanSuggestionItemRequest>(selectedDrafts.Count);
+        foreach (var draft in selectedDrafts)
+        {
+            if (!TryParseAmountOrWarn(draft.PlannedAmountInput, out var plannedAmount))
+            {
+                return;
+            }
+
+            selectedRequests.Add(new ApplyMonthPlanSuggestionItemRequest
+            {
+                SourceExpenseId = draft.Suggestion.SourceExpenseId,
+                PlannedAmount = plannedAmount
+            });
+        }
+
+        try
+        {
+            var createdCount = await ExpenseService.ApplyMonthPlanSuggestionsAsync(
+                new ApplyMonthPlanSuggestionsRequest
+                {
+                    Year = Year,
+                    Month = Month,
+                    Suggestions = selectedRequests
+                },
+                CancellationToken.None);
+
+            _isCopyMode = false;
+            _selectedExpenseIdsForCopy.Clear();
+            ClearMonthPreparation();
+
+            await RefreshArchiveMonthsCacheAsync();
+            await LoadAsync(bypassPreparation: true);
+
+            var totalSelected = selectedRequests.Count;
+            if (createdCount == 0)
+            {
+                Snackbar.Add("Nie dodano żadnych propozycji. Cykliczne wydatki i tak zostały uzupełnione.", Severity.Info);
+                return;
+            }
+
+            if (createdCount < totalSelected)
+            {
+                Snackbar.Add($"Dodano {createdCount} z {totalSelected} wybranych propozycji. Część pozycji została już dodana automatycznie.", Severity.Info);
+                return;
+            }
+
+            Snackbar.Add($"Dodano {createdCount} propozycji historycznych.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SkipMonthPlanSuggestionsAsync()
+    {
+        if (!HasMonthPreparation)
+        {
+            return;
+        }
+
+        try
+        {
+            _isCopyMode = false;
+            _selectedExpenseIdsForCopy.Clear();
+            ClearMonthPreparation();
+
+            await LoadAsync(bypassPreparation: true);
+            await RefreshArchiveMonthsCacheAsync();
+
+            Snackbar.Add("Miesiąc został utworzony bez propozycji historycznych. Cykliczne wydatki dodano automatycznie.", Severity.Info);
         }
         catch (Exception ex)
         {
@@ -320,6 +498,11 @@ public partial class PlanPage
     private bool IsLastExpense(int expenseId)
     {
         return OrderedExpenses.Count == 0 || OrderedExpenses[^1].Id == expenseId;
+    }
+
+    private string GetMonthName(int month)
+    {
+        return new DateTime(2000, month, 1).ToString("MMMM", Culture);
     }
 
     private bool SupportsLineItemsForSelection(int categoryId, int? tagId)

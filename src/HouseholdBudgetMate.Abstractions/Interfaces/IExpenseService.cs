@@ -8,6 +8,7 @@ public interface IExpenseService
     Task<MonthPlanDto> GetMonthAsync(int year, int month, CancellationToken cancellationToken);
     Task<DashboardSummaryDto> GetDashboardSummaryAsync(int year, int month, CancellationToken cancellationToken);
     Task<YearStatisticsDto> GetYearStatisticsAsync(int year, CancellationToken cancellationToken);
+    Task<AnnualPlanDto> UpsertAnnualPlanAsync(UpsertAnnualPlanRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<ExpenseHistorySearchResultDto>> SearchExpenseHistoryAsync(
         SearchExpenseHistoryRequest request,
         CancellationToken cancellationToken);
@@ -24,6 +25,7 @@ public interface IExpenseService
         CancellationToken cancellationToken);
     Task<IReadOnlyList<AvailableMonthDto>> GetAvailableMonthsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<RegularExpenseDefinitionDto>> GetRegularExpenseDefinitionsAsync(CancellationToken cancellationToken);
+    Task<MonthPlanPreparationDto> GetMonthPlanPreparationAsync(int year, int month, CancellationToken cancellationToken);
 
     Task<MonthSavingsTransferItemDto> CreateMonthSavingsTransferItemAsync(CreateMonthSavingsTransferItemRequest request,
         CancellationToken cancellationToken);
@@ -43,6 +45,10 @@ public interface IExpenseService
         CancellationToken cancellationToken);
 
     Task ReorderExpensesAsync(ReorderExpensesRequest request, CancellationToken cancellationToken);
+    Task<int> ApplyMonthPlanSuggestionsAsync(ApplyMonthPlanSuggestionsRequest request,
+        CancellationToken cancellationToken);
+    Task<int> CopySelectedExpensesToMonthAsync(CopySelectedExpensesToMonthRequest request,
+        CancellationToken cancellationToken);
     Task<int> CopySelectedExpensesToNextMonthAsync(CopySelectedExpensesToNextMonthRequest request,
         CancellationToken cancellationToken);
     Task ReorderRegularExpenseDefinitionsAsync(ReorderRegularExpenseDefinitionsRequest request,

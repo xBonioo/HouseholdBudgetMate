@@ -3,7 +3,7 @@ project: "Household Budget Mate"
 version: 1
 status: draft
 created: 2026-05-25
-updated: 2026-06-03
+updated: 2026-06-07
 prd_version: 1
 main_goal: quality
 top_blocker: F-02 external evidence before real household data
@@ -33,7 +33,7 @@ W tej roadmapie **North star** oznacza najmniejszy kompletny rezultat widoczny d
 | F-02 | secure-real-data-readiness        | (foundation) warunki trwaĹ‚ego i obserwowalnego uĹĽycia danych gospodarstwa sÄ… uzgodnione i sprawdzalne          | â€”                | Non-Functional Requirements, Access Control   | done     |
 | S-01 | verify-pin-gated-household-access | administrator moĹĽe utworzyÄ‡ profile PIN, a domownik moĹĽe odblokowaÄ‡ dane budĹĽetu                               | â€”                | FR-008, FR-009, US-01                         | done     |
 | S-02 | verify-monthly-safe-to-spend-loop | domownik moĹĽe prowadziÄ‡ plan miesiÄ…ca, zapisaÄ‡ wydatki i zobaczyÄ‡ wiarygodny stan miesiÄ…ca                      | F-01, F-02, S-01 | US-01, FR-001, FR-002, FR-005, FR-006, FR-007 | done |
-| S-03 | improve-monthly-planning          | domownik moĹĽe szybciej przygotowaÄ‡ plan miesiÄ…ca z kopii, historii, cyklicznych wydatkĂłw i sugestii rocznych   | S-02             | FR-003, FR-004, FR-007, Business Logic        | ready |
+| S-03 | improve-monthly-planning          | domownik moĹĽe szybciej przygotowaÄ‡ plan miesiÄ…ca z kopii, historii, cyklicznych wydatkĂłw i sugestii rocznych   | S-02             | FR-003, FR-004, FR-007, Business Logic        | done |
 
 ## Streams
 
@@ -133,7 +133,7 @@ Stan kodu na `2026-05-25` (automatycznie zbadany i potwierdzony przez uĹĽytkow
   - Automatycznie sugerowaÄ‡ aktywne wydatki cykliczne do nowego planu, jeĹ›li nie zostaĹ‚y jeszcze dodane.
   - DodaÄ‡ moĹĽliwoĹ›Ä‡ zaplanowania przewidywanych rocznych wpĹ‚ywĂłw i oszczÄ™dnoĹ›ci w sekcji `Plan roczny` w statystykach.
 - **Risk:** Algorytm moĹĽe zbudowaÄ‡ plan, ktĂłremu uĹĽytkownik nie ufa, jeĹ›li bÄ™dzie mieszaĹ‚ sezonowe koszty z jednorazowymi wydatkami lub powielaĹ‚ cykliczne pozycje; slice musi traktowaÄ‡ sugestie jako propozycje do zatwierdzenia, nie jako ciche automatyczne dodawanie.
-- **Status:** ready
+- **Status:** done
 
 ## Backlog Handoff
 
@@ -143,7 +143,7 @@ Stan kodu na `2026-05-25` (automatycznie zbadany i potwierdzony przez uĹĽytkow
 | F-02       | secure-real-data-readiness        | UstaliÄ‡ warunki bezpiecznego uĹĽycia rzeczywistych danych      | no                    | UkoĹ„czone; implementacja commitem bieĹĽÄ…cym. Real-data sign-off nadal wymaga evidence z `readiness-evidence.md`. |
 | S-01       | verify-pin-gated-household-access | PotwierdziÄ‡ dostÄ™p gospodarstwa zabezpieczony PIN             | no                    | UkoĹ„czone; implementacja: `5f75f53`, `fd579c3`, `3422512`, `879a267`.                            |
 | S-02       | verify-monthly-safe-to-spend-loop | PotwierdziÄ‡ wiarygodnÄ… pÄ™tlÄ™ prowadzenia miesiÄ…ca             | no                    | UkoĹ„czone dla kontrolowanego no-Safe-to-spend scope; real-data gate pozostaje w F-02 evidence. |
-| S-03       | improve-monthly-planning          | UsprawniÄ‡ planowanie miesiÄ™cy kopiami, historiÄ… i sugestiami  | yes                   | Gotowe do `/10x-plan`; plan powinien rozbiÄ‡ algorytm sugestii, copy mode, cykliczne wydatki, alert-prep i `Plan roczny` na fazy. |
+| S-03       | improve-monthly-planning          | UsprawniÄ‡ planowanie miesiÄ™cy kopiami, historiÄ… i sugestiami  | no                    | UkoĹ„czone i zarchiwizowane; pozostaĹ‚e prace to opcjonalny manual smoke w aplikacji. |
 
 ## Open Roadmap Questions
 
@@ -162,6 +162,7 @@ PoniĹĽsze pytania wynikajÄ… z rĂłĹĽnicy miÄ™dzy zakresem PRD, aktual
 
 ## Done
 
+- **S-03: domownik może szybciej przygotować plan miesiąca dzięki kopiowaniu planów, sugestiom z historii, aktywnym wydatkom cyklicznym, alertom przygotowanym pod przyszłe notyfikacje oraz rocznemu kontekstowi wpływów i oszczędności.** — Archived 2026-06-07 → `context/archive/2026-06-03-improve-monthly-planning/`. Lesson: —.
 - **F-02: warunki trwałego i obserwowalnego użycia danych gospodarstwa są uzgodnione i sprawdzalne.** — Archived 2026-06-03 → `context/archive/2026-05-27-secure-real-data-readiness/`. Lesson: —.
 - **F-01: historyczny kontrakt Safe-to-spend.** — Archived 2026-06-03 → `context/archive/2026-05-26-align-safe-to-spend-contract/`. Lesson: —.
 - **S-02: wiarygodna pętla prowadzenia miesiąca.** — Archived 2026-06-03 → `context/archive/2026-05-29-verify-monthly-safe-to-spend-loop/`. Lesson: —.

@@ -512,6 +512,31 @@
 	justify-content: flex-end;
 }
 
+.expense-header-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.month-preparation-panel {
+	border: 1px solid #cfe0ed;
+	box-shadow: 0 8px 22px rgba(13, 37, 63, 0.08);
+}
+
+.plan-table-preparation .mud-table-root {
+	min-width: 980px;
+}
+
+.copy-target-year {
+	width: 110px;
+}
+
+.copy-target-month {
+	min-width: 180px;
+}
+
 @media (max-width: 1400px) {
 	.expense-header-actions {
 		flex-wrap: wrap;
@@ -637,6 +662,12 @@
 	.expense-form-actions,
 	.expense-form-actions .mud-button-root {
 		width: 100%;
+	}
+
+	.copy-target-year,
+	.copy-target-month {
+		width: 100%;
+		min-width: 0;
 	}
 }
 

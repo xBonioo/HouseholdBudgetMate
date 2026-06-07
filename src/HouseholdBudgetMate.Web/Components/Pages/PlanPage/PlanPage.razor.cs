@@ -32,6 +32,8 @@ public partial class PlanPage : ComponentBase
     private bool _isLoading;
     private bool _isCreateExpenseFormVisible;
     private bool _isCopyMode;
+    private int? _selectedExpenseCategoryFilterId;
+    private ExpensePaymentFilter _selectedExpensePaymentFilter = ExpensePaymentFilter.All;
 
     #endregion
 
@@ -136,6 +138,15 @@ public partial class PlanPage : ComponentBase
     #region Copy Mode
 
     private readonly HashSet<int> _selectedExpenseIdsForCopy = [];
+    private int _copyTargetYear;
+    private int _copyTargetMonth;
+
+    #endregion
+
+    #region Month Preparation
+
+    private MonthPlanPreparationDto? _monthPlanPreparation;
+    private readonly List<MonthPlanSuggestionDraft> _monthPlanSuggestionDrafts = [];
 
     #endregion
 
@@ -161,6 +172,28 @@ public partial class PlanPage : ComponentBase
         _monthPlan?.Expenses
             .OrderBy(x => x.Order)
             .ThenBy(x => x.Id)
+            .ToList() ?? [];
+
+    private IReadOnlyList<ExpenseDto> FilteredExpenses =>
+        OrderedExpenses
+            .Where(MatchesExpenseCategoryFilter)
+            .Where(MatchesExpensePaymentFilter)
+            .ToList();
+
+    private IReadOnlyList<CategoryDto> ExpenseFilterCategories =>
+        _monthPlan?.Expenses
+            .GroupBy(x => x.CategoryId)
+            .Select(group => new
+            {
+                CategoryId = group.Key,
+                CategoryName = group.First().CategoryName
+            })
+            .OrderBy(x => x.CategoryName)
+            .Select(x => new CategoryDto
+            {
+                Id = x.CategoryId,
+                Name = x.CategoryName
+            })
             .ToList() ?? [];
 
     private string? CreateExpenseEnvelopeWarning => BuildCreateExpenseEnvelopeWarning();
@@ -197,6 +230,14 @@ public partial class PlanPage : ComponentBase
 
     private int IrregularIncomeCount => _incomes.Count - RegularIncomeCount;
 
+    private bool HasMonthPreparation => _monthPlanPreparation is { MonthExists: false } && _monthPlanSuggestionDrafts.Count > 0;
+
+    private bool IsCopyTargetSameAsSource => _copyTargetYear == Year && _copyTargetMonth == Month;
+
+    private bool HasActiveExpenseFilters =>
+        _selectedExpenseCategoryFilterId.HasValue
+        || _selectedExpensePaymentFilter != ExpensePaymentFilter.All;
+
     #endregion
 
     #region DTOs
@@ -209,6 +250,27 @@ public partial class PlanPage : ComponentBase
         public decimal LimitAmount { get; init; }
         public double ProgressPercent { get; init; }
         public Color Color { get; init; }
+    }
+
+    private sealed class MonthPlanSuggestionDraft
+    {
+        public MonthPlanSuggestionDraft(MonthPlanExpenseSuggestionDto suggestion)
+        {
+            Suggestion = suggestion;
+            IsSelected = false;
+            PlannedAmountInput = FormatDecimalInput(suggestion.SuggestedPlannedAmount);
+        }
+
+        public MonthPlanExpenseSuggestionDto Suggestion { get; }
+        public bool IsSelected { get; set; }
+        public string PlannedAmountInput { get; set; }
+    }
+
+    private enum ExpensePaymentFilter
+    {
+        All,
+        RemainingToPay,
+        PaidOff
     }
 
     private void MarkDirtyStatePristine()
@@ -293,8 +355,42 @@ public partial class PlanPage : ComponentBase
                 Amount = _editLineItemAmountInput,
                 _editLineItemDate,
                 _editLineItem.TagId
-            }
+            },
+        MonthPreparation = HasMonthPreparation
+            ? _monthPlanSuggestionDrafts
+                .OrderBy(x => x.Suggestion.SourceExpenseId)
+                .Select(x => new
+                {
+                    x.Suggestion.SourceExpenseId,
+                    x.IsSelected,
+                    x.PlannedAmountInput
+                })
+                .ToList()
+            : null
     };
+
+    private void ResetCopyTargetToNextMonth()
+    {
+        var nextMonth = new DateTime(Year, Month, 1).AddMonths(1);
+        _copyTargetYear = nextMonth.Year;
+        _copyTargetMonth = nextMonth.Month;
+    }
+
+    private void SetMonthPreparation(MonthPlanPreparationDto preparation)
+    {
+        _monthPlanPreparation = preparation;
+        _monthPlanSuggestionDrafts.Clear();
+        _monthPlanSuggestionDrafts.AddRange(
+            preparation.Suggestions.Select(suggestion => new MonthPlanSuggestionDraft(suggestion)));
+        MarkDirtyStatePristine();
+    }
+
+    private void ClearMonthPreparation()
+    {
+        _monthPlanPreparation = null;
+        _monthPlanSuggestionDrafts.Clear();
+        MarkDirtyStatePristine();
+    }
 
     #endregion
 }

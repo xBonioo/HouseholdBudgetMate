@@ -59,6 +59,97 @@
     </MudStack>
 </MudPaper>
 
+@if (HasMonthPreparation)
+{
+    <MudPaper Class="pa-4 hb-panel month-preparation-panel">
+        @{
+            var sourceMonthLabel = new DateTime(_monthPlanPreparation!.SourceYear, _monthPlanPreparation.SourceMonth, 1)
+                .ToString("MMMM yyyy", Culture);
+        }
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h6">Propozycje wydatków na bazie historii</MudText>
+            <MudText Typo="Typo.body2" Class="hb-muted">
+                Źródło: @sourceMonthLabel. Zaznacz pozycje, które chcesz przenieść, możesz też skorygować proponowaną kwotę.
+                Cykliczne wydatki nadal pojawią się automatycznie, gdy utworzysz miesiąc.
+            </MudText>
+        </MudStack>
+
+        <MudTable Items="_monthPlanSuggestionDrafts" Dense="true" Hover="true" Class="mt-3 plan-table plan-table-preparation">
+            <HeaderContent>
+                <MudTh>Wybór</MudTh>
+                <MudTh>Wydatek</MudTh>
+                <MudTh>Kategoria</MudTh>
+                <MudTh>Tag</MudTh>
+                <MudTh>Poprzedni plan</MudTh>
+                <MudTh>Proponowana kwota</MudTh>
+                <MudTh>Uwagi</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="draft">
+                <MudTd>
+                    <MudCheckBox T="bool"
+                                 Value="@draft.IsSelected"
+                                 ValueChanged="@(value => SetMonthPlanSuggestionSelectionAsync(draft.Suggestion.SourceExpenseId, value))"
+                                 Dense="true"
+                                 Disabled="@(!draft.Suggestion.IsAvailable)"
+                                 Color="Color.Primary"/>
+                </MudTd>
+                <MudTd>
+                    <MudText>@draft.Suggestion.Name</MudText>
+                    <MudText Typo="Typo.caption" Class="hb-muted">@draft.Suggestion.Reason</MudText>
+                </MudTd>
+                <MudTd>@draft.Suggestion.CategoryName</MudTd>
+                <MudTd>@(draft.Suggestion.TagName ?? "-")</MudTd>
+                <MudTd>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@draft.Suggestion.SourceActualAmount.ToString("0.00", Culture)zł</MudText>
+                        <MudText Typo="Typo.caption" Class="hb-muted">plan: @draft.Suggestion.SourcePlannedAmount.ToString("0.00", Culture)zł</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd>
+                    <MudTextField T="string"
+                                  Value="@draft.PlannedAmountInput"
+                                  ValueChanged="@(input => SetMonthPlanSuggestionAmountInputAsync(draft.Suggestion.SourceExpenseId, input))"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Dense="true"
+                                  Disabled="@(!draft.Suggestion.IsAvailable)"/>
+                </MudTd>
+                <MudTd>
+                    @if (draft.Suggestion.IsAvailable)
+                    {
+                        <MudText Typo="Typo.caption" Class="hb-muted">Do wyboru</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">@draft.Suggestion.UnavailableReason</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-3" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.caption" Class="hb-muted">
+                Możesz zmienić kwoty przed utworzeniem miesiąca.
+            </MudText>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.SkipNext"
+                           OnClick="SkipMonthPlanSuggestionsAsync">
+                    Pomiń propozycje
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Check"
+                           Disabled="@(!HasMonthPreparation || !_monthPlanSuggestionDrafts.Any(x => x.IsSelected && x.Suggestion.IsAvailable))"
+                           OnClick="ApplyMonthPlanSuggestionsAsync">
+                    Utwórz miesiąc z wybranych
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+}
+
 <div class="@GetPlanDashboardGridClass()">
 <section class="plan-left-column">
 <MudGrid Class="hb-kpi-grid">
@@ -192,7 +283,6 @@
             <RowTemplate Context="item">
                 @if (_editSavingsTransfer?.Id == item.Id)
                 {
-                    <ActionForm OnSubmit="SaveSavingsTransferEditAsync">
                     <MudTd>
                         <MudTextField T="string"
                                       Value="_editSavingsTransferAmountInput"
@@ -210,7 +300,8 @@
                             Variant="Variant.Filled"
                             Color="Color.Primary"
                             Size="Size.Small"
-                            ButtonType="ButtonType.Submit">
+                            ButtonType="ButtonType.Button"
+                            OnClick="SaveSavingsTransferEditAsync">
                             Zapisz
                         </MudButton>
                         <MudButton
@@ -221,7 +312,6 @@
                             Anuluj
                         </MudButton>
                     </MudTd>
-                    </ActionForm>
                 }
                 else
                 {
@@ -471,22 +561,104 @@
 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2 section-title-row">
     <MudText Typo="Typo.h6">Lista wydatków</MudText>
     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="expense-header-actions">
-        <MudButton Variant="Variant.Outlined" Color="@(_isCopyMode ? Color.Warning : Color.Primary)" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="ToggleCopyMode">
-            @(_isCopyMode ? "Anuluj kopiowanie" : "KOPIUJ DO NASTĘPNEGO MIESIĄCA")
+        <MudButton Variant="Variant.Outlined"
+                   Color="@(_isCopyMode ? Color.Warning : Color.Primary)"
+                   StartIcon="@Icons.Material.Filled.ContentCopy"
+                   Disabled="@(_monthPlan is null)"
+                   OnClick="ToggleCopyMode">
+            @(_isCopyMode ? "Anuluj kopiowanie" : "KOPIUJ DO WYBRANEGO MIESIĄCA")
         </MudButton>
         @if (_isCopyMode)
         {
+            <MudNumericField T="int"
+                             @bind-Value="_copyTargetYear"
+                             Label="Rok"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             Min="2000"
+                             Max="3000"
+                             Immediate="true"
+                             Class="copy-target-year"/>
+            <MudSelect T="int"
+                       @bind-Value="_copyTargetMonth"
+                       Label="Miesiąc"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense="true"
+                       Class="copy-target-month">
+                @foreach (var monthNumber in Enumerable.Range(1, 12))
+                {
+                    <MudSelectItem Value="@monthNumber">@GetMonthName(monthNumber)</MudSelectItem>
+                }
+            </MudSelect>
             <MudButton
                 Variant="Variant.Filled"
                 Color="Color.Primary"
                 StartIcon="@Icons.Material.Filled.Check"
-                Disabled="@(_selectedExpenseIdsForCopy.Count == 0)"
+                Disabled="@(_selectedExpenseIdsForCopy.Count == 0 || IsCopyTargetSameAsSource)"
                 OnClick="CopySelectedExpensesAsync">
                 Kopiuj zaznaczone
             </MudButton>
+            @if (IsCopyTargetSameAsSource)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Warning">Wybierz inny miesiąc docelowy.</MudText>
+            }
         }
     </MudStack>
 </MudStack>
+
+@if (_monthPlan is null)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+        Utwórz lub pomiń propozycje, aby zobaczyć pełną listę wydatków.
+    </MudAlert>
+}
+
+@if (_monthPlan is not null && _monthPlan.Expenses.Count > 0)
+{
+    <MudStack Spacing="1" Class="mb-3 expense-filter-chips">
+        <MudText Typo="Typo.subtitle2">Filtry wydatków</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.caption" Class="hb-muted">Kategoria</MudText>
+            <MudChip T="string"
+                     Variant="@(!_selectedExpenseCategoryFilterId.HasValue ? Variant.Filled : Variant.Outlined)"
+                     Color="@(!_selectedExpenseCategoryFilterId.HasValue ? Color.Primary : Color.Default)"
+                     OnClick="@(() => SelectExpenseCategoryFilter(null))">
+                Wszystkie
+            </MudChip>
+            @foreach (var category in ExpenseFilterCategories)
+            {
+                <MudChip T="string"
+                         Variant="@(_selectedExpenseCategoryFilterId == category.Id ? Variant.Filled : Variant.Outlined)"
+                         Color="@(_selectedExpenseCategoryFilterId == category.Id ? Color.Primary : Color.Default)"
+                         OnClick="@(() => SelectExpenseCategoryFilter(category.Id))">
+                    @category.Name
+                </MudChip>
+            }
+        </MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.caption" Class="hb-muted">Status</MudText>
+            <MudChip T="string"
+                     Variant="@(_selectedExpensePaymentFilter == ExpensePaymentFilter.All ? Variant.Filled : Variant.Outlined)"
+                     Color="@(_selectedExpensePaymentFilter == ExpensePaymentFilter.All ? Color.Primary : Color.Default)"
+                     OnClick="@(() => SelectExpensePaymentFilter(ExpensePaymentFilter.All))">
+                Wszystkie
+            </MudChip>
+            <MudChip T="string"
+                     Variant="@(_selectedExpensePaymentFilter == ExpensePaymentFilter.RemainingToPay ? Variant.Filled : Variant.Outlined)"
+                     Color="@(_selectedExpensePaymentFilter == ExpensePaymentFilter.RemainingToPay ? Color.Warning : Color.Default)"
+                     OnClick="@(() => SelectExpensePaymentFilter(ExpensePaymentFilter.RemainingToPay))">
+                Pozostało do zapłaty
+            </MudChip>
+            <MudChip T="string"
+                     Variant="@(_selectedExpensePaymentFilter == ExpensePaymentFilter.PaidOff ? Variant.Filled : Variant.Outlined)"
+                     Color="@(_selectedExpensePaymentFilter == ExpensePaymentFilter.PaidOff ? Color.Success : Color.Default)"
+                     OnClick="@(() => SelectExpensePaymentFilter(ExpensePaymentFilter.PaidOff))">
+                Spłacone
+            </MudChip>
+        </MudStack>
+    </MudStack>
+}
 
 @if (EnvelopeProgressItems.Count > 0)
 {
@@ -509,13 +681,19 @@
     </MudStack>
 }
 
-@if (_monthPlan is null || _monthPlan.Expenses.Count == 0)
+@if (_monthPlan is not null && _monthPlan.Expenses.Count == 0)
 {
     <MudText Typo="Typo.body2">Brak wydatków w tym miesiącu.</MudText>
 }
-else
+else if (_monthPlan is not null)
 {
-    <MudTable Items="OrderedExpenses" Dense="true" Hover="true" Class="plan-table plan-table-expenses" RowClassFunc="GetRowClass">
+    @if (FilteredExpenses.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted">Brak wydatków pasujących do filtrów.</MudText>
+    }
+    else
+    {
+    <MudTable Items="FilteredExpenses" Dense="true" Hover="true" Class="plan-table plan-table-expenses" RowClassFunc="GetRowClass">
     <HeaderContent>
         <MudTh Class="expense-order-column">Kolejność</MudTh>
         <MudTh>Nazwa</MudTh>
@@ -543,8 +721,8 @@ else
                                 <MudText Typo="Typo.caption" Class="hb-muted">Pozycja @expense.Order w planie miesiąca</MudText>
                             </div>
                             <div class="expense-order-controls">
-                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@IsFirstExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
-                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@IsLastExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@(HasActiveExpenseFilters || IsFirstExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@(HasActiveExpenseFilters || IsLastExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
                             </div>
                         </div>
 
@@ -651,8 +829,8 @@ else
                 {
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudText Typo="Typo.caption">@expense.Order</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@IsFirstExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
-                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@IsLastExpense(expense.Id)" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@(HasActiveExpenseFilters || IsFirstExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@(HasActiveExpenseFilters || IsLastExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
                     </MudStack>
                 }
             </MudTd>
@@ -847,6 +1025,7 @@ else
         }
     </ChildRowContent>
     </MudTable>
+    }
 }
 
 <div id="create-expense-anchor"></div>

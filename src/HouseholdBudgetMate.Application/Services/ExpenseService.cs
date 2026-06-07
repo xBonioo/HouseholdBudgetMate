@@ -32,7 +32,10 @@ public sealed class ExpenseService(
     private static readonly UpdateMonthSavingsTransferItemRequestValidator UpdateSavingsTransferItemValidator = new();
     private static readonly UpdateExpenseRequestValidator UpdateExpenseValidator = new();
     private static readonly ReorderExpensesRequestValidator ReorderExpensesValidator = new();
+    private static readonly ApplyMonthPlanSuggestionsRequestValidator ApplyMonthPlanSuggestionsValidator = new();
+    private static readonly CopySelectedExpensesToMonthRequestValidator CopySelectedExpensesToMonthValidator = new();
     private static readonly CopySelectedExpensesToNextMonthRequestValidator CopySelectedExpensesToNextMonthValidator = new();
+    private static readonly UpsertAnnualPlanRequestValidator UpsertAnnualPlanValidator = new();
     private static readonly UpdateExpenseLineItemRequestValidator UpdateExpenseLineItemValidator = new();
     private static readonly DeleteMonthSavingsTransferItemRequestValidator DeleteSavingsTransferItemValidator = new();
     private static readonly DeleteExpenseRequestValidator DeleteExpenseValidator = new();
@@ -54,6 +57,59 @@ public sealed class ExpenseService(
             .ToListAsync(cancellationToken);
 
         return monthPlans;
+    }
+
+    public async Task<MonthPlanPreparationDto> GetMonthPlanPreparationAsync(
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var monthExists = await dbContext.MonthPlans
+            .AsNoTracking()
+            .AnyAsync(x => x.Year == year && x.Month == month, cancellationToken);
+
+        var sourceYear = year - 1;
+        var sourceMonth = month;
+
+        if (monthExists)
+        {
+            return new MonthPlanPreparationDto
+            {
+                Year = year,
+                Month = month,
+                MonthExists = true,
+                SourceYear = sourceYear,
+                SourceMonth = sourceMonth
+            };
+        }
+
+        var sourceExpenses = await LoadMonthExpensesAsync(
+            dbContext,
+            sourceYear,
+            sourceMonth,
+            null,
+            cancellationToken);
+        var activeRecurringExpenseKeys = await LoadActiveRecurringExpenseKeysAsync(dbContext, cancellationToken);
+
+        return new MonthPlanPreparationDto
+        {
+            Year = year,
+            Month = month,
+            MonthExists = false,
+            SourceYear = sourceYear,
+            SourceMonth = sourceMonth,
+            Suggestions = sourceExpenses
+                .Select(expense => BuildMonthPlanExpenseSuggestionDto(
+                    expense,
+                    sourceYear,
+                    sourceMonth,
+                    activeRecurringExpenseKeys))
+                .ToList()
+        };
     }
 
     public async Task<IReadOnlyList<RegularExpenseDefinitionDto>> GetRegularExpenseDefinitionsAsync(
@@ -558,6 +614,9 @@ public sealed class ExpenseService(
         var availableYears = await dbContext.MonthPlans
             .AsNoTracking()
             .Select(x => x.Year)
+            .Concat(dbContext.AnnualPlans
+                .AsNoTracking()
+                .Select(x => x.Year))
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -918,6 +977,22 @@ public sealed class ExpenseService(
             .Where(x => x.MonthlyClosingBalances.Any(balance => balance.HasValue))
             .ToList();
 
+        var deviationAlertCandidates = BuildDeviationAlertCandidates(expenseRows, populatedMonths, year);
+
+        var annualPlan = await dbContext.AnnualPlans
+            .AsNoTracking()
+            .Where(x => x.Year == year)
+            .Select(x => new AnnualPlanDto
+            {
+                Year = x.Year,
+                ExpectedIncomeAmount = x.ExpectedIncomeAmount,
+                ExpectedSavingsAmount = x.ExpectedSavingsAmount
+            })
+            .SingleOrDefaultAsync(cancellationToken) ?? new AnnualPlanDto
+            {
+                Year = year
+            };
+
         return new YearStatisticsDto
         {
             Year = year,
@@ -929,8 +1004,129 @@ public sealed class ExpenseService(
             CategoryTagStatistics = categoryTagStatistics,
             CategoryBreakdown = categoryBreakdown,
             MonthlyFinance = monthlyFinance,
-            AccountBalances = accountBalances
+            AccountBalances = accountBalances,
+            DeviationAlertCandidates = deviationAlertCandidates,
+            AnnualPlan = annualPlan
         };
+    }
+
+    public async Task<AnnualPlanDto> UpsertAnnualPlanAsync(
+        UpsertAnnualPlanRequest request,
+        CancellationToken cancellationToken)
+    {
+        UpsertAnnualPlanValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var annualPlan = await dbContext.AnnualPlans
+            .SingleOrDefaultAsync(x => x.Year == request.Year, cancellationToken);
+
+        if (annualPlan is null)
+        {
+            annualPlan = new AnnualPlan
+            {
+                Year = request.Year,
+                ExpectedIncomeAmount = request.ExpectedIncomeAmount,
+                ExpectedSavingsAmount = request.ExpectedSavingsAmount
+            };
+            dbContext.AnnualPlans.Add(annualPlan);
+        }
+        else
+        {
+            annualPlan.ExpectedIncomeAmount = request.ExpectedIncomeAmount;
+            annualPlan.ExpectedSavingsAmount = request.ExpectedSavingsAmount;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new AnnualPlanDto
+        {
+            Year = annualPlan.Year,
+            ExpectedIncomeAmount = annualPlan.ExpectedIncomeAmount,
+            ExpectedSavingsAmount = annualPlan.ExpectedSavingsAmount
+        };
+    }
+
+    private static IReadOnlyList<CategoryDeviationAlertCandidateDto> BuildDeviationAlertCandidates(
+        IReadOnlyList<ExpenseYearSnapshot> expenseRows,
+        IReadOnlyList<int> populatedMonths,
+        int year)
+    {
+        if (expenseRows.Count == 0 || populatedMonths.Count == 0)
+        {
+            return [];
+        }
+
+        var monthlyCategorySpent = expenseRows
+            .GroupBy(x => new { x.CategoryId, x.CategoryName, x.Month })
+            .ToDictionary(
+                group => (group.Key.CategoryId, group.Key.CategoryName, group.Key.Month),
+                group => group.Sum(x => x.ActualAmount));
+
+        var categories = expenseRows
+            .GroupBy(x => new { x.CategoryId, x.CategoryName })
+            .Select(group => (group.Key.CategoryId, group.Key.CategoryName))
+            .OrderBy(x => x.CategoryName)
+            .ToList();
+
+        var candidates = new List<CategoryDeviationAlertCandidateDto>();
+
+        foreach (var (categoryId, categoryName) in categories)
+        {
+            var categoryMonthlyValues = populatedMonths
+                .Select(month => monthlyCategorySpent.GetValueOrDefault((categoryId, categoryName, month), 0m))
+                .ToList();
+
+            for (var index = 0; index < populatedMonths.Count; index++)
+            {
+                var currentSpent = categoryMonthlyValues[index];
+                if (currentSpent <= 0m)
+                {
+                    continue;
+                }
+
+                var priorValues = categoryMonthlyValues
+                    .Take(index)
+                    .Where(value => value > 0m)
+                    .ToList();
+
+                if (priorValues.Count == 0)
+                {
+                    continue;
+                }
+
+                var historicalAverage = priorValues.Average();
+                if (historicalAverage <= 0m)
+                {
+                    continue;
+                }
+
+                var deviationPercent = ((currentSpent - historicalAverage) / historicalAverage) * 100m;
+                if (deviationPercent <= 20m)
+                {
+                    continue;
+                }
+
+                candidates.Add(new CategoryDeviationAlertCandidateDto
+                {
+                    Year = year,
+                    Month = populatedMonths[index],
+                    CategoryId = categoryId,
+                    CategoryName = categoryName,
+                    CurrentSpentAmount = currentSpent,
+                    HistoricalAverageAmount = historicalAverage,
+                    DeviationPercent = deviationPercent,
+                    ThresholdPercent = 20m
+                });
+            }
+        }
+
+        return candidates
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .ThenByDescending(x => x.DeviationPercent)
+            .ThenBy(x => x.CategoryName)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<ExpenseHistorySearchResultDto>> SearchExpenseHistoryAsync(
@@ -1606,32 +1802,142 @@ public sealed class ExpenseService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<int> CopySelectedExpensesToNextMonthAsync(
-        CopySelectedExpensesToNextMonthRequest request,
+    public async Task<int> ApplyMonthPlanSuggestionsAsync(
+        ApplyMonthPlanSuggestionsRequest request,
         CancellationToken cancellationToken)
     {
-        CopySelectedExpensesToNextMonthValidator.ValidateOrThrowBadRequest(request);
+        ApplyMonthPlanSuggestionsValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var sourceMonthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+        var sourceYear = request.Year - 1;
+        var sourceMonth = request.Month;
+        var selectedIds = request.Suggestions.Select(x => x.SourceExpenseId).ToArray();
 
-        var sourceExpenses = await dbContext.Expenses
+        var sourceExpenses = await LoadMonthExpensesAsync(
+            dbContext,
+            sourceYear,
+            sourceMonth,
+            selectedIds,
+            cancellationToken);
+
+        if (sourceExpenses.Count != request.Suggestions.Count)
+        {
+            throw new BadRequestException("Some suggestion source expenses were not found in source month.");
+        }
+
+        var targetMonthState = await GetOrCreateMonthPlanStateAsync(dbContext, request.Year, request.Month, cancellationToken);
+        var targetMonthPlan = targetMonthState.MonthPlan;
+        BudgetHelper.EnsureMonthIsOpen(targetMonthPlan);
+
+        if (targetMonthState.WasCreated)
+        {
+            await SyncRegularExpensesForMonthAsync(dbContext, targetMonthPlan, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await incomeService.SyncRegularIncomesForMonthAsync(request.Year, request.Month, cancellationToken);
+            await loanService.SyncLoanInstallmentsForMonthAsync(request.Year, request.Month, cancellationToken);
+        }
+
+        var selectedItemsBySourceId = request.Suggestions.ToDictionary(x => x.SourceExpenseId);
+        var existingRegularDefinitionIdsInTarget = await dbContext.Expenses
+            .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(x => x.MonthPlanId == sourceMonthPlan.Id && request.ExpenseIds.Contains(x.Id))
-            .OrderBy(x => x.Order)
-            .ThenBy(x => x.Id)
+            .Where(x => x.UserId == dbContext.CurrentBudgetOwnerUserId
+                        && x.MonthPlanId == targetMonthPlan.Id
+                        && x.RegularExpenseDefinitionId.HasValue)
+            .Select(x => x.RegularExpenseDefinitionId!.Value)
             .ToListAsync(cancellationToken);
+
+        var existingRegularDefinitionIdsSet = existingRegularDefinitionIdsInTarget.ToHashSet();
+        var activeRecurringExpenseKeys = await LoadActiveRecurringExpenseKeysAsync(dbContext, cancellationToken);
+        var maxOrder = await dbContext.Expenses
+            .Where(x => x.MonthPlanId == targetMonthPlan.Id)
+            .Select(x => (int?)x.Order)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        var createdCount = 0;
+        foreach (var sourceExpense in sourceExpenses)
+        {
+            var selectedItem = selectedItemsBySourceId[sourceExpense.Id];
+            if (!IsHistoricalSuggestionAvailable(sourceExpense, activeRecurringExpenseKeys))
+            {
+                continue;
+            }
+
+            if (sourceExpense.RegularExpenseDefinitionId.HasValue
+                && existingRegularDefinitionIdsSet.Contains(sourceExpense.RegularExpenseDefinitionId.Value))
+            {
+                continue;
+            }
+
+            maxOrder++;
+            dbContext.Expenses.Add(new Expense
+            {
+                MonthPlanId = targetMonthPlan.Id,
+                Order = maxOrder,
+                Name = sourceExpense.Name,
+                CategoryId = sourceExpense.CategoryId,
+                TagId = sourceExpense.TagId,
+                PlannedAmount = selectedItem.PlannedAmount,
+                ActualAmount = 0,
+                ShowRemainingInUI = sourceExpense.ShowRemainingInUI
+            });
+
+            createdCount++;
+        }
+
+        if (createdCount > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return createdCount;
+    }
+
+    public async Task<int> CopySelectedExpensesToMonthAsync(
+        CopySelectedExpensesToMonthRequest request,
+        CancellationToken cancellationToken)
+    {
+        CopySelectedExpensesToMonthValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (!await dbContext.MonthPlans
+                .AsNoTracking()
+                .AnyAsync(x => x.Year == request.Year && x.Month == request.Month, cancellationToken))
+        {
+            throw new NotFoundException("Source month plan not found.");
+        }
+
+        var sourceExpenses = await LoadMonthExpensesAsync(
+            dbContext,
+            request.Year,
+            request.Month,
+            request.ExpenseIds,
+            cancellationToken);
 
         if (sourceExpenses.Count != request.ExpenseIds.Count)
         {
             throw new BadRequestException("Some expenses were not found in selected month.");
         }
 
-        var nextMonthDate = new DateTime(request.Year, request.Month, 1).AddMonths(1);
-        var targetMonthPlan = await GetOrCreateMonthPlanAsync(dbContext, nextMonthDate.Year, nextMonthDate.Month,
+        var targetMonthState = await GetOrCreateMonthPlanStateAsync(
+            dbContext,
+            request.TargetYear,
+            request.TargetMonth,
             cancellationToken);
+        var targetMonthPlan = targetMonthState.MonthPlan;
         BudgetHelper.EnsureMonthIsOpen(targetMonthPlan);
+
+        if (targetMonthState.WasCreated)
+        {
+            await SyncRegularExpensesForMonthAsync(dbContext, targetMonthPlan, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await incomeService.SyncRegularIncomesForMonthAsync(request.TargetYear, request.TargetMonth, cancellationToken);
+            await loanService.SyncLoanInstallmentsForMonthAsync(request.TargetYear, request.TargetMonth, cancellationToken);
+        }
 
         var existingRegularDefinitionIdsInTarget = await dbContext.Expenses
             .IgnoreQueryFilters()
@@ -1643,7 +1949,6 @@ public sealed class ExpenseService(
             .ToListAsync(cancellationToken);
 
         var existingRegularDefinitionIdsSet = existingRegularDefinitionIdsInTarget.ToHashSet();
-
         var maxOrder = await dbContext.Expenses
             .Where(x => x.MonthPlanId == targetMonthPlan.Id)
             .Select(x => (int?)x.Order)
@@ -1654,6 +1959,11 @@ public sealed class ExpenseService(
         {
             if (sourceExpense.RegularExpenseDefinitionId.HasValue
                 && existingRegularDefinitionIdsSet.Contains(sourceExpense.RegularExpenseDefinitionId.Value))
+            {
+                continue;
+            }
+
+            if (sourceExpense.LoanInstallmentId.HasValue)
             {
                 continue;
             }
@@ -1685,6 +1995,23 @@ public sealed class ExpenseService(
         }
 
         return createdCount;
+    }
+
+    public async Task<int> CopySelectedExpensesToNextMonthAsync(
+        CopySelectedExpensesToNextMonthRequest request,
+        CancellationToken cancellationToken)
+    {
+        CopySelectedExpensesToNextMonthValidator.ValidateOrThrowBadRequest(request);
+
+        var nextMonthDate = new DateTime(request.Year, request.Month, 1).AddMonths(1);
+        return await CopySelectedExpensesToMonthAsync(new CopySelectedExpensesToMonthRequest
+        {
+            Year = request.Year,
+            Month = request.Month,
+            TargetYear = nextMonthDate.Year,
+            TargetMonth = nextMonthDate.Month,
+            ExpenseIds = request.ExpenseIds
+        }, cancellationToken);
     }
 
     public async Task<ExpenseLineItemDto> CreateExpenseLineItemAsync(CreateExpenseLineItemRequest request,
@@ -2014,6 +2341,145 @@ public sealed class ExpenseService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new MonthPlanState(monthPlan, true);
+    }
+
+    private static async Task<IReadOnlyList<Expense>> LoadMonthExpensesAsync(
+        ApplicationDbContext dbContext,
+        int year,
+        int month,
+        IReadOnlyCollection<int>? expenseIds,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<Expense> query = dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlan.Year == year && x.MonthPlan.Month == month)
+            .Include(x => x.Category)
+            .Include(x => x.Tag)
+            .Include(x => x.RegularExpenseDefinition)
+            .Include(x => x.LoanInstallment!)
+            .ThenInclude(x => x.Loan)
+            .Include(x => x.LineItems);
+
+        if (expenseIds is not null)
+        {
+            var selectedIds = expenseIds.ToArray();
+            query = query.Where(x => selectedIds.Contains(x.Id));
+        }
+
+        query = query
+            .OrderBy(x => x.Order)
+            .ThenBy(x => x.Id);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    private static MonthPlanExpenseSuggestionDto BuildMonthPlanExpenseSuggestionDto(
+        Expense expense,
+        int sourceYear,
+        int sourceMonth,
+        IReadOnlySet<RecurringExpenseKey> activeRecurringExpenseKeys)
+    {
+        var sourceActualAmount = GetExpenseActualAmountForSuggestion(expense);
+        return new MonthPlanExpenseSuggestionDto
+        {
+            SourceExpenseId = expense.Id,
+            Name = expense.Name,
+            CategoryId = expense.CategoryId,
+            CategoryName = expense.Category.Name,
+            TagId = expense.TagId,
+            TagName = expense.Tag?.Name,
+            SourcePlannedAmount = expense.PlannedAmount,
+            SourceActualAmount = sourceActualAmount,
+            SuggestedPlannedAmount = CalculateSuggestedPlannedAmount(
+                sourceActualAmount > 0 ? sourceActualAmount : expense.PlannedAmount),
+            Reason = $"Ten sam miesiąc w poprzednim roku ({sourceYear}-{sourceMonth:00})",
+            IsAvailable = IsHistoricalSuggestionAvailable(expense, activeRecurringExpenseKeys),
+            UnavailableReason = GetHistoricalSuggestionUnavailableReason(expense, activeRecurringExpenseKeys)
+        };
+    }
+
+    private static decimal GetExpenseActualAmountForSuggestion(Expense expense)
+    {
+        return expense.LineItems.Count > 0
+            ? expense.LineItems.Sum(x => x.Amount)
+            : expense.ActualAmount;
+    }
+
+    private static bool IsHistoricalSuggestionAvailable(
+        Expense expense,
+        IReadOnlySet<RecurringExpenseKey> activeRecurringExpenseKeys)
+    {
+        if (expense.RegularExpenseDefinitionId.HasValue && expense.RegularExpenseDefinition?.IsActive == true)
+        {
+            return false;
+        }
+
+        if (activeRecurringExpenseKeys.Contains(RecurringExpenseKey.FromExpense(expense)))
+        {
+            return false;
+        }
+
+        if (expense.LoanInstallmentId.HasValue && expense.LoanInstallment?.Loan?.IsActive == true)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string? GetHistoricalSuggestionUnavailableReason(
+        Expense expense,
+        IReadOnlySet<RecurringExpenseKey> activeRecurringExpenseKeys)
+    {
+        if (expense.RegularExpenseDefinitionId.HasValue && expense.RegularExpenseDefinition?.IsActive == true)
+        {
+            return "Wydatek cykliczny zostanie automatycznie zsynchronizowany przy utworzeniu miesiąca.";
+        }
+
+        if (expense.LoanInstallmentId.HasValue && expense.LoanInstallment?.Loan?.IsActive == true)
+        {
+            return "Rata kredytu zostanie automatycznie zsynchronizowana przy utworzeniu miesiąca.";
+        }
+
+        if (activeRecurringExpenseKeys.Contains(RecurringExpenseKey.FromExpense(expense)))
+        {
+            return "Podobny aktywny wydatek cykliczny zostanie automatycznie dodany przy utworzeniu miesiąca.";
+        }
+
+        return null;
+    }
+
+    private static async Task<HashSet<RecurringExpenseKey>> LoadActiveRecurringExpenseKeysAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var definitions = await dbContext.RegularExpenseDefinitions
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => new
+            {
+                x.Name,
+                x.CategoryId,
+                x.TagId
+            })
+            .ToListAsync(cancellationToken);
+
+        return definitions
+            .Select(x => new RecurringExpenseKey(x.Name, x.CategoryId, x.TagId))
+            .ToHashSet();
+    }
+
+    private static decimal CalculateSuggestedPlannedAmount(decimal basisAmount)
+    {
+        if (basisAmount <= 0)
+        {
+            return 0;
+        }
+
+        var bufferedAmount = basisAmount * 1.10m;
+        var roundingScale = bufferedAmount < 500m ? 10m : 100m;
+        var roundedUpAmount = Math.Ceiling(bufferedAmount / roundingScale) * roundingScale;
+        return decimal.Round(roundedUpAmount, 2, MidpointRounding.AwayFromZero);
     }
 
     private static MonthPlanDto BuildMonthPlanDto(
@@ -2463,6 +2929,27 @@ public sealed class ExpenseService(
             .SumAsync(x => x.ActualAmount, cancellationToken);
 
         return new EnvelopeUsageSnapshot(category.Id, category.Name, category.EnvelopeLimit.Value, spentAmount);
+    }
+
+    private sealed record RecurringExpenseKey(string Name, int CategoryId, int? TagId)
+    {
+        public static RecurringExpenseKey FromExpense(Expense expense)
+        {
+            return new RecurringExpenseKey(expense.Name, expense.CategoryId, expense.TagId);
+        }
+
+        public bool Equals(RecurringExpenseKey? other)
+        {
+            return other is not null
+                   && CategoryId == other.CategoryId
+                   && TagId == other.TagId
+                   && string.Equals(Name.Trim(), other.Name.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(Name.Trim()), CategoryId, TagId);
+        }
     }
 
     private sealed record EnvelopeUsageSnapshot(int CategoryId, string CategoryName, decimal Limit, decimal SpentAmount);

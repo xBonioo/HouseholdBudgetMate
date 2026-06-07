@@ -33,6 +33,7 @@ public class ApplicationDbContext(
 
     public DbSet<Account> Accounts { get; set; }
     public DbSet<AccountMonthBalance> AccountMonthBalances { get; set; }
+    public DbSet<AnnualPlan> AnnualPlans { get; set; }
     public DbSet<Income> Incomes { get; set; }
     public DbSet<RegularIncomeDefinition> RegularIncomeDefinitions { get; set; }
 
@@ -68,6 +69,7 @@ public class ApplicationDbContext(
         EnsureUserScopedWriteAccess();
         StampUserScope(ChangeTracker.Entries<Account>(), (entity, userId) => entity.UserId = userId);
         StampUserScope(ChangeTracker.Entries<AccountMonthBalance>(), (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<AnnualPlan>(), (entity, userId) => entity.UserId = userId);
         StampUserScope(ChangeTracker.Entries<Expense>(), (entity, userId) => entity.UserId = userId);
         StampUserScope(ChangeTracker.Entries<ExpenseLineItem>(), (entity, userId) => entity.UserId = userId);
         StampUserScope(ChangeTracker.Entries<Income>(), (entity, userId) => entity.UserId = userId);
@@ -154,6 +156,7 @@ public class ApplicationDbContext(
     {
         return entity is Account
             or AccountMonthBalance
+            or AnnualPlan
             or Expense
             or ExpenseLineItem
             or Income
@@ -171,6 +174,7 @@ public class ApplicationDbContext(
     {
         ConfigureUserScopedEntity<Account>(modelBuilder);
         ConfigureUserScopedEntity<AccountMonthBalance>(modelBuilder);
+        ConfigureUserScopedEntity<AnnualPlan>(modelBuilder);
         ConfigureUserScopedEntity<Expense>(modelBuilder);
         ConfigureUserScopedEntity<ExpenseLineItem>(modelBuilder);
         ConfigureUserScopedEntity<Income>(modelBuilder);
@@ -203,6 +207,7 @@ public class ApplicationDbContext(
     {
         modelBuilder.Entity<Account>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<AccountMonthBalance>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
+        modelBuilder.Entity<AnnualPlan>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<Category>().HasQueryFilter(x => CurrentBudgetOwnerUserId != NoBudgetAccessScope && !x.IsDeleted);
         modelBuilder.Entity<Expense>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId && !x.IsDeleted);
         modelBuilder.Entity<ExpenseLineItem>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);

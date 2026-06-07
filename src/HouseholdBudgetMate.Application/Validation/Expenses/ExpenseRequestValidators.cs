@@ -71,6 +71,14 @@ public sealed class CreateExpenseRequestValidator : AbstractValidator<CreateExpe
         RuleFor(x => x.TagId)
             .GreaterThan(0)
             .When(x => x.TagId.HasValue);
+
+        RuleFor(x => x.PlannedAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Planowana kwota wydatku musi być większa lub równa zero.");
+
+        RuleFor(x => x.ActualAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Faktyczna kwota wydatku musi być większa lub równa zero.");
     }
 
     protected override bool PreValidate(ValidationContext<CreateExpenseRequest> context, ValidationResult result)
@@ -103,6 +111,14 @@ public sealed class UpdateExpenseRequestValidator : AbstractValidator<UpdateExpe
         RuleFor(x => x.TagId)
             .GreaterThan(0)
             .When(x => x.TagId.HasValue);
+
+        RuleFor(x => x.PlannedAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Planowana kwota wydatku musi być większa lub równa zero.");
+
+        RuleFor(x => x.ActualAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Faktyczna kwota wydatku musi być większa lub równa zero.");
     }
 
     protected override bool PreValidate(ValidationContext<UpdateExpenseRequest> context, ValidationResult result)
@@ -158,6 +174,98 @@ public sealed class CopySelectedExpensesToNextMonthRequestValidator : AbstractVa
         RuleFor(x => x.ExpenseIds)
             .Must(ids => ids.Distinct().Count() == ids.Count)
             .WithMessage("Expense ids must be unique.");
+    }
+}
+
+public sealed class ApplyMonthPlanSuggestionItemRequestValidator : AbstractValidator<ApplyMonthPlanSuggestionItemRequest>
+{
+    public ApplyMonthPlanSuggestionItemRequestValidator()
+    {
+        RuleFor(x => x.SourceExpenseId).GreaterThan(0);
+
+        RuleFor(x => x.PlannedAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Planowana kwota musi być większa lub równa zero.");
+    }
+}
+
+public sealed class ApplyMonthPlanSuggestionsRequestValidator : AbstractValidator<ApplyMonthPlanSuggestionsRequest>
+{
+    public ApplyMonthPlanSuggestionsRequestValidator()
+    {
+        RuleFor(x => x.Year)
+            .InclusiveBetween(2000, 3000)
+            .WithMessage("Year is out of allowed range.");
+
+        RuleFor(x => x.Month)
+            .InclusiveBetween(1, 12)
+            .WithMessage("Month must be in range 1..12.");
+
+        RuleFor(x => x.Suggestions)
+            .NotEmpty()
+            .WithMessage("Wybierz co najmniej jedną propozycję.");
+
+        RuleForEach(x => x.Suggestions)
+            .SetValidator(new ApplyMonthPlanSuggestionItemRequestValidator());
+
+        RuleFor(x => x.Suggestions)
+            .Must(items => items.Select(x => x.SourceExpenseId).Distinct().Count() == items.Count)
+            .WithMessage("Propozycje wydatków nie mogą się powtarzać.");
+    }
+}
+
+public sealed class CopySelectedExpensesToMonthRequestValidator : AbstractValidator<CopySelectedExpensesToMonthRequest>
+{
+    public CopySelectedExpensesToMonthRequestValidator()
+    {
+        RuleFor(x => x.Year)
+            .InclusiveBetween(2000, 3000)
+            .WithMessage("Year is out of allowed range.");
+
+        RuleFor(x => x.Month)
+            .InclusiveBetween(1, 12)
+            .WithMessage("Month must be in range 1..12.");
+
+        RuleFor(x => x.TargetYear)
+            .InclusiveBetween(2000, 3000)
+            .WithMessage("Target year is out of allowed range.");
+
+        RuleFor(x => x.TargetMonth)
+            .InclusiveBetween(1, 12)
+            .WithMessage("Target month must be in range 1..12.");
+
+        RuleFor(x => x)
+            .Must(x => x.Year != x.TargetYear || x.Month != x.TargetMonth)
+            .WithMessage("Source and target month must be different.");
+
+        RuleFor(x => x.ExpenseIds)
+            .NotEmpty()
+            .WithMessage("At least one expense must be selected.");
+
+        RuleForEach(x => x.ExpenseIds)
+            .GreaterThan(0);
+
+        RuleFor(x => x.ExpenseIds)
+            .Must(ids => ids.Distinct().Count() == ids.Count)
+            .WithMessage("Expense ids must be unique.");
+    }
+}
+
+public sealed class UpsertAnnualPlanRequestValidator : AbstractValidator<UpsertAnnualPlanRequest>
+{
+    public UpsertAnnualPlanRequestValidator()
+    {
+        RuleFor(x => x.Year)
+            .InclusiveBetween(2000, 3000)
+            .WithMessage("Year is out of allowed range.");
+
+        RuleFor(x => x.ExpectedIncomeAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Expected income amount must be zero or greater.");
+
+        RuleFor(x => x.ExpectedSavingsAmount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Expected savings amount must be zero or greater.");
     }
 }
 

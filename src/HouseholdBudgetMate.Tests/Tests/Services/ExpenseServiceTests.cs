@@ -5,6 +5,8 @@ using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Domain.Infrastructure;
+using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,6 +26,88 @@ public sealed class ExpenseServiceTests
             eventPublisher ?? new RecordingAppEventPublisher(),
             new NoOpIncomeService(),
             new NoOpLoanService());
+    }
+
+    private ExpenseService CreateService(CurrentUserContext currentUserContext, RecordingAppEventPublisher? eventPublisher = null, DateTime? nowUtc = null)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(_dbName)
+            .Options;
+        var factory = new CurrentUserDbContextFactory(options, currentUserContext);
+        var provider = new StaticDateTimeProvider(nowUtc ?? DateTime.UtcNow);
+
+        return new ExpenseService(
+            factory,
+            provider,
+            eventPublisher ?? new RecordingAppEventPublisher(),
+            new NoOpIncomeService(),
+            new NoOpLoanService());
+    }
+
+    private async Task<int> CreateCategoryAsync(string name, bool supportsLineItems = false)
+    {
+        await using var context = TestDbContextFactory.CreateDbContext(_dbName);
+
+        var category = new Category
+        {
+            Name = name,
+            Color = "#6D4C41",
+            SupportsLineItems = supportsLineItems
+        };
+
+        context.Categories.Add(category);
+        await context.SaveChangesAsync();
+        return category.Id;
+    }
+
+    private async Task<int> CreateMonthPlanAsync(int year, int month, bool isClosed = false)
+    {
+        await using var context = TestDbContextFactory.CreateDbContext(_dbName);
+
+        var monthPlan = new MonthPlan
+        {
+            Year = year,
+            Month = month,
+            IsClosed = isClosed
+        };
+
+        context.MonthPlans.Add(monthPlan);
+        await context.SaveChangesAsync();
+        return monthPlan.Id;
+    }
+
+    private async Task<int> CreateRegularExpenseDefinitionAsync(
+        int categoryId,
+        string name,
+        decimal amount,
+        bool showRemainingInUi = true)
+    {
+        await using var context = TestDbContextFactory.CreateDbContext(_dbName);
+
+        var definition = new RegularExpenseDefinition
+        {
+            Name = name,
+            CategoryId = categoryId,
+            Amount = amount,
+            ShowRemainingInUI = showRemainingInUi,
+            IsActive = true
+        };
+
+        context.RegularExpenseDefinitions.Add(definition);
+        await context.SaveChangesAsync();
+        return definition.Id;
+    }
+
+    private sealed class CurrentUserDbContextFactory(
+        DbContextOptions<ApplicationDbContext> options,
+        CurrentUserContext currentUserContext) : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext() => new(options, currentUserContext);
+
+        public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CreateDbContext());
+        }
     }
 
     /// <summary>
@@ -80,6 +164,76 @@ public sealed class ExpenseServiceTests
         Assert.Equal(categoryId, budgetEvents[0].CategoryId);
         Assert.Equal(510m, budgetEvents[0].SpentAmount);
         Assert.Equal(500m, budgetEvents[0].EnvelopeLimit);
+    }
+
+    /// <summary>
+    /// Verifies that manually created expenses cannot carry negative planned or actual amounts.
+    /// </summary>
+    [Fact]
+    public async Task CreateExpenseAsync_Should_Reject_Negative_Amounts()
+    {
+        var categoryId = await CreateCategoryAsync("Zakupy");
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Ujemny plan",
+            CategoryId = categoryId,
+            PlannedAmount = -1m,
+            ActualAmount = 0m
+        }, CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Ujemny faktyczny",
+            CategoryId = categoryId,
+            PlannedAmount = 0m,
+            ActualAmount = -1m
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that edited expenses cannot be saved with negative planned or actual amounts.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseAsync_Should_Reject_Negative_Amounts()
+    {
+        var categoryId = await CreateCategoryAsync("Zakupy");
+        var service = CreateService();
+        var created = await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Zakupy",
+            CategoryId = categoryId,
+            PlannedAmount = 100m,
+            ActualAmount = 50m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = created.Id,
+            Name = "Ujemny plan",
+            CategoryId = categoryId,
+            PlannedAmount = -1m,
+            ActualAmount = 50m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = created.Id,
+            Name = "Ujemny faktyczny",
+            CategoryId = categoryId,
+            PlannedAmount = 100m,
+            ActualAmount = -1m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None));
     }
 
     /// <summary>
@@ -667,6 +821,563 @@ public sealed class ExpenseServiceTests
         Assert.Equal(50m, copiedB.PlannedAmount);
         Assert.Equal(0m, copiedB.ActualAmount);
         Assert.False(copiedB.ShowRemainingInUI);
+    }
+
+    /// <summary>
+    /// Prepares a missing month with one recurring source expense and verifies that the target month
+    /// is not created during preview, while the suggestion is marked unavailable for auto-sync.
+    /// </summary>
+    [Fact]
+    public async Task GetMonthPlanPreparationAsync_Should_Not_Create_Target_Month_And_Mark_Recurring_Suggestion_Unavailable()
+    {
+        var categoryId = await CreateCategoryAsync("Rachunki");
+        var regularDefinitionId = await CreateRegularExpenseDefinitionAsync(categoryId, "Prad", 120m);
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 7);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Prad",
+                CategoryId = categoryId,
+                RegularExpenseDefinitionId = regularDefinitionId,
+                PlannedAmount = 120m,
+                ActualAmount = 120m,
+                ShowRemainingInUI = true
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.GetMonthPlanPreparationAsync(2026, 7, CancellationToken.None);
+
+        Assert.False(result.MonthExists);
+        Assert.Equal(2025, result.SourceYear);
+        Assert.Equal(7, result.SourceMonth);
+
+        var suggestion = Assert.Single(result.Suggestions);
+        Assert.False(suggestion.IsAvailable);
+        Assert.Equal(
+            "Wydatek cykliczny zostanie automatycznie zsynchronizowany przy utworzeniu miesiąca.",
+            suggestion.UnavailableReason);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlans = await verifyContext.MonthPlans.ToListAsync();
+        Assert.Single(monthPlans);
+        Assert.DoesNotContain(monthPlans, x => x.Year == 2026 && x.Month == 7);
+    }
+
+    /// <summary>
+    /// Verifies that an older manual historical expense is suppressed when an active recurring
+    /// definition with the same name/category/tag now covers that future month.
+    /// </summary>
+    [Fact]
+    public async Task GetMonthPlanPreparationAsync_Should_Mark_Manual_History_Unavailable_When_Active_Recurring_Definition_Matches()
+    {
+        var categoryId = await CreateCategoryAsync("Kosmetyki");
+        await CreateRegularExpenseDefinitionAsync(categoryId, "Kosmetyki", 160m);
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 7);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Kosmetyki",
+                CategoryId = categoryId,
+                PlannedAmount = 130m,
+                ActualAmount = 118m,
+                ShowRemainingInUI = true
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.GetMonthPlanPreparationAsync(2026, 7, CancellationToken.None);
+
+        var suggestion = Assert.Single(result.Suggestions);
+        Assert.False(suggestion.IsAvailable);
+        Assert.Equal(
+            "Podobny aktywny wydatek cykliczny zostanie automatycznie dodany przy utworzeniu miesiąca.",
+            suggestion.UnavailableReason);
+    }
+
+    /// <summary>
+    /// Verifies that same-month previous-year suggestions are built from line-item actuals when present
+    /// and fall back to planned amounts when actuals are zero.
+    /// </summary>
+    [Fact]
+    public async Task GetMonthPlanPreparationAsync_Should_Suggest_Same_Month_Last_Year_Expenses_Using_Actual_Or_Planned_Basis()
+    {
+        var categoryId = await CreateCategoryAsync("Zakupy", supportsLineItems: true);
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 7);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var firstExpense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Pozycja z paragonu",
+                CategoryId = categoryId,
+                PlannedAmount = 120m,
+                ActualAmount = 0m,
+                ShowRemainingInUI = true
+            };
+
+            var secondExpense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 2,
+                Name = "Planowana pozycja",
+                CategoryId = categoryId,
+                PlannedAmount = 200m,
+                ActualAmount = 0m,
+                ShowRemainingInUI = false
+            };
+
+            context.Expenses.AddRange(firstExpense, secondExpense);
+            await context.SaveChangesAsync();
+
+            context.ExpenseLineItems.Add(new ExpenseLineItem
+            {
+                ExpenseId = firstExpense.Id,
+                Description = "Pozycja 1",
+                Amount = 73m,
+                OccurredAt = new DateOnly(2025, 7, 5)
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.GetMonthPlanPreparationAsync(2026, 7, CancellationToken.None);
+
+        var firstSuggestion = Assert.Single(result.Suggestions, x => x.Name == "Pozycja z paragonu");
+        Assert.Equal(73m, firstSuggestion.SourceActualAmount);
+        Assert.Equal(90m, firstSuggestion.SuggestedPlannedAmount);
+        Assert.True(firstSuggestion.IsAvailable);
+
+        var secondSuggestion = Assert.Single(result.Suggestions, x => x.Name == "Planowana pozycja");
+        Assert.Equal(0m, secondSuggestion.SourceActualAmount);
+        Assert.Equal(220m, secondSuggestion.SuggestedPlannedAmount);
+        Assert.True(secondSuggestion.IsAvailable);
+    }
+
+    /// <summary>
+    /// Verifies that the buffered suggestion amount rounds up to the nearest 10 below 500 and the
+    /// nearest 100 once the buffered amount reaches 500 or more.
+    /// </summary>
+    [Theory]
+    [InlineData(111, 130)]
+    [InlineData(456, 600)]
+    public async Task GetMonthPlanPreparationAsync_Should_Round_Suggested_PlannedAmount_By_Scale(
+        double sourceAmount,
+        double expectedSuggestedAmount)
+    {
+        var categoryId = await CreateCategoryAsync("Zakupy");
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 8);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Pozycja",
+                CategoryId = categoryId,
+                PlannedAmount = (decimal)sourceAmount,
+                ActualAmount = 0m,
+                ShowRemainingInUI = true
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.GetMonthPlanPreparationAsync(2026, 8, CancellationToken.None);
+
+        var suggestion = Assert.Single(result.Suggestions);
+        Assert.Equal((decimal)expectedSuggestedAmount, suggestion.SuggestedPlannedAmount);
+    }
+
+    /// <summary>
+    /// Applies a selected historical suggestion, edits the planned amount, and verifies the target
+    /// month is created with the edited value and zero actual amount.
+    /// </summary>
+    [Fact]
+    public async Task ApplyMonthPlanSuggestionsAsync_Should_Create_Target_Month_With_Edited_PlannedAmount()
+    {
+        var categoryId = await CreateCategoryAsync("Transport");
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 9);
+
+        int sourceExpenseId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var expense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Paliwo",
+                CategoryId = categoryId,
+                PlannedAmount = 120m,
+                ActualAmount = 95m,
+                ShowRemainingInUI = true
+            };
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            sourceExpenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        var createdCount = await service.ApplyMonthPlanSuggestionsAsync(new ApplyMonthPlanSuggestionsRequest
+        {
+            Year = 2026,
+            Month = 9,
+            Suggestions =
+            [
+                new ApplyMonthPlanSuggestionItemRequest
+                {
+                    SourceExpenseId = sourceExpenseId,
+                    PlannedAmount = 133m
+                }
+            ]
+        }, CancellationToken.None);
+
+        Assert.Equal(1, createdCount);
+
+        var targetMonth = await service.GetMonthAsync(2026, 9, CancellationToken.None);
+        var copiedExpense = Assert.Single(targetMonth.Expenses);
+        Assert.Equal("Paliwo", copiedExpense.Name);
+        Assert.Equal(133m, copiedExpense.PlannedAmount);
+        Assert.Equal(0m, copiedExpense.ActualAmount);
+        Assert.True(copiedExpense.ShowRemainingInUI);
+    }
+
+    /// <summary>
+    /// Applies a recurring source suggestion alongside a manual one and verifies the recurring row
+    /// is suppressed because the month creation path already auto-synced it.
+    /// </summary>
+    [Fact]
+    public async Task ApplyMonthPlanSuggestionsAsync_Should_Skip_Recurring_Duplicates_And_Keep_AutoSynced_Expense()
+    {
+        var categoryId = await CreateCategoryAsync("Rachunki");
+        var regularDefinitionId = await CreateRegularExpenseDefinitionAsync(categoryId, "Prad", 120m);
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 10);
+
+        int recurringExpenseId;
+        int manualExpenseId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var recurringExpense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Prad",
+                CategoryId = categoryId,
+                RegularExpenseDefinitionId = regularDefinitionId,
+                PlannedAmount = 120m,
+                ActualAmount = 120m,
+                ShowRemainingInUI = true
+            };
+
+            var manualExpense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 2,
+                Name = "Papier",
+                CategoryId = categoryId,
+                PlannedAmount = 45m,
+                ActualAmount = 30m,
+                ShowRemainingInUI = false
+            };
+
+            context.Expenses.AddRange(recurringExpense, manualExpense);
+            await context.SaveChangesAsync();
+
+            recurringExpenseId = recurringExpense.Id;
+            manualExpenseId = manualExpense.Id;
+        }
+
+        var service = CreateService();
+        var createdCount = await service.ApplyMonthPlanSuggestionsAsync(new ApplyMonthPlanSuggestionsRequest
+        {
+            Year = 2026,
+            Month = 10,
+            Suggestions =
+            [
+                new ApplyMonthPlanSuggestionItemRequest
+                {
+                    SourceExpenseId = recurringExpenseId,
+                    PlannedAmount = 133m
+                },
+                new ApplyMonthPlanSuggestionItemRequest
+                {
+                    SourceExpenseId = manualExpenseId,
+                    PlannedAmount = 50m
+                }
+            ]
+        }, CancellationToken.None);
+
+        Assert.Equal(1, createdCount);
+
+        var targetMonth = await service.GetMonthAsync(2026, 10, CancellationToken.None);
+        Assert.Equal(2, targetMonth.Expenses.Count);
+
+        var autoSyncedRecurring = Assert.Single(targetMonth.Expenses, x => x.Name == "Prad");
+        Assert.Equal(regularDefinitionId, autoSyncedRecurring.RegularExpenseDefinitionId);
+        Assert.Equal(120m, autoSyncedRecurring.PlannedAmount);
+
+        var copiedManual = Assert.Single(targetMonth.Expenses, x => x.Name == "Papier");
+        Assert.Null(copiedManual.RegularExpenseDefinitionId);
+        Assert.Equal(50m, copiedManual.PlannedAmount);
+        Assert.Equal(0m, copiedManual.ActualAmount);
+    }
+
+    /// <summary>
+    /// Verifies that applying an older manual historical suggestion does not duplicate an active
+    /// recurring definition that now represents the same planned expense.
+    /// </summary>
+    [Fact]
+    public async Task ApplyMonthPlanSuggestionsAsync_Should_Skip_Manual_History_When_Active_Recurring_Definition_Matches()
+    {
+        var categoryId = await CreateCategoryAsync("Kosmetyki");
+        var regularDefinitionId = await CreateRegularExpenseDefinitionAsync(categoryId, "Kosmetyki", 160m);
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2025, 11);
+
+        int sourceExpenseId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var expense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Kosmetyki",
+                CategoryId = categoryId,
+                PlannedAmount = 130m,
+                ActualAmount = 118m,
+                ShowRemainingInUI = true
+            };
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            sourceExpenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        var createdCount = await service.ApplyMonthPlanSuggestionsAsync(new ApplyMonthPlanSuggestionsRequest
+        {
+            Year = 2026,
+            Month = 11,
+            Suggestions =
+            [
+                new ApplyMonthPlanSuggestionItemRequest
+                {
+                    SourceExpenseId = sourceExpenseId,
+                    PlannedAmount = 140m
+                }
+            ]
+        }, CancellationToken.None);
+
+        Assert.Equal(0, createdCount);
+
+        var targetMonth = await service.GetMonthAsync(2026, 11, CancellationToken.None);
+        var autoSyncedRecurring = Assert.Single(targetMonth.Expenses);
+        Assert.Equal("Kosmetyki", autoSyncedRecurring.Name);
+        Assert.Equal(regularDefinitionId, autoSyncedRecurring.RegularExpenseDefinitionId);
+        Assert.Equal(160m, autoSyncedRecurring.PlannedAmount);
+    }
+
+    /// <summary>
+    /// Copies selected expenses to a non-adjacent target month and verifies line items are not copied
+    /// while planned fields are preserved and actual amounts are reset.
+    /// </summary>
+    [Fact]
+    public async Task CopySelectedExpensesToMonthAsync_Should_Copy_Selected_Items_To_Explicit_Target_And_Strip_LineItems()
+    {
+        var categoryId = await CreateCategoryAsync("Zakupy", supportsLineItems: true);
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2026, 8);
+
+        int sourceExpenseId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var expense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Paragon",
+                CategoryId = categoryId,
+                PlannedAmount = 150m,
+                ActualAmount = 0m,
+                ShowRemainingInUI = false
+            };
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+
+            context.ExpenseLineItems.AddRange(
+                new ExpenseLineItem
+                {
+                    ExpenseId = expense.Id,
+                    Description = "Chleb",
+                    Amount = 45m,
+                    OccurredAt = new DateOnly(2026, 8, 2)
+                },
+                new ExpenseLineItem
+                {
+                    ExpenseId = expense.Id,
+                    Description = "Mleko",
+                    Amount = 30m,
+                    OccurredAt = new DateOnly(2026, 8, 3)
+                });
+
+            await context.SaveChangesAsync();
+            sourceExpenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        var copiedCount = await service.CopySelectedExpensesToMonthAsync(new CopySelectedExpensesToMonthRequest
+        {
+            Year = 2026,
+            Month = 8,
+            TargetYear = 2026,
+            TargetMonth = 10,
+            ExpenseIds = [sourceExpenseId]
+        }, CancellationToken.None);
+
+        Assert.Equal(1, copiedCount);
+
+        var targetMonth = await service.GetMonthAsync(2026, 10, CancellationToken.None);
+        var copiedExpense = Assert.Single(targetMonth.Expenses);
+        Assert.Equal("Paragon", copiedExpense.Name);
+        Assert.Equal(150m, copiedExpense.PlannedAmount);
+        Assert.Equal(0m, copiedExpense.ActualAmount);
+        Assert.False(copiedExpense.ShowRemainingInUI);
+        Assert.Empty(copiedExpense.LineItems);
+    }
+
+    /// <summary>
+    /// Copies a mixed selection containing a loan-backed expense and a manual expense.
+    /// Verifies loan-backed rows are skipped so their unique LoanInstallmentId is not duplicated.
+    /// </summary>
+    [Fact]
+    public async Task CopySelectedExpensesToMonthAsync_Should_Skip_LoanBacked_Expenses()
+    {
+        var categoryId = await CreateCategoryAsync("Raty");
+        var sourceMonthPlanId = await CreateMonthPlanAsync(2026, 8);
+
+        int loanExpenseId;
+        int manualExpenseId;
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var loan = new Loan
+            {
+                Name = "Kredyt",
+                LoanType = 1,
+                InterestMode = 1,
+                Principal = 1000m,
+                InterestRate = 5m,
+                RepaymentDayOfMonth = 10,
+                StartDate = new DateOnly(2026, 1, 1),
+                EndDate = new DateOnly(2026, 12, 31),
+                IsActive = true
+            };
+
+            context.Loans.Add(loan);
+            await context.SaveChangesAsync();
+
+            var installment = new LoanInstallment
+            {
+                LoanId = loan.Id,
+                Year = 2026,
+                Month = 8,
+                DueDate = new DateOnly(2026, 8, 10),
+                Amount = 300m,
+                PrincipalAmount = 250m,
+                InterestAmount = 50m
+            };
+
+            context.LoanInstallments.Add(installment);
+            await context.SaveChangesAsync();
+
+            var loanExpense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 1,
+                Name = "Rata kredytu",
+                CategoryId = categoryId,
+                LoanInstallmentId = installment.Id,
+                PlannedAmount = 300m,
+                ActualAmount = 0m,
+                ShowRemainingInUI = true
+            };
+
+            var manualExpense = new Expense
+            {
+                MonthPlanId = sourceMonthPlanId,
+                Order = 2,
+                Name = "Manualna rata",
+                CategoryId = categoryId,
+                PlannedAmount = 120m,
+                ActualAmount = 80m,
+                ShowRemainingInUI = true
+            };
+
+            context.Expenses.AddRange(loanExpense, manualExpense);
+            await context.SaveChangesAsync();
+
+            loanExpenseId = loanExpense.Id;
+            manualExpenseId = manualExpense.Id;
+        }
+
+        var service = CreateService();
+        var copiedCount = await service.CopySelectedExpensesToMonthAsync(new CopySelectedExpensesToMonthRequest
+        {
+            Year = 2026,
+            Month = 8,
+            TargetYear = 2026,
+            TargetMonth = 10,
+            ExpenseIds = [loanExpenseId, manualExpenseId]
+        }, CancellationToken.None);
+
+        Assert.Equal(1, copiedCount);
+
+        var targetMonth = await service.GetMonthAsync(2026, 10, CancellationToken.None);
+        var copiedExpense = Assert.Single(targetMonth.Expenses);
+        Assert.Equal("Manualna rata", copiedExpense.Name);
+        Assert.Equal(120m, copiedExpense.PlannedAmount);
+        Assert.Equal(0m, copiedExpense.ActualAmount);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var persistedTargetExpense = await verifyContext.Expenses
+            .AsNoTracking()
+            .SingleAsync(x => x.MonthPlan.Year == 2026 && x.MonthPlan.Month == 10);
+        Assert.Null(persistedTargetExpense.LoanInstallmentId);
+    }
+
+    /// <summary>
+    /// Verifies that copying to the same month is rejected before any data is changed.
+    /// </summary>
+    [Fact]
+    public async Task CopySelectedExpensesToMonthAsync_Should_Throw_When_Target_Equals_Source()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CopySelectedExpensesToMonthAsync(
+            new CopySelectedExpensesToMonthRequest
+            {
+                Year = 2026,
+                Month = 8,
+                TargetYear = 2026,
+                TargetMonth = 8,
+                ExpenseIds = [1]
+            }, CancellationToken.None));
     }
 
     /// <summary>
@@ -1282,6 +1993,125 @@ public sealed class ExpenseServiceTests
 
         var accountRow = Assert.Single(result.AccountBalances, x => x.AccountId == accountId);
         Assert.Equal(12, accountRow.MonthlyClosingBalances.Count);
+    }
+
+    /// <summary>
+    /// Seeds monthly expense history that produces one category deviation over 20 percent,
+    /// one category exactly at 20 percent, and one category with no prior history.
+    /// Verifies that only the over-threshold category is returned and that the alert
+    /// preparation path does not publish any app events.
+    /// </summary>
+    [Fact]
+    public async Task GetYearStatisticsAsync_Should_Return_DeviationAlertCandidates_Only_Above_Twenty_Percent_And_Without_Publishing_Events()
+    {
+        int stableCategoryId;
+        int overCategoryId;
+        int freshCategoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var stable = new Category { Name = "Stabilne", Color = "#43A047" };
+            var over = new Category { Name = "Nadmiarowe", Color = "#FB8C00" };
+            var fresh = new Category { Name = "Nowe", Color = "#1E88E5" };
+
+            context.Categories.AddRange(stable, over, fresh);
+            await context.SaveChangesAsync();
+
+            stableCategoryId = stable.Id;
+            overCategoryId = over.Id;
+            freshCategoryId = fresh.Id;
+
+            for (var month = 1; month <= 3; month++)
+            {
+                var monthPlan = new MonthPlan
+                {
+                    Year = 2026,
+                    Month = month
+                };
+
+                context.MonthPlans.Add(monthPlan);
+                await context.SaveChangesAsync();
+
+                if (month <= 2)
+                {
+                    context.Expenses.AddRange(
+                        new Expense
+                        {
+                            MonthPlanId = monthPlan.Id,
+                            Order = 1,
+                            Name = $"Stabilne {month}",
+                            CategoryId = stableCategoryId,
+                            PlannedAmount = 100m,
+                            ActualAmount = 100m,
+                            ShowRemainingInUI = true
+                        },
+                        new Expense
+                        {
+                            MonthPlanId = monthPlan.Id,
+                            Order = 2,
+                            Name = $"Nadmiarowe {month}",
+                            CategoryId = overCategoryId,
+                            PlannedAmount = 100m,
+                            ActualAmount = 100m,
+                            ShowRemainingInUI = true
+                        });
+                }
+
+                if (month == 3)
+                {
+                    context.Expenses.AddRange(
+                        new Expense
+                        {
+                            MonthPlanId = monthPlan.Id,
+                            Order = 1,
+                            Name = "Stabilne 3",
+                            CategoryId = stableCategoryId,
+                            PlannedAmount = 120m,
+                            ActualAmount = 120m,
+                            ShowRemainingInUI = true
+                        },
+                        new Expense
+                        {
+                            MonthPlanId = monthPlan.Id,
+                            Order = 2,
+                            Name = "Nadmiarowe 3",
+                            CategoryId = overCategoryId,
+                            PlannedAmount = 121m,
+                            ActualAmount = 121m,
+                            ShowRemainingInUI = true
+                        },
+                        new Expense
+                        {
+                            MonthPlanId = monthPlan.Id,
+                            Order = 3,
+                            Name = "Nowe 3",
+                            CategoryId = freshCategoryId,
+                            PlannedAmount = 500m,
+                            ActualAmount = 500m,
+                            ShowRemainingInUI = true
+                        });
+                }
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        var publisher = new RecordingAppEventPublisher();
+        var service = CreateService(publisher);
+
+        var result = await service.GetYearStatisticsAsync(2026, CancellationToken.None);
+
+        var candidate = Assert.Single(result.DeviationAlertCandidates, x => x.CategoryId == overCategoryId);
+        Assert.Equal(2026, candidate.Year);
+        Assert.Equal(3, candidate.Month);
+        Assert.Equal("Nadmiarowe", candidate.CategoryName);
+        Assert.Equal(121m, candidate.CurrentSpentAmount);
+        Assert.Equal(100m, candidate.HistoricalAverageAmount);
+        Assert.True(candidate.DeviationPercent > 20m);
+        Assert.Equal(20m, candidate.ThresholdPercent);
+        Assert.DoesNotContain(result.DeviationAlertCandidates, x => x.CategoryId == stableCategoryId);
+        Assert.DoesNotContain(result.DeviationAlertCandidates, x => x.CategoryId == freshCategoryId);
+        Assert.Empty(publisher.Events);
     }
 
     /// <summary>
@@ -2842,6 +3672,88 @@ public sealed class ExpenseServiceTests
     // ─── GetYearStatisticsAsync empty year ──────────────────────────────────────
 
     /// <summary>
+    /// Saves annual plan targets for two different budget owners in the same database.
+    /// Verifies that each owner sees only their own row and that updates overwrite the
+    /// prior values instead of creating duplicates.
+    /// </summary>
+    [Fact]
+    public async Task UpsertAnnualPlanAsync_Should_Create_Update_And_Respect_UserScope()
+    {
+        var ownerA = new CurrentUserContext { UserId = "owner-a", BudgetOwnerUserId = "owner-a" };
+        var ownerB = new CurrentUserContext { UserId = "owner-b", BudgetOwnerUserId = "owner-b" };
+
+        var serviceA = CreateService(ownerA);
+        var serviceB = CreateService(ownerB);
+
+        var createdA = await serviceA.UpsertAnnualPlanAsync(new UpsertAnnualPlanRequest
+        {
+            Year = 2027,
+            ExpectedIncomeAmount = 50000m,
+            ExpectedSavingsAmount = 12000m
+        }, CancellationToken.None);
+
+        Assert.Equal(2027, createdA.Year);
+        Assert.Equal(50000m, createdA.ExpectedIncomeAmount);
+        Assert.Equal(12000m, createdA.ExpectedSavingsAmount);
+
+        var updatedA = await serviceA.UpsertAnnualPlanAsync(new UpsertAnnualPlanRequest
+        {
+            Year = 2027,
+            ExpectedIncomeAmount = 51000m,
+            ExpectedSavingsAmount = 13000m
+        }, CancellationToken.None);
+
+        Assert.Equal(51000m, updatedA.ExpectedIncomeAmount);
+        Assert.Equal(13000m, updatedA.ExpectedSavingsAmount);
+
+        var createdB = await serviceB.UpsertAnnualPlanAsync(new UpsertAnnualPlanRequest
+        {
+            Year = 2027,
+            ExpectedIncomeAmount = 70000m,
+            ExpectedSavingsAmount = 20000m
+        }, CancellationToken.None);
+
+        Assert.Equal(2027, createdB.Year);
+        Assert.Equal(70000m, createdB.ExpectedIncomeAmount);
+        Assert.Equal(20000m, createdB.ExpectedSavingsAmount);
+
+        var statsA = await serviceA.GetYearStatisticsAsync(2027, CancellationToken.None);
+        var statsB = await serviceB.GetYearStatisticsAsync(2027, CancellationToken.None);
+
+        Assert.Contains(2027, statsA.AvailableYears);
+        Assert.Contains(2027, statsB.AvailableYears);
+        Assert.Equal(51000m, statsA.AnnualPlan.ExpectedIncomeAmount);
+        Assert.Equal(13000m, statsA.AnnualPlan.ExpectedSavingsAmount);
+        Assert.Equal(70000m, statsB.AnnualPlan.ExpectedIncomeAmount);
+        Assert.Equal(20000m, statsB.AnnualPlan.ExpectedSavingsAmount);
+        Assert.NotEqual(statsA.AnnualPlan.ExpectedIncomeAmount, statsB.AnnualPlan.ExpectedIncomeAmount);
+        Assert.NotEqual(statsA.AnnualPlan.ExpectedSavingsAmount, statsB.AnnualPlan.ExpectedSavingsAmount);
+    }
+
+    /// <summary>
+    /// Verifies that annual plan targets cannot be negative.
+    /// </summary>
+    [Fact]
+    public async Task UpsertAnnualPlanAsync_Should_Reject_Negative_Targets()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpsertAnnualPlanAsync(new UpsertAnnualPlanRequest
+        {
+            Year = 2027,
+            ExpectedIncomeAmount = -1m,
+            ExpectedSavingsAmount = 0m
+        }, CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpsertAnnualPlanAsync(new UpsertAnnualPlanRequest
+        {
+            Year = 2027,
+            ExpectedIncomeAmount = 0m,
+            ExpectedSavingsAmount = -1m
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
     /// Calls GetYearStatisticsAsync for a year with no expenses or account data.
     /// Verifies that empty collections are returned without errors.
     /// </summary>
@@ -2855,6 +3767,9 @@ public sealed class ExpenseServiceTests
         Assert.Empty(result.CategoryStatistics);
         Assert.Empty(result.MonthlyFinance);
         Assert.Empty(result.AccountBalances);
+        Assert.Equal(2099, result.AnnualPlan.Year);
+        Assert.Equal(0m, result.AnnualPlan.ExpectedIncomeAmount);
+        Assert.Equal(0m, result.AnnualPlan.ExpectedSavingsAmount);
     }
 
     // ─── CloseMonthAsync idempotency ─────────────────────────────────────────────

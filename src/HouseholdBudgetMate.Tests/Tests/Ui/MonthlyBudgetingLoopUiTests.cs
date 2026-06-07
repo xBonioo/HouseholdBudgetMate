@@ -15,6 +15,7 @@ public sealed class MonthlyBudgetingLoopUiTests
         var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.razor");
         var code = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.razor.cs");
         var lifecycle = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Lifecycle.cs");
+        var expenses = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Expenses.cs");
         var page = string.Concat(markup, code, lifecycle);
 
         markup.Should().Contain(RemainingInPlanLabel);
@@ -24,12 +25,50 @@ public sealed class MonthlyBudgetingLoopUiTests
         markup.Should().Contain(PreviousClosingBalanceRequired);
         markup.Should().Contain("ZAMKNIJ MIESI\u0104C");
         markup.Should().Contain("OTW\u00d3RZ MIESI\u0104C");
+        markup.Should().Contain("Propozycje wydatk\u00f3w na bazie historii");
+        markup.Should().Contain("Cykliczne wydatki nadal pojawi\u0105 si\u0119 automatycznie");
+        markup.Should().Contain("KOPIUJ DO WYBRANEGO MIESI\u0104CA");
+        markup.Should().Contain("Pomi\u0144 propozycje");
+        markup.Should().Contain("Utw\u00f3rz miesi\u0105c z wybranych");
+        markup.Should().Contain("Filtry wydatk\u00f3w");
+        markup.Should().Contain("Kategoria");
+        markup.Should().Contain("Status");
+        markup.Should().Contain("Pozosta\u0142o do zap\u0142aty");
+        markup.Should().Contain("Sp\u0142acone");
+        markup.Should().Contain("Items=\"FilteredExpenses\"");
+        markup.Should().Contain("Brak wydatk\u00f3w pasuj\u0105cych do filtr\u00f3w");
+        markup.Should().Contain("Disabled=\"@(HasActiveExpenseFilters || IsFirstExpense(expense.Id))\"");
+        markup.Should().Contain("Disabled=\"@(HasActiveExpenseFilters || IsLastExpense(expense.Id))\"");
+        markup.Should().Contain("OnClick=\"SaveSavingsTransferEditAsync\"");
+        markup.Should().NotContain("savings-transfer-editor-cell");
+        markup.Should().NotContain("ActionForm OnSubmit=\"SaveSavingsTransferEditAsync\"");
+        markup.Should().NotContain("Recurring expense will be auto-synced when the month is created.");
+        markup.Should().NotContain("Loan installment will be auto-synced when the month is created.");
 
+        code.Should().Contain("IsSelected = false");
+        code.Should().NotContain("IsSelected = suggestion.IsAvailable");
+
+        lifecycle.Should().Contain("ExpenseService.GetMonthPlanPreparationAsync");
         lifecycle.Should().Contain("ExpenseService.GetMonthAsync");
         lifecycle.Should().Contain("ExpenseService.GetDashboardSummaryAsync");
         lifecycle.Should().Contain("IncomeService.GetLiveBalanceAsync");
         lifecycle.Should().Contain("ExpenseService.CloseMonthAsync");
         lifecycle.Should().Contain("ExpenseService.OpenMonthAsync");
+        lifecycle.Should().Contain("bypassPreparation");
+
+        expenses.Should().Contain("ApplyMonthPlanSuggestionsAsync");
+        expenses.Should().Contain("SkipMonthPlanSuggestionsAsync");
+        expenses.Should().Contain("CopySelectedExpensesToMonthAsync");
+        expenses.Should().Contain("SetMonthPlanSuggestionAmountInputAsync");
+        expenses.Should().Contain("SetMonthPlanSuggestionSelectionAsync");
+        expenses.Should().Contain("IsCopyTargetSameAsSource");
+        expenses.Should().Contain("MatchesExpenseCategoryFilter");
+        expenses.Should().Contain("MatchesExpensePaymentFilter");
+        expenses.Should().Contain("ExpensePaymentFilter.RemainingToPay");
+        expenses.Should().Contain("ExpensePaymentFilter.PaidOff");
+        expenses.Should().Contain("expense.ActualAmount <= 0");
+        expenses.Should().Contain("expense.ActualAmount > 0");
+        expenses.Should().Contain("Wyczy\u015b\u0107 filtry, aby zmieni\u0107 kolejno\u015b\u0107 wydatk\u00f3w.");
 
         page.Should().Contain(PreviousClosingBalanceGuidance);
         page.Should().Contain(StoredZeroBalanceGuidance);
@@ -89,15 +128,26 @@ public sealed class MonthlyBudgetingLoopUiTests
         var statisticsPage = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Statistics.razor");
 
         statisticsPage.Should().Contain("Statystyki roczne");
-        statisticsPage.Should().Contain("Podsumowanie miesi\u0119czne (wp\u0142ywy, plan, oszcz\u0119dno\u015bci)");
+        statisticsPage.Should().Contain("Plan roczny");
+        statisticsPage.Should().Contain("Oczekiwane roczne wpływy");
+        statisticsPage.Should().Contain("Oczekiwane roczne oszczędności");
+        statisticsPage.Should().Contain("Zapisz plan roczny");
+        statisticsPage.Should().Contain("Kandydaci alert");
+        statisticsPage.Should().Contain("To są kandydaci do przyszłych powiadomień");
+        statisticsPage.Should().Contain("Nic nie jest wysyłane automatycznie");
+        statisticsPage.Should().Contain("Powyżej progu");
+        statisticsPage.Should().Contain("Podsumowanie miesięczne (wpływy, plan, oszczędności)");
         statisticsPage.Should().Contain("Suma roczna");
-        statisticsPage.Should().Contain("\u015arednia na miesi\u0105c");
+        statisticsPage.Should().Contain("Średnia na miesiąc");
         statisticsPage.Should().Contain("GetYearSummaryTitle()");
         statisticsPage.Should().Contain("GetYearSummaryPeriod()");
+        statisticsPage.Should().Contain("ExpenseService.UpsertAnnualPlanAsync");
         statisticsPage.Should().Contain("ExpenseService.GetYearStatisticsAsync");
         statisticsPage.Should().Contain("MonthlyFinance");
         statisticsPage.Should().Contain("PlannedAmount");
         statisticsPage.Should().Contain("SavingsTransferredAmount");
+        statisticsPage.Should().Contain("AnnualPlan");
+        statisticsPage.Should().Contain("DeviationAlertCandidates");
         statisticsPage.Should().Contain("Math.Max(startMonth, today.Month)");
         statisticsPage.Should().NotContain("sty\u2013{DateTimeProvider.GetLocalDateOnly()");
         statisticsPage.Should().NotContain("Live balance");
@@ -110,14 +160,16 @@ public sealed class MonthlyBudgetingLoopUiTests
     [Fact]
     public void Acceptance_Evidence_Should_Record_Controlled_Service_Scenario()
     {
-        var evidence = ReadRepoFile("context/changes/verify-monthly-safe-to-spend-loop/acceptance-evidence.md");
+        var evidence = ReadRepoFile("context/changes/improve-monthly-planning/acceptance-evidence.md");
 
-        evidence.Should().Contain("Initial controlled state");
-        evidence.Should().Contain("After real spend");
-        evidence.Should().Contain("After due savings transfer");
-        evidence.Should().Contain("After close/reopen/edit/close");
-        evidence.Should().Contain("Closed-month edit blocking");
-        evidence.Should().Contain("No separate safe-to-spend field");
+        evidence.Should().Contain("Automated Verification");
+        evidence.Should().Contain("Service Evidence");
+        evidence.Should().Contain("Manual Browser Smoke");
+        evidence.Should().Contain("Pending manual");
+        evidence.Should().Contain("GetMonthPlanPreparationAsync_Should_Not_Create_Target_Month");
+        evidence.Should().Contain("CopySelectedExpensesToMonthAsync_Should_Skip_LoanBacked_Expenses");
+        evidence.Should().Contain("UpsertAnnualPlanAsync_Should_Reject_Negative_Targets");
+        evidence.Should().Contain("No `Safe-to-spend` / `SafeToSpend` output was reintroduced");
     }
 
     private static string ReadRepoFile(string relativePath)

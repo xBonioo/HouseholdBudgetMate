@@ -18,10 +18,11 @@ public partial class PlanPage : IAsyncDisposable
             Month = DateTime.Today.Month;
         }
 
+        ResetCopyTargetToNextMonth();
         await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(bool bypassPreparation = false)
     {
         _isLoading = true;
 
@@ -31,6 +32,30 @@ public partial class PlanPage : IAsyncDisposable
             _tagUsageCountByTagId = (await ExpenseService.GetTagUsageCountsAsync(CancellationToken.None))
                 .ToDictionary(x => x.TagId, x => x.UsageCount);
             _accounts = (await AccountService.GetAllAsync(CancellationToken.None)).Where(x => !x.IsArchived).ToList();
+
+            if (!bypassPreparation)
+            {
+                var preparation = await ExpenseService.GetMonthPlanPreparationAsync(Year, Month, CancellationToken.None);
+                if (!preparation.MonthExists && preparation.Suggestions.Count > 0)
+                {
+                    SetMonthPreparation(preparation);
+                    _isCopyMode = false;
+                    _selectedExpenseIdsForCopy.Clear();
+                    _monthPlan = null;
+                    _dashboardSummary = new DashboardSummaryDto();
+                    _incomes = [];
+                    _liveBalance = new LiveBalanceDto();
+                    _pieSelectedCategoryIds = [];
+                    RecomputePieChartData();
+                    ApplyKpiFromMonthPlan();
+                    EnsureDefaultSelections();
+                    SyncMonthScopedDateDefaults();
+                    MarkDirtyStatePristine();
+                    return;
+                }
+            }
+
+            ClearMonthPreparation();
             _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
             _dashboardSummary = await ExpenseService.GetDashboardSummaryAsync(Year, Month, CancellationToken.None);
 

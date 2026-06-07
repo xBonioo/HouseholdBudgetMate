@@ -143,6 +143,22 @@ public partial class PlanPage
         return false;
     }
 
+    private bool TryParseNonNegativeAmountOrWarn(string? input, out decimal value)
+    {
+        if (!TryParseAmountOrWarn(input, out value))
+        {
+            return false;
+        }
+
+        if (value >= 0)
+        {
+            return true;
+        }
+
+        Snackbar.Add("Kwota nie może być ujemna.", Severity.Warning);
+        return false;
+    }
+
     private static string FormatDecimalInput(decimal value)
     {
         return value.ToString("0.00", Culture);

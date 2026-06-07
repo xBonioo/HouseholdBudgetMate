@@ -217,6 +217,21 @@
     }
     else
     {
+        <MudGrid Class="mt-3" Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudPaper Class="pa-3 hb-panel" Elevation="0">
+                    <MudText Typo="Typo.caption" Class="hb-muted">Suma wybranych kategorii</MudText>
+                    <MudText Typo="Typo.h6">@FormatMoney(GetCategoryRangeSelectedTotalSpent())</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudPaper Class="pa-3 hb-panel" Elevation="0">
+                    <MudText Typo="Typo.caption" Class="hb-muted">Średnia miesięczna wybranych kategorii</MudText>
+                    <MudText Typo="Typo.h6">@FormatMoney(GetCategoryRangeSelectedAverageMonthlySpent())</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
         <div style="overflow-x: auto;">
             <MudSimpleTable Dense="true" Hover="true" Class="mt-3">
                 <thead>
@@ -1006,6 +1021,16 @@
             Snackbar.Add(ex.Message, Severity.Error);
             _categoryRangeStatistics = new CategoryRangeStatisticsDto();
         }
+    }
+
+    private decimal GetCategoryRangeSelectedTotalSpent()
+    {
+        return _categoryRangeStatistics.CategoryStatistics.Sum(x => x.TotalSpent);
+    }
+
+    private decimal GetCategoryRangeSelectedAverageMonthlySpent()
+    {
+        return _categoryRangeStatistics.CategoryStatistics.Sum(x => x.AverageMonthlySpent);
     }
 
     private void InitializeLifetimeRange()

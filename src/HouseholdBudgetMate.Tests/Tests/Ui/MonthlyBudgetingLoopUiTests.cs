@@ -128,6 +128,11 @@ public sealed class MonthlyBudgetingLoopUiTests
         var statisticsPage = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Statistics.razor");
 
         statisticsPage.Should().Contain("Statystyki roczne");
+        statisticsPage.Should().Contain("Statystyki wydatków per kategoria");
+        statisticsPage.Should().Contain("Suma wybranych kategorii");
+        statisticsPage.Should().Contain("Średnia miesięczna wybranych kategorii");
+        statisticsPage.Should().Contain("GetCategoryRangeSelectedTotalSpent()");
+        statisticsPage.Should().Contain("GetCategoryRangeSelectedAverageMonthlySpent()");
         statisticsPage.Should().Contain("Plan roczny");
         statisticsPage.Should().Contain("Oczekiwane roczne wpływy");
         statisticsPage.Should().Contain("Oczekiwane roczne oszczędności");
@@ -160,7 +165,7 @@ public sealed class MonthlyBudgetingLoopUiTests
     [Fact]
     public void Acceptance_Evidence_Should_Record_Controlled_Service_Scenario()
     {
-        var evidence = ReadRepoFile("context/changes/improve-monthly-planning/acceptance-evidence.md");
+        var evidence = ReadRepoFile("context/archive/2026-06-03-improve-monthly-planning/acceptance-evidence.md");
 
         evidence.Should().Contain("Automated Verification");
         evidence.Should().Contain("Service Evidence");

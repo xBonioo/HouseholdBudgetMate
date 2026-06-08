@@ -59,7 +59,9 @@ public sealed class AuditSaveChangesInterceptor(CurrentUserContext currentUserCo
 
     private void AddAuditLogsAndCollectCreates(DbContext? dbContext)
     {
-        if (_isSavingAuditLogs || dbContext is not ApplicationDbContext applicationDbContext)
+        if (_isSavingAuditLogs
+            || currentUserContext.IsSystemOperation
+            || dbContext is not ApplicationDbContext applicationDbContext)
         {
             return;
         }

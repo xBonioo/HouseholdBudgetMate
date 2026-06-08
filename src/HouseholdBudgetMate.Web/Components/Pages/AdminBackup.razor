@@ -11,6 +11,8 @@
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
 
+@implements IAsyncDisposable
+
 <PageTitle>Backup</PageTitle>
 
 @if (!IsAdminSession)
@@ -120,6 +122,33 @@ else
                             </MudItem>
                         </MudGrid>
 
+                        <MudSwitch T="bool"
+                                   Label="Ogranicz dane budżetowe do zakresu miesięcy"
+                                   Color="Color.Warning"
+                                   @bind-Value="_manualLimitBudgetPeriod"
+                                   Disabled="@(!_manualBudget)" />
+
+                        @if (_manualBudget && _manualLimitBudgetPeriod)
+                        {
+                            <MudGrid>
+                                <MudItem xs="12" sm="6" md="3">
+                                    <MudNumericField T="int" Label="Od roku" @bind-Value="_manualFromYear" Variant="Variant.Outlined" Margin="Margin.Dense" Min="2000" Max="3000" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="3">
+                                    <MudNumericField T="int" Label="Od miesiąca" @bind-Value="_manualFromMonth" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="12" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="3">
+                                    <MudNumericField T="int" Label="Do roku" @bind-Value="_manualToYear" Variant="Variant.Outlined" Margin="Margin.Dense" Min="2000" Max="3000" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="3">
+                                    <MudNumericField T="int" Label="Do miesiąca" @bind-Value="_manualToMonth" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="12" />
+                                </MudItem>
+                            </MudGrid>
+                            <MudText Typo="Typo.caption" Class="hb-muted">
+                                Zakres dotyczy sekcji Budget data. Kategorie/tagi i profile są eksportowane zgodnie z zaznaczonymi sekcjami.
+                            </MudText>
+                        }
+
                         <MudButton Variant="Variant.Filled"
                                    Color="Color.Secondary"
                                    StartIcon="@Icons.Material.Filled.Download"
@@ -154,7 +183,7 @@ else
                     Zła fraza albo błędny plik blokuje operację.
                 </MudAlert>
 
-                <label class="backup-drop-zone">
+                <label class="backup-drop-zone" @ref="_restoreDropZone">
                     <InputFile class="backup-drop-zone-input"
                                OnChange="OnRestoreFileSelectedAsync"
                                accept=".json,application/json" />
@@ -210,14 +239,15 @@ else
                               Label="Wpisz RESTORE BACKUP"
                               @bind-Value="_restoreConfirmation"
                               Variant="Variant.Outlined"
-                              Margin="Margin.Dense" />
+                              Margin="Margin.Dense"
+                              Immediate="true" />
 
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Error"
                            StartIcon="@Icons.Material.Filled.Restore"
                            ButtonType="ButtonType.Button"
                            OnClick="RestoreBackupAsync"
-                           Disabled="@(_isBusy || _restoreFileContent.Length == 0 || _restorePreview?.IsAllowed != true || _restoreConfirmation != RestoreConfirmationPhrase)">
+                           Disabled="@(!CanRestoreBackup)">
                     Przywróć backup
                 </MudButton>
 
@@ -337,6 +367,11 @@ else
     private bool _manualAudit = true;
     private bool _manualLogs = true;
     private bool _manualSettingsMetadata = true;
+    private bool _manualLimitBudgetPeriod;
+    private int _manualFromYear = DateTime.Now.Year;
+    private int _manualFromMonth = DateTime.Now.Month;
+    private int _manualToYear = DateTime.Now.Year;
+    private int _manualToMonth = DateTime.Now.Month;
     private List<string> _lastBackupWarnings = [];
 
     private byte[] _restoreFileContent = [];
@@ -344,6 +379,9 @@ else
     private string _restoreConfirmation = string.Empty;
     private BackupRestorePreviewDto? _restorePreview;
     private BackupRestoreResultDto? _lastRestoreResult;
+    private ElementReference _restoreDropZone;
+    private IJSObjectReference? _backupDropZoneModule;
+    private IJSObjectReference? _backupDropZoneRegistration;
 
     private bool _scheduleEnabled;
     private string _schedulePath = string.Empty;
@@ -369,6 +407,21 @@ else
         }
 
         await LoadScheduleAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !IsAdminSession)
+        {
+            return;
+        }
+
+        _backupDropZoneModule = await JSRuntime.InvokeAsync<IJSObjectReference>(
+            "import",
+            "./js/backup-drop-zone.js");
+        _backupDropZoneRegistration = await _backupDropZoneModule.InvokeAsync<IJSObjectReference>(
+            "registerBackupDropZone",
+            _restoreDropZone);
     }
 
     private async Task LoadScheduleAsync()
@@ -413,7 +466,11 @@ else
                 new CreateBackupRequest
                 {
                     Sections = BuildManualSections(),
-                    IncludeAllBudgetOwners = BuildManualSections().HasFlag(BackupSection.Profiles)
+                    IncludeAllBudgetOwners = BuildManualSections().HasFlag(BackupSection.Profiles),
+                    FromYear = _manualLimitBudgetPeriod ? _manualFromYear : null,
+                    FromMonth = _manualLimitBudgetPeriod ? _manualFromMonth : null,
+                    ToYear = _manualLimitBudgetPeriod ? _manualToYear : null,
+                    ToMonth = _manualLimitBudgetPeriod ? _manualToMonth : null
                 },
                 CancellationToken.None);
 
@@ -455,6 +512,12 @@ else
 
     private async Task RestoreBackupAsync()
     {
+        if (!HasValidRestoreRequest)
+        {
+            ShowError("Najpierw wybierz plik, uruchom poprawną walidację i wpisz frazę RESTORE BACKUP.");
+            return;
+        }
+
         await RunAdminActionAsync(async () =>
         {
             await using var stream = new MemoryStream(_restoreFileContent);
@@ -463,7 +526,7 @@ else
                 {
                     Content = stream,
                     FileName = _restoreFileName,
-                    ConfirmationPhrase = _restoreConfirmation
+                    ConfirmationPhrase = _restoreConfirmation.Trim()
                 },
                 CancellationToken.None);
 
@@ -517,6 +580,19 @@ else
 
     private BackupSection BuildManualSections()
         => BuildSections(_manualBudget, _manualProfiles, _manualTaxonomy, _manualAudit, _manualLogs, _manualSettingsMetadata);
+
+    private bool CanRestoreBackup => !_isBusy && HasValidRestoreRequest;
+
+    private bool HasValidRestoreRequest =>
+        _restoreFileContent.Length > 0
+        && _restorePreview?.IsAllowed == true
+        && IsRestoreConfirmationValid();
+
+    private bool IsRestoreConfirmationValid()
+        => string.Equals(
+            _restoreConfirmation.Trim(),
+            RestoreConfirmationPhrase,
+            StringComparison.OrdinalIgnoreCase);
 
     private BackupSection BuildScheduleSections()
         => BuildSections(_scheduleBudget, _scheduleProfiles, _scheduleTaxonomy, _scheduleAudit, _scheduleLogs, _scheduleSettingsMetadata);
@@ -583,5 +659,19 @@ else
     {
         _statusMessage = message;
         _statusSeverity = Severity.Error;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_backupDropZoneRegistration is not null)
+        {
+            await _backupDropZoneRegistration.InvokeVoidAsync("dispose");
+            await _backupDropZoneRegistration.DisposeAsync();
+        }
+
+        if (_backupDropZoneModule is not null)
+        {
+            await _backupDropZoneModule.DisposeAsync();
+        }
     }
 }

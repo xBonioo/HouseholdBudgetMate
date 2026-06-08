@@ -140,6 +140,59 @@ public sealed class CoreDataSeedService(
         await ClearBudgetDataAsync(strategyContext, cancellationToken);
     }
 
+    public async Task ClearBudgetDataForBudgetOwnerAsync(
+        string budgetOwnerUserId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(budgetOwnerUserId))
+        {
+            throw new ArgumentException("Budget owner user id is required.", nameof(budgetOwnerUserId));
+        }
+
+        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
+        await using var strategyContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (!await strategyContext.Database.CanConnectAsync(cancellationToken)) return;
+
+        if (strategyContext.Database.IsRelational())
+        {
+            var executionStrategy = strategyContext.Database.CreateExecutionStrategy();
+            await executionStrategy.ExecuteAsync(async () =>
+            {
+                await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                await ClearBudgetDataForBudgetOwnerAsync(dbContext, budgetOwnerUserId, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+            return;
+        }
+
+        await ClearBudgetDataForBudgetOwnerAsync(strategyContext, budgetOwnerUserId, cancellationToken);
+    }
+
+    public async Task ClearApplicationDataAsync(CancellationToken cancellationToken)
+    {
+        using var technicalOwnerScope = currentUserContext.BeginTechnicalOwnerScope();
+        await using var strategyContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (!await strategyContext.Database.CanConnectAsync(cancellationToken)) return;
+
+        if (strategyContext.Database.IsRelational())
+        {
+            var executionStrategy = strategyContext.Database.CreateExecutionStrategy();
+            await executionStrategy.ExecuteAsync(async () =>
+            {
+                await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                await ClearApplicationDataAsync(dbContext, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+            return;
+        }
+
+        await ClearApplicationDataAsync(strategyContext, cancellationToken);
+    }
+
     private async Task SeedDefaultsForActiveScopeAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -170,6 +223,7 @@ public sealed class CoreDataSeedService(
         await DeleteAllAsync(dbContext, dbContext.RegularIncomeDefinitions.IgnoreQueryFilters(), cancellationToken);
         await DeleteAllAsync(dbContext, dbContext.AccountMonthBalances.IgnoreQueryFilters(), cancellationToken);
         await DeleteAllAsync(dbContext, dbContext.Accounts.IgnoreQueryFilters(), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.AnnualPlans.IgnoreQueryFilters(), cancellationToken);
         await DeleteAllAsync(dbContext, dbContext.MonthPlans.IgnoreQueryFilters(), cancellationToken);
 
         await ClearTagParentReferencesAsync(dbContext, cancellationToken);
@@ -179,6 +233,46 @@ public sealed class CoreDataSeedService(
         await DeleteAllAsync(dbContext, dbContext.Logs, cancellationToken);
 
         logger.LogWarning("Budget data cleared by administrator action.");
+    }
+
+    private async Task ClearBudgetDataForBudgetOwnerAsync(
+        ApplicationDbContext dbContext,
+        string budgetOwnerUserId,
+        CancellationToken cancellationToken)
+    {
+        await DeleteAllAsync(dbContext, dbContext.ExpenseLineItems.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Expenses.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.MonthSavingsTransferItems.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Incomes.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.LoanCharges.IgnoreQueryFilters().Where(x => x.Loan.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.LoanInstallments.IgnoreQueryFilters().Where(x => x.Loan.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.LoanRateEntries.IgnoreQueryFilters().Where(x => x.Loan.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Loans.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.RegularExpenseDefinitions.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.RegularIncomeDefinitions.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.AccountMonthBalances.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.Accounts.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.AnnualPlans.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.MonthPlans.IgnoreQueryFilters().Where(x => x.UserId == budgetOwnerUserId), cancellationToken);
+        await DeleteAllAsync(dbContext, dbContext.AuditLogs.Where(x => x.BudgetOwnerUserId == budgetOwnerUserId), cancellationToken);
+
+        logger.LogWarning(
+            "Budget data cleared by administrator action for budget owner {BudgetOwnerUserId}.",
+            budgetOwnerUserId);
+    }
+
+    private async Task ClearApplicationDataAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        await ClearBudgetDataAsync(dbContext, cancellationToken);
+        await DeleteAllAsync(
+            dbContext,
+            dbContext.Users.Where(x => x.Id != User.DefaultUserId),
+            cancellationToken);
+
+        await EnsureTechnicalOwnerAsync(dbContext, cancellationToken);
+        logger.LogWarning("Full application data cleared by administrator action.");
     }
 
     private static async Task ClearTagParentReferencesAsync(
@@ -324,6 +418,34 @@ public sealed class CoreDataSeedService(
             BudgetOwnerUserId = User.DefaultUserId,
             IsAdmin = false
         });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task EnsureTechnicalOwnerAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var technicalOwner = await dbContext.Users
+            .FirstOrDefaultAsync(x => x.Id == User.DefaultUserId, cancellationToken);
+
+        if (technicalOwner is null)
+        {
+            dbContext.Users.Add(new User
+            {
+                Id = User.DefaultUserId,
+                Username = User.TechnicalOwnerUsername,
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId,
+                IsAdmin = false
+            });
+        }
+        else
+        {
+            technicalOwner.Username = User.TechnicalOwnerUsername;
+            technicalOwner.BudgetOwnerUserId = User.DefaultUserId;
+            technicalOwner.IsAdmin = false;
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

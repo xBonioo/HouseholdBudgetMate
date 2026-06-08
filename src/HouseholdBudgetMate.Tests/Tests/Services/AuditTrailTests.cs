@@ -639,6 +639,27 @@ public sealed class AuditTrailTests
             .WithMessage("*authenticated user or explicit system scope*");
     }
 
+    [Fact]
+    public async Task SaveChanges_WhenSystemOperation_Should_Not_Create_AuditLogs()
+    {
+        var currentUser = CurrentUserContext.ForTechnicalOwner();
+        var options = NewOptions(currentUser);
+
+        await using var dbContext = new ApplicationDbContext(options, currentUser);
+        dbContext.Users.Add(new User
+        {
+            Id = User.DefaultUserId,
+            Username = User.TechnicalOwnerUsername,
+            PasswordHash = string.Empty,
+            BudgetOwnerUserId = User.DefaultUserId
+        });
+        dbContext.Accounts.Add(new Account { Name = "System restore account", Type = 1, Order = 1 });
+
+        await dbContext.SaveChangesAsync();
+
+        (await dbContext.AuditLogs.CountAsync()).Should().Be(0);
+    }
+
     private static DbContextOptions<ApplicationDbContext> NewOptions(CurrentUserContext currentUserContext)
     {
         return new DbContextOptionsBuilder<ApplicationDbContext>()

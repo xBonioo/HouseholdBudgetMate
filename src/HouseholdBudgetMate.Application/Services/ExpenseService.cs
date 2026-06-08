@@ -432,6 +432,13 @@ public sealed class ExpenseService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
+        var firstMonthInYear = await dbContext.MonthPlans
+            .AsNoTracking()
+            .Where(x => x.Year == year && x.Month <= month)
+            .OrderBy(x => x.Month)
+            .Select(x => (int?)x.Month)
+            .FirstOrDefaultAsync(cancellationToken) ?? month;
+
         var incomesCount = monthRelationToToday switch
         {
             < 0 => await dbContext.Incomes
@@ -469,7 +476,9 @@ public sealed class ExpenseService(
 
         var expensesByMonth = await dbContext.Expenses
             .AsNoTracking()
-            .Where(x => x.MonthPlan.Year == year && x.MonthPlan.Month <= month)
+            .Where(x => x.MonthPlan.Year == year
+                        && x.MonthPlan.Month >= firstMonthInYear
+                        && x.MonthPlan.Month <= month)
             .GroupBy(x => x.MonthPlan.Month)
             .Select(g => new
             {
@@ -481,7 +490,7 @@ public sealed class ExpenseService(
 
         var incomesByMonth = await dbContext.Incomes
             .AsNoTracking()
-            .Where(x => x.Year == year && x.Month <= month)
+            .Where(x => x.Year == year && x.Month >= firstMonthInYear && x.Month <= month)
             .GroupBy(x => x.Month)
             .Select(g => new
             {
@@ -508,8 +517,8 @@ public sealed class ExpenseService(
                 x.ClosingBalance))
             .ToListAsync(cancellationToken);
 
-        var timeline = new List<DashboardMonthlySavingsDto>(month);
-        for (var i = 1; i <= month; i++)
+        var timeline = new List<DashboardMonthlySavingsDto>(month - firstMonthInYear + 1);
+        for (var i = firstMonthInYear; i <= month; i++)
         {
             expensesMap.TryGetValue(i, out var expenseData);
             incomesMap.TryGetValue(i, out var incomeAmount);

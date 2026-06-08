@@ -2811,6 +2811,23 @@ public sealed class ExpenseServiceTests
     }
 
     /// <summary>
+    /// Verifies that the dashboard YTD savings timeline starts from the first plan month
+    /// owned by the current budget instead of rendering empty months from January.
+    /// </summary>
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Start_Ytd_Timeline_From_First_Available_MonthPlan()
+    {
+        await CreateMonthPlanAsync(2026, 3);
+        await CreateMonthPlanAsync(2026, 6);
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal([3, 4, 5, 6], summary.SavingsTimeline.Select(x => x.Month).ToArray());
+        Assert.DoesNotContain(summary.SavingsTimeline, x => x.Month is 1 or 2);
+    }
+
+    /// <summary>
     /// Seeds one regular expense and one SupportsLineItems expense that has two line items.
     /// Verifies that TransactionCount=3 (1 regular + 2 line items) instead of 2 (1 regular + 1 parent).
     /// </summary>

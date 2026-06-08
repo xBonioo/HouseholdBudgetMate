@@ -251,6 +251,42 @@ public sealed class BackupServiceTests
     }
 
     [Fact]
+    public async Task CreateBackupAsync_Should_Filter_Budget_Records_By_Optional_Period_Range()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var currentUser = CreateVisibleUserContext();
+        var options = NewOptions(dbName);
+        var factory = new ScopedInMemoryDbContextFactory(options, currentUser);
+
+        await SeedProfileAsync(options, currentUser);
+        await SeedFullAppAsync(options, currentUser);
+        await SeedHistoricalVisibleBudgetAsync(options, currentUser);
+
+        var service = CreateService(factory, currentUser);
+        var result = await service.CreateBackupAsync(
+            new CreateBackupRequest
+            {
+                Sections = BackupSection.Budget,
+                FromYear = 2024,
+                FromMonth = 7,
+                ToYear = 2024,
+                ToMonth = 7
+            },
+            CancellationToken.None);
+
+        var envelope = DecodeJson(result.Content);
+
+        Assert.Equal(2024, envelope.Manifest.BudgetFromYear);
+        Assert.Equal(7, envelope.Manifest.BudgetFromMonth);
+        Assert.Equal(2024, envelope.Manifest.BudgetToYear);
+        Assert.Equal(7, envelope.Manifest.BudgetToMonth);
+        Assert.Contains(envelope.Payload.Budget!.Records, x => x.Table == "expenses" && x.Fields[nameof(Expense.Name)] == "Historical rent");
+        Assert.Contains(envelope.Payload.Budget!.Records, x => x.Table == "incomes" && x.Fields[nameof(Income.Name)] == "Historical salary");
+        Assert.DoesNotContain(envelope.Payload.Budget!.Records, x => x.Table == "expenses" && x.Fields[nameof(Expense.Name)] == "Rent, utilities");
+        Assert.DoesNotContain(envelope.Payload.Budget!.Records, x => x.Table == "incomes" && x.Fields[nameof(Income.Name)] == "Salary, bonus");
+    }
+
+    [Fact]
     public async Task RestoreBackupAsync_Should_Round_Trip_Full_App_State_And_Create_PreRestore_Backup()
     {
         await using var connection = new SqliteConnection("DataSource=:memory:");
@@ -268,6 +304,7 @@ public sealed class BackupServiceTests
 
         await SeedProfileAsync(options, currentUser);
         await SeedFullAppAsync(options, currentUser);
+        await SeedHistoricalVisibleBudgetAsync(options, currentUser);
 
         var service = CreateService(factory, currentUser);
         var backup = await service.CreateBackupAsync(
@@ -289,6 +326,11 @@ public sealed class BackupServiceTests
         var restoredExpense = await verify.Expenses.AsNoTracking().SingleAsync(x => x.Name == "Rent, utilities");
         var restoredIncome = await verify.Incomes.AsNoTracking().SingleAsync(x => x.Name == "Salary, bonus");
         var restoredLoan = await verify.Loans.AsNoTracking().SingleAsync(x => x.Name == "Mortgage");
+        var historicalExpense = await verify.Expenses.AsNoTracking().SingleAsync(x => x.Name == "Historical rent");
+        var historicalExpensePlan = await verify.MonthPlans
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == historicalExpense.MonthPlanId);
+        var historicalIncome = await verify.Incomes.AsNoTracking().SingleAsync(x => x.Name == "Historical salary");
 
         Assert.True(restoreResult.IsSuccess);
         Assert.NotNull(restoreResult.PreRestoreBackupPath);
@@ -296,9 +338,25 @@ public sealed class BackupServiceTests
         Assert.Equal("Rent, utilities", restoredExpense.Name);
         Assert.Equal(1200m, restoredExpense.PlannedAmount);
         Assert.Equal(5000m, restoredIncome.Amount);
+        Assert.Equal(2024, historicalExpensePlan.Year);
+        Assert.Equal(7, historicalExpensePlan.Month);
+        Assert.Equal(2024, historicalIncome.Year);
+        Assert.Equal(7, historicalIncome.Month);
         Assert.True(restoredLoan.IsActive);
         Assert.Contains(restoreResult.RestoredCounts, x => x.Key == "expenses" && x.Value > 0);
         Assert.Contains(restoreResult.RestoredCounts, x => x.Key == "users" && x.Value > 0);
+    }
+
+    [Fact]
+    public void RestoreBackupAsync_Should_Run_User_Transaction_Inside_Ef_Execution_Strategy()
+    {
+        var source = ReadRepoFile("src/HouseholdBudgetMate.Application/Services/BackupService.cs");
+        var strategyIndex = source.IndexOf("return await strategy.ExecuteAsync(async () =>", StringComparison.Ordinal);
+        var transactionIndex = source.IndexOf("BeginTransactionAsync(cancellationToken)", StringComparison.Ordinal);
+
+        Assert.Contains("var strategy = strategyContext.Database.CreateExecutionStrategy();", source);
+        Assert.True(strategyIndex >= 0);
+        Assert.True(transactionIndex > strategyIndex);
     }
 
     [Fact]
@@ -809,6 +867,37 @@ public sealed class BackupServiceTests
         await context.SaveChangesAsync();
     }
 
+    private static async Task SeedHistoricalVisibleBudgetAsync(
+        DbContextOptions<ApplicationDbContext> options,
+        CurrentUserContext currentUser)
+    {
+        await using var context = new ApplicationDbContext(options, currentUser);
+        var account = await context.Accounts.FirstAsync();
+        var category = await context.Categories.FirstAsync();
+        var historicalPlan = new MonthPlan { Year = 2024, Month = 7 };
+        context.MonthPlans.Add(historicalPlan);
+        context.Expenses.Add(new Expense
+        {
+            MonthPlan = historicalPlan,
+            Name = "Historical rent",
+            Category = category,
+            PlannedAmount = 900m,
+            ActualAmount = 900m,
+            Order = 1
+        });
+        context.Incomes.Add(new Income
+        {
+            Year = 2024,
+            Month = 7,
+            Name = "Historical salary",
+            Amount = 4500m,
+            ExpectedDayOfMonth = new DateOnly(2024, 7, 5),
+            Account = account
+        });
+
+        await context.SaveChangesAsync();
+    }
+
     private static async Task MutateVisibleStateAsync(
         DbContextOptions<ApplicationDbContext> options,
         CurrentUserContext currentUser)
@@ -1044,6 +1133,23 @@ public sealed class BackupServiceTests
             new StaticDateTimeProvider(new DateTime(2026, 6, 7, 16, 5, 0, DateTimeKind.Utc)),
             currentUserContext,
             backupSettingsStore ?? new InMemoryBackupSettingsStore());
+    }
+
+    private static string ReadRepoFile(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repository file '{relativePath}'.", relativePath);
     }
 
     private static IEnumerable<BackupRecordDto> EnumerateRecords(BackupEnvelopeDto envelope)

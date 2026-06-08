@@ -74,6 +74,20 @@ public sealed class RealDataReadinessGateTests
         adminConfig.Should().NotContain("all clear");
     }
 
+    [Fact]
+    public void AdminConfig_Should_Expose_Scoped_And_Full_Database_Cleanup()
+    {
+        var adminConfig = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/AdminConfig.razor");
+
+        adminConfig.Should().Contain("Zakres czyszczenia");
+        adminConfig.Should().Contain("Dane budżetowe użytkownika");
+        adminConfig.Should().Contain("Cała aplikacja");
+        adminConfig.Should().Contain("Właściciel budżetu");
+        adminConfig.Should().Contain("ClearBudgetDataForBudgetOwnerAsync");
+        adminConfig.Should().Contain("ClearApplicationDataAsync");
+        adminConfig.Should().Contain("SignOutAsync");
+    }
+
     private static void AssertTableStatus(string markdown, string rowMarker, string expectedStatus)
     {
         var row = markdown

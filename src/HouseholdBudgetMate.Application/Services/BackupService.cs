@@ -9,7 +9,6 @@ using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace HouseholdBudgetMate.Application.Services;
 
@@ -87,6 +86,8 @@ public sealed class BackupService(
             throw new BadRequestException("At least one backup section must be selected.");
         }
 
+        ValidateBackupPeriodRange(request);
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var snapshotBuilder = new BackupSnapshotBuilder(dateTimeProvider);
         var includeAllBudgetOwners = ShouldIncludeAllBudgetOwners(request);
@@ -94,6 +95,7 @@ public sealed class BackupService(
             dbContext,
             request.Sections,
             includeAllBudgetOwners,
+            BackupPeriodRange.FromRequest(request),
             cancellationToken);
         var content = BackupJsonSerializer.SerializeToUtf8Bytes(envelope);
         var fileName = BackupFileName.Build(envelope.Manifest.CreatedAtUtc, envelope.Manifest.IncludedSections);
@@ -166,47 +168,24 @@ public sealed class BackupService(
         var preRestoreBackupPath = await CreatePreRestoreBackupAsync(cancellationToken);
 
         using var scope = currentUserContext.BeginTechnicalOwnerScope();
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var executor = new BackupRestoreExecutor();
-        IDbContextTransaction? transaction = null;
-        if (dbContext.Database.IsRelational())
-        {
-            transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        }
+        await using var strategyContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        try
+        if (strategyContext.Database.IsRelational())
         {
-            var result = await executor.RestoreAsync(dbContext, envelope, cancellationToken);
-            if (transaction is not null)
+            var strategy = strategyContext.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
+                await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                var result = await RestoreEnvelopeAsync(dbContext, envelope, validation.Warnings, preRestoreBackupPath, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-            }
 
-            return new BackupRestoreResultDto
-            {
-                IsSuccess = result.IsSuccess,
-                Message = result.Message,
-                PreRestoreBackupPath = preRestoreBackupPath,
-                RestoredCounts = result.RestoredCounts,
-                Warnings = validation.Warnings
-            };
+                return result;
+            });
         }
-        catch
-        {
-            if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
 
-            throw;
-        }
-        finally
-        {
-            if (transaction is not null)
-            {
-                await transaction.DisposeAsync();
-            }
-        }
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await RestoreEnvelopeAsync(dbContext, envelope, validation.Warnings, preRestoreBackupPath, cancellationToken);
     }
 
     public Task<BackupSettingsDto> GetBackupSettingsAsync(CancellationToken cancellationToken)
@@ -274,11 +253,67 @@ public sealed class BackupService(
         return backup.WrittenPath ?? Path.Combine(preRestoreFolder, backup.FileName);
     }
 
+    private static async Task<BackupRestoreResultDto> RestoreEnvelopeAsync(
+        ApplicationDbContext dbContext,
+        BackupEnvelopeDto envelope,
+        IReadOnlyList<string> validationWarnings,
+        string preRestoreBackupPath,
+        CancellationToken cancellationToken)
+    {
+        var executor = new BackupRestoreExecutor();
+        var result = await executor.RestoreAsync(dbContext, envelope, cancellationToken);
+
+        return new BackupRestoreResultDto
+        {
+            IsSuccess = result.IsSuccess,
+            Message = result.Message,
+            PreRestoreBackupPath = preRestoreBackupPath,
+            RestoredCounts = result.RestoredCounts,
+            Warnings = validationWarnings
+        };
+    }
+
     private static void ValidateRestoreRequest(RestoreBackupRequest request)
     {
         if (!string.Equals(request.ConfirmationPhrase.Trim(), "RESTORE BACKUP", StringComparison.OrdinalIgnoreCase))
         {
             throw new BadRequestException("Typed confirmation phrase does not match.");
+        }
+    }
+
+    private static void ValidateBackupPeriodRange(CreateBackupRequest request)
+    {
+        var hasAnyRangeValue = request.FromYear.HasValue
+                               || request.FromMonth.HasValue
+                               || request.ToYear.HasValue
+                               || request.ToMonth.HasValue;
+        if (!hasAnyRangeValue)
+        {
+            return;
+        }
+
+        if (!request.FromYear.HasValue
+            || !request.FromMonth.HasValue
+            || !request.ToYear.HasValue
+            || !request.ToMonth.HasValue)
+        {
+            throw new BadRequestException("Backup period range requires from year/month and to year/month.");
+        }
+
+        if (request.FromMonth is < 1 or > 12 || request.ToMonth is < 1 or > 12)
+        {
+            throw new BadRequestException("Backup period month must be between 1 and 12.");
+        }
+
+        if (request.FromYear is < 2000 or > 3000 || request.ToYear is < 2000 or > 3000)
+        {
+            throw new BadRequestException("Backup period year is out of allowed range.");
+        }
+
+        if ((request.FromYear.Value * 12 + request.FromMonth.Value)
+            > (request.ToYear.Value * 12 + request.ToMonth.Value))
+        {
+            throw new BadRequestException("Backup period start must be before or equal to period end.");
         }
     }
 

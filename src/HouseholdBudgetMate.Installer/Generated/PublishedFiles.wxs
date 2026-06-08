@@ -165,6 +165,15 @@
       <Component Id="Cmp8A95297CFD65CA35AC5245B29D0F64C5A1CFDA21" Guid="*" Bitness="always64" Directory="DirA61EC23761C06AA3FA46F9C6FEB5E65781CC5FB8">
         <File Id="Fil8A95297CFD65CA35AC5245B29D0F64C5A1CFDA21" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\images\logo.png" KeyPath="yes" />
       </Component>
+      <Component Id="Cmp065A59B615EB36E390F8BD01E2FD56CF53A371B5" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="Fil065A59B615EB36E390F8BD01E2FD56CF53A371B5" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\backup-drop-zone.js" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpB9AD4E2CC1B163646565BD53A90178578AE6E983" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="FilB9AD4E2CC1B163646565BD53A90178578AE6E983" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\backup-drop-zone.js.br" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpC12E63280E610760FB06BE53DB1D062193D7A1DD" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
+        <File Id="FilC12E63280E610760FB06BE53DB1D062193D7A1DD" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\backup-drop-zone.js.gz" KeyPath="yes" />
+      </Component>
       <Component Id="CmpDE16D70391E67AFAB1E4C857BA7315C36763DB75" Guid="*" Bitness="always64" Directory="Dir3297F7076B7408467E594C42FF8DD820B9BAE2CF">
         <File Id="FilDE16D70391E67AFAB1E4C857BA7315C36763DB75" Source="F:\Kamil\.Net\_projects\HouseholdBudgetMate\src\HouseholdBudgetMate.Web\bin\Release\net10.0\win-x64\publish\wwwroot\js\chart.umd.min.js" KeyPath="yes" />
       </Component>

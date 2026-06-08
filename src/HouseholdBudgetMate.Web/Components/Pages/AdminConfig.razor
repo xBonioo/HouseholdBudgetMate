@@ -184,9 +184,34 @@ else
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.h6">Dane aplikacji</MudText>
                     <MudText Typo="Typo.body2" Class="hb-muted">
-                        Reset usuwa dane budżetowe, kategorie, tagi, audyt i logi, ale zostawia profile użytkowników oraz konfigurację połączenia.
+                        Wybierz, czy czyścisz dane budżetowe konkretnego właściciela budżetu, czy całą aplikację z kategoriami i profilami.
                     </MudText>
                 </MudStack>
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="ClearDatabaseScope" Label="Zakres czyszczenia" @bind-Value="_clearDatabaseScope" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="ClearDatabaseScope.BudgetOwner">Dane budżetowe użytkownika</MudSelectItem>
+                            <MudSelectItem Value="ClearDatabaseScope.FullApplication">Cała aplikacja</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="5">
+                        <MudSelect T="string"
+                                   Label="Właściciel budżetu"
+                                   @bind-Value="_clearBudgetOwnerUserId"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Disabled="@(_clearDatabaseScope == ClearDatabaseScope.FullApplication)">
+                            <MudSelectItem Value="@User.DefaultUserId">Wspólny budżet gospodarstwa</MudSelectItem>
+                            @foreach (var owner in GetBudgetOwners())
+                            {
+                                <MudSelectItem Value="@owner.Id">@owner.Username</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+                <MudAlert Severity="@(_clearDatabaseScope == ClearDatabaseScope.FullApplication ? Severity.Error : Severity.Warning)" Variant="Variant.Outlined" Dense="true">
+                    @GetClearDatabaseWarning()
+                </MudAlert>
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Error"
@@ -340,6 +365,8 @@ else
     private string _dbPassword = string.Empty;
     private string _dbName = "household_budget_mate";
     private bool _showDbPassword;
+    private ClearDatabaseScope _clearDatabaseScope = ClearDatabaseScope.BudgetOwner;
+    private string _clearBudgetOwnerUserId = User.DefaultUserId;
 
     private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
 
@@ -393,6 +420,10 @@ else
         }
 
         _newUserBudgetOwnerId = User.DefaultUserId;
+        if (!_users.Any(user => user.Id == _clearBudgetOwnerUserId || user.BudgetOwnerUserId == _clearBudgetOwnerUserId))
+        {
+            _clearBudgetOwnerUserId = User.DefaultUserId;
+        }
     }
 
     private void LoadDatabaseFields()
@@ -496,9 +527,12 @@ else
 
     private async Task ClearDatabaseAsync()
     {
+        var isFullReset = _clearDatabaseScope == ClearDatabaseScope.FullApplication;
         var parameters = new DialogParameters
         {
-            [nameof(ConfirmDialog.Message)] = "Wyczyścić dane budżetowe, kategorie, tagi, audyt i logi? Profile użytkowników oraz konfiguracja połączenia zostaną zachowane. Tej operacji nie można cofnąć."
+            [nameof(ConfirmDialog.Message)] = isFullReset
+                ? "Wyczyścić całą aplikację: dane budżetowe, kategorie, tagi, audyt, logi i profile użytkowników? Konfiguracja połączenia zostanie zachowana. Po operacji nastąpi wylogowanie. Tej operacji nie można cofnąć."
+                : $"Wyczyścić dane budżetowe dla: {GetBudgetOwnerLabel(_clearBudgetOwnerUserId)}? Kategorie, tagi, profile użytkowników oraz konfiguracja połączenia zostaną zachowane. Tej operacji nie można cofnąć."
         };
 
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Wyczyść bazę danych", parameters);
@@ -510,9 +544,18 @@ else
 
         await RunAdminActionAsync(async () =>
         {
-            await CoreDataSeedService.ClearBudgetDataAsync(CancellationToken.None);
+            if (isFullReset)
+            {
+                await CoreDataSeedService.ClearApplicationDataAsync(CancellationToken.None);
+                await UserSessionService.SignOutAsync();
+                ShowSuccess("Cała aplikacja została wyczyszczona. Nastąpi przekierowanie do logowania.");
+                NavigationManager.NavigateTo("/");
+                return;
+            }
+
+            await CoreDataSeedService.ClearBudgetDataForBudgetOwnerAsync(_clearBudgetOwnerUserId, CancellationToken.None);
             await LoadUsersAsync();
-            ShowSuccess("Baza danych została wyczyszczona. Profile użytkowników zostały zachowane.");
+            ShowSuccess($"Dane budżetowe zostały wyczyszczone dla: {GetBudgetOwnerLabel(_clearBudgetOwnerUserId)}.");
         });
     }
 
@@ -620,6 +663,42 @@ else
             _dbUsername,
             _dbPassword,
             _dbName
+        },
+        ClearData = new
+        {
+            _clearDatabaseScope,
+            _clearBudgetOwnerUserId
         }
     };
+
+    private IEnumerable<UserDto> GetBudgetOwners()
+    {
+        return _users
+            .Where(user => user.HouseholdMode == HouseholdMode.SeparateBudget)
+            .OrderBy(user => user.Username, StringComparer.CurrentCultureIgnoreCase);
+    }
+
+    private string GetBudgetOwnerLabel(string budgetOwnerUserId)
+    {
+        if (budgetOwnerUserId == User.DefaultUserId)
+        {
+            return "Wspólny budżet gospodarstwa";
+        }
+
+        return _users.FirstOrDefault(user => user.Id == budgetOwnerUserId)?.Username
+               ?? budgetOwnerUserId;
+    }
+
+    private string GetClearDatabaseWarning()
+    {
+        return _clearDatabaseScope == ClearDatabaseScope.FullApplication
+            ? "Pełny reset usuwa dane budżetowe wszystkich użytkowników, kategorie, tagi, audyt, logi i profile. Ukryty profil techniczny zostaje zachowany wyłącznie po to, aby aplikacja mogła wystartować ponownie."
+            : "Reset użytkownika usuwa tylko dane budżetowe wybranego właściciela budżetu. Kategorie, tagi i profile zostają zachowane.";
+    }
+
+    private enum ClearDatabaseScope
+    {
+        BudgetOwner,
+        FullApplication
+    }
 }

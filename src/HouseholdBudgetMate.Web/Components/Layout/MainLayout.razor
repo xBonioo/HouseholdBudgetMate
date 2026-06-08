@@ -105,16 +105,15 @@ else
 
                 @if (IsAdminSession)
                 {
-                    <MudButton Variant="Variant.Text" Class="@GetNavClass("/audit")"
-                               StartIcon="@Icons.Material.Filled.ManageSearch" Href="/audit">
-                        Audyt
-                    </MudButton>
-
                     <MudMenu Variant="Variant.Text"
                              Color="Color.Inherit"
                              Label="Admin"
                              Class="@GetNavClass("/admin")"
                              StartIcon="@Icons.Material.Filled.AdminPanelSettings">
+
+                            <MudMenuItem Href="/admin/audit" Icon="@Icons.Material.Filled.ManageSearch">
+                            Audyt
+                        </MudMenuItem>
                         <MudMenuItem Href="/admin/config" Icon="@Icons.Material.Filled.Settings">
                             Konfiguracja
                         </MudMenuItem>
@@ -191,7 +190,7 @@ else
                                 OnClick="CloseDrawer">Kategorie</MudNavLink>
                     @if (IsAdminSession)
                     {
-                        <MudNavLink Class="mobile-nav-link" Href="/audit"
+                        <MudNavLink Class="mobile-nav-link" Href="/admin/audit"
                                     Icon="@Icons.Material.Filled.ManageSearch" OnClick="CloseDrawer">Audyt</MudNavLink>
                         <MudText Typo="Typo.caption" Class="px-2 pt-2 hb-muted">Admin</MudText>
                         <MudNavLink Class="mobile-nav-link" Href="/admin/config"
@@ -233,6 +232,7 @@ else
     private bool _isDarkMode;
 
     private string CurrentUserLabel => UserSessionService.CurrentUser?.Username ?? "Użytkownik";
+    private string? CurrentBudgetOwnerUserId => UserSessionService.CurrentUser?.BudgetOwnerUserId;
     private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
 
     private void ToggleDrawer()
@@ -379,7 +379,7 @@ else
     {
         _ = InvokeAsync(async () =>
         {
-            if (ArchiveCache.TryGetCache(out var cached))
+            if (ArchiveCache.TryGetCache(CurrentBudgetOwnerUserId, out var cached))
             {
                 _monthGroups = BuildMonthGroups(cached);
             }
@@ -417,7 +417,7 @@ else
         if (!await ArchiveCache.Semaphore.WaitAsync(TimeSpan.FromSeconds(10)))
         {
             // Timed out waiting for the lock — try the cache one more time, then give up.
-            if (ArchiveCache.TryGetCache(out var cached))
+            if (ArchiveCache.TryGetCache(CurrentBudgetOwnerUserId, out var cached))
                 _monthGroups = BuildMonthGroups(cached);
             else
                 SetFallbackMonthGroup();
@@ -427,7 +427,7 @@ else
         try
         {
             // Double-check: another circuit may have populated the cache while we were waiting.
-            if (ArchiveCache.TryGetCache(out var cached))
+            if (ArchiveCache.TryGetCache(CurrentBudgetOwnerUserId, out var cached))
             {
                 _monthGroups = BuildMonthGroups(cached);
                 return;
@@ -437,7 +437,7 @@ else
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var months = await ExpenseService.GetAvailableMonthsAsync(cts.Token);
 
-            ArchiveCache.UpdateCache(months);
+            ArchiveCache.UpdateCache(CurrentBudgetOwnerUserId, months);
             _monthGroups = BuildMonthGroups(months);
 
             if (_monthGroups.Count == 0)

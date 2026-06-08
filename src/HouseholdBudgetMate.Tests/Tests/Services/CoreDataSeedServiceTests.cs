@@ -78,6 +78,12 @@ public sealed class CoreDataSeedServiceTests
             setupContext.Categories.Add(category);
             setupContext.Tags.Add(new Tag { Name = "Groceries", Category = category });
             setupContext.Accounts.Add(new Account { Name = "Bank", Type = (int)AccountType.Bank, Order = 1 });
+            setupContext.AnnualPlans.Add(new AnnualPlan
+            {
+                Year = 2026,
+                ExpectedIncomeAmount = 1000m,
+                ExpectedSavingsAmount = 100m
+            });
             setupContext.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 5 });
             setupContext.Logs.Add(new LogEntry
             {
@@ -114,7 +120,82 @@ public sealed class CoreDataSeedServiceTests
         (await verifyContext.Categories.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await verifyContext.Tags.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await verifyContext.Accounts.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verifyContext.AnnualPlans.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await verifyContext.MonthPlans.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verifyContext.Logs.CountAsync()).Should().Be(0);
+        (await verifyContext.AuditLogs.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ClearBudgetDataForBudgetOwnerAsync_Should_Delete_Only_Selected_BudgetOwner_Data()
+    {
+        var currentUserContext = new CurrentUserContext();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var timeProvider = new Mock<IDateTimeProvider>();
+        timeProvider.Setup(x => x.GetLocalDateTime()).Returns(new DateTime(2026, 5, 27));
+
+        await SeedUsersAndGlobalDataAsync(options);
+        await SeedBudgetDataAsync(options, "user-a", 2026);
+        await SeedBudgetDataAsync(options, "user-b", 2027);
+
+        var service = new CoreDataSeedService(
+            new ContextFactory(options, currentUserContext),
+            timeProvider.Object,
+            NullLogger<CoreDataSeedService>.Instance,
+            currentUserContext);
+
+        await service.ClearBudgetDataForBudgetOwnerAsync("user-a", CancellationToken.None);
+
+        await using var verifyContext = new ApplicationDbContext(options, CurrentUserContext.ForTechnicalOwner());
+        (await verifyContext.Users.CountAsync()).Should().Be(3);
+        (await verifyContext.Categories.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        (await verifyContext.Tags.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        (await verifyContext.Logs.CountAsync()).Should().Be(1);
+        (await verifyContext.Accounts.IgnoreQueryFilters().CountAsync(x => x.UserId == "user-a")).Should().Be(0);
+        (await verifyContext.MonthPlans.IgnoreQueryFilters().CountAsync(x => x.UserId == "user-a")).Should().Be(0);
+        (await verifyContext.AnnualPlans.IgnoreQueryFilters().CountAsync(x => x.UserId == "user-a")).Should().Be(0);
+        (await verifyContext.AuditLogs.CountAsync(x => x.BudgetOwnerUserId == "user-a")).Should().Be(0);
+        (await verifyContext.Accounts.IgnoreQueryFilters().CountAsync(x => x.UserId == "user-b")).Should().Be(1);
+        (await verifyContext.MonthPlans.IgnoreQueryFilters().CountAsync(x => x.UserId == "user-b")).Should().Be(1);
+        (await verifyContext.AnnualPlans.IgnoreQueryFilters().CountAsync(x => x.UserId == "user-b")).Should().Be(1);
+        (await verifyContext.AuditLogs.CountAsync(x => x.BudgetOwnerUserId == "user-b")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ClearApplicationDataAsync_Should_Delete_Budget_Data_Global_Data_And_Interactive_Users()
+    {
+        var currentUserContext = new CurrentUserContext();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var timeProvider = new Mock<IDateTimeProvider>();
+        timeProvider.Setup(x => x.GetLocalDateTime()).Returns(new DateTime(2026, 5, 27));
+
+        await SeedUsersAndGlobalDataAsync(options);
+        await SeedBudgetDataAsync(options, "user-a", 2026);
+        await SeedBudgetDataAsync(options, "user-b", 2027);
+
+        var service = new CoreDataSeedService(
+            new ContextFactory(options, currentUserContext),
+            timeProvider.Object,
+            NullLogger<CoreDataSeedService>.Instance,
+            currentUserContext);
+
+        await service.ClearApplicationDataAsync(CancellationToken.None);
+
+        await using var verifyContext = new ApplicationDbContext(options, CurrentUserContext.ForTechnicalOwner());
+        var remainingUser = await verifyContext.Users.SingleAsync();
+        remainingUser.Id.Should().Be(User.DefaultUserId);
+        remainingUser.Username.Should().Be(User.TechnicalOwnerUsername);
+        remainingUser.BudgetOwnerUserId.Should().Be(User.DefaultUserId);
+        remainingUser.IsAdmin.Should().BeFalse();
+        (await verifyContext.Categories.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verifyContext.Tags.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verifyContext.Accounts.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verifyContext.MonthPlans.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await verifyContext.AnnualPlans.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await verifyContext.Logs.CountAsync()).Should().Be(0);
         (await verifyContext.AuditLogs.CountAsync()).Should().Be(0);
     }
@@ -188,5 +269,78 @@ public sealed class CoreDataSeedServiceTests
         {
             return Task.FromResult(CreateDbContext());
         }
+    }
+
+    private static async Task SeedUsersAndGlobalDataAsync(DbContextOptions<ApplicationDbContext> options)
+    {
+        await using var setupContext = new ApplicationDbContext(options, CurrentUserContext.ForTechnicalOwner());
+        setupContext.Users.AddRange(
+            new User
+            {
+                Id = User.DefaultUserId,
+                Username = User.TechnicalOwnerUsername,
+                PasswordHash = string.Empty,
+                BudgetOwnerUserId = User.DefaultUserId
+            },
+            new User
+            {
+                Id = "user-a",
+                Username = "user-a",
+                PasswordHash = "PBKDF2-SHA256:test",
+                BudgetOwnerUserId = "user-a",
+                HouseholdMode = (int)HouseholdMode.SeparateBudget
+            },
+            new User
+            {
+                Id = "user-b",
+                Username = "user-b",
+                PasswordHash = "PBKDF2-SHA256:test",
+                BudgetOwnerUserId = "user-b",
+                HouseholdMode = (int)HouseholdMode.SeparateBudget
+            });
+
+        var category = new Category { Name = "Food", Color = "#123456" };
+        setupContext.Categories.Add(category);
+        setupContext.Tags.Add(new Tag { Name = "Groceries", Category = category });
+        setupContext.Logs.Add(new LogEntry
+        {
+            Message = "log",
+            MessageTemplate = "log",
+            Level = "Information",
+            Timestamp = DateTime.UtcNow
+        });
+
+        await setupContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedBudgetDataAsync(
+        DbContextOptions<ApplicationDbContext> options,
+        string budgetOwnerUserId,
+        int year)
+    {
+        var userContext = new CurrentUserContext();
+        userContext.SetInteractiveUser(budgetOwnerUserId, budgetOwnerUserId);
+        await using var setupContext = new ApplicationDbContext(options, userContext);
+        setupContext.Accounts.Add(new Account { Name = $"Bank {budgetOwnerUserId}", Type = (int)AccountType.Bank, Order = 1 });
+        setupContext.MonthPlans.Add(new MonthPlan { Year = year, Month = 5 });
+        setupContext.AnnualPlans.Add(new AnnualPlan
+        {
+            Year = year,
+            ExpectedIncomeAmount = 1000m,
+            ExpectedSavingsAmount = 100m
+        });
+        setupContext.AuditLogs.Add(new AuditLog
+        {
+            EntityType = nameof(Account),
+            EntityId = year,
+            UserId = budgetOwnerUserId,
+            BudgetOwnerUserId = budgetOwnerUserId,
+            Operation = "Create",
+            OldValuesJson = "{}",
+            NewValuesJson = "{}",
+            ChangedAtUtc = DateTime.UtcNow
+        });
+
+        await setupContext.SaveChangesAsync();
     }
 }

@@ -32,6 +32,26 @@ public sealed class BackupUiTests
         page.Should().Contain("BackupService.RestoreBackupAsync");
         page.Should().Contain("BackupService.PreviewRestoreAsync");
         page.Should().Contain("BackupService.RunScheduledBackupNowAsync");
+        page.Should().Contain("Immediate=\"true\"");
+        page.Should().Contain("Disabled=\"@(!CanRestoreBackup)\"");
+        page.Should().Contain("HasValidRestoreRequest");
+        page.Should().Contain("IsRestoreConfirmationValid");
+        page.Should().Contain("StringComparison.OrdinalIgnoreCase");
+        page.Should().Contain("ConfirmationPhrase = _restoreConfirmation.Trim()");
+        page.Should().Contain("registerBackupDropZone");
+        page.Should().Contain("DisposeAsync");
+
+        var css = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/AdminBackup.razor.css");
+        css.Should().Contain(".backup-drop-zone-input");
+        css.Should().Contain("z-index: 2");
+        css.Should().Contain("pointer-events: none");
+        css.Should().Contain("backup-drop-zone-active");
+
+        var js = ReadRepoFile("src/HouseholdBudgetMate.Web/wwwroot/js/backup-drop-zone.js");
+        js.Should().Contain("registerBackupDropZone");
+        js.Should().Contain("dragover");
+        js.Should().Contain("new DataTransfer()");
+        js.Should().Contain("input.dispatchEvent(new Event('change'");
     }
 
     [Fact]

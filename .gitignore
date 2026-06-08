@@ -263,6 +263,8 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
+!src/HouseholdBudgetMate.Application/Services/Backup/
+!src/HouseholdBudgetMate.Application/Services/Backup/*.cs
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/

@@ -240,12 +240,13 @@ public partial class PlanPage : IAsyncDisposable
 
     private async Task RefreshArchiveMonthsCacheAsync()
     {
-        ArchiveCache.Invalidate();
+        var budgetOwnerUserId = UserSessionService.CurrentUser?.BudgetOwnerUserId;
+        ArchiveCache.Invalidate(budgetOwnerUserId);
 
         try
         {
             var months = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
-            ArchiveCache.UpdateCache(months);
+            ArchiveCache.UpdateCache(budgetOwnerUserId, months);
         }
         catch
         {

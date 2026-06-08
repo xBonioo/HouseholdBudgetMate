@@ -1,0 +1,587 @@
+@page "/admin/backup"
+@using HouseholdBudgetMate.Abstractions.Contracts.Backup
+@using HouseholdBudgetMate.Abstractions.Contracts.Backup.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Backup.Requests
+@using HouseholdBudgetMate.Abstractions.Interfaces
+@using HouseholdBudgetMate.Web.Services
+@using MudBlazor
+
+@inject IBackupService BackupService
+@inject IUserSessionService UserSessionService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+
+<PageTitle>Backup</PageTitle>
+
+@if (!IsAdminSession)
+{
+    <MudPaper Class="pa-4 hb-panel">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled">
+            Nie masz uprawnień do zarządzania backupami.
+        </MudAlert>
+    </MudPaper>
+}
+else
+{
+    <MudStack Spacing="0">
+        <MudPaper Class="hb-page-header">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4">Backup i eksport</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Eksportuj CSV, twórz wrażliwe pliki JSON backupu, przywracaj dane i zarządzaj harmonogramem.
+                    </MudText>
+                </MudStack>
+                <MudChip T="string" Color="Color.Error" Variant="Variant.Filled">
+                    Tylko administrator
+                </MudChip>
+            </MudStack>
+
+            @if (!string.IsNullOrWhiteSpace(_statusMessage))
+            {
+                <MudAlert Severity="@_statusSeverity" Dense="true" Class="mt-4">@_statusMessage</MudAlert>
+            }
+        </MudPaper>
+
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+            Wrażliwy plik backupu: plain JSON backup can contain household financial data, profile records, and PIN hashes.
+            Przechowuj go poza publicznymi katalogami i udostępniaj tylko zaufanym administratorom.
+        </MudAlert>
+
+        <MudGrid Class="mt-1">
+            <MudItem xs="12" lg="6">
+                <MudPaper Class="pa-4 mt-4 hb-panel">
+                    <MudStack Spacing="3">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">Eksport CSV</MudText>
+                            <MudText Typo="Typo.body2" Class="hb-muted">
+                                Oddzielny eksport wydatków i wpływów do arkusza, niezależny od backupu JSON.
+                            </MudText>
+                        </MudStack>
+
+                        <MudGrid>
+                            <MudItem xs="12" sm="4">
+                                <MudNumericField T="int" Label="Rok" @bind-Value="_csvYear" Variant="Variant.Outlined" Margin="Margin.Dense" Min="2000" Max="2100" />
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudNumericField T="int?" Label="Miesiąc (opcjonalnie)" @bind-Value="_csvMonth" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="12" />
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="BackupCsvExportKind" Label="Zakres" @bind-Value="_csvKind" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem Value="BackupCsvExportKind.ExpensesAndIncomes">Wydatki i wpływy</MudSelectItem>
+                                    <MudSelectItem Value="BackupCsvExportKind.Expenses">Tylko wydatki</MudSelectItem>
+                                    <MudSelectItem Value="BackupCsvExportKind.Incomes">Tylko wpływy</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudSwitch T="bool" Label="Dołącz soft-deleted rows" Color="Color.Warning" @bind-Value="_csvIncludeDeleted" />
+
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.TableView"
+                                   ButtonType="ButtonType.Button"
+                                   OnClick="ExportCsvAsync"
+                                   Disabled="_isBusy">
+                            Pobierz CSV
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" lg="6">
+                <MudPaper Class="pa-4 mt-4 hb-panel">
+                    <MudStack Spacing="3">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6">Backup JSON</MudText>
+                            <MudText Typo="Typo.body2" Class="hb-muted">
+                                Modułowy snapshot aplikacji. Pełny backup zawiera profile i hashe PIN, jeśli zaznaczysz tę sekcję.
+                            </MudText>
+                        </MudStack>
+
+                        <MudGrid>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudCheckBox T="bool" Label="Budget data" @bind-Value="_manualBudget" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudCheckBox T="bool" Label="Profiles and PIN hashes" @bind-Value="_manualProfiles" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudCheckBox T="bool" Label="Categories and tags" @bind-Value="_manualTaxonomy" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudCheckBox T="bool" Label="Audit" @bind-Value="_manualAudit" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudCheckBox T="bool" Label="Logs" @bind-Value="_manualLogs" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudCheckBox T="bool" Label="Settings metadata" @bind-Value="_manualSettingsMetadata" />
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.Download"
+                                   ButtonType="ButtonType.Button"
+                                   OnClick="CreateJsonBackupAsync"
+                                   Disabled="_isBusy">
+                            Pobierz JSON backup
+                        </MudButton>
+
+                        @if (_lastBackupWarnings.Count > 0)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true">
+                                @string.Join(" ", _lastBackupWarnings)
+                            </MudAlert>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudPaper Class="pa-4 mt-4 hb-panel backup-restore-danger">
+            <MudStack Spacing="3">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6" Color="Color.Error">Przywracanie backupu</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Restore jest destrukcyjny. Przed zmianą danych aplikacja tworzy automatic pre-restore backup copy.
+                    </MudText>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                    Przywracanie wymaga pliku JSON, walidacji i wpisania frazy <strong>@RestoreConfirmationPhrase</strong>.
+                    Zła fraza albo błędny plik blokuje operację.
+                </MudAlert>
+
+                <label class="backup-drop-zone">
+                    <InputFile class="backup-drop-zone-input"
+                               OnChange="OnRestoreFileSelectedAsync"
+                               accept=".json,application/json" />
+                    <MudIcon Icon="@Icons.Material.Filled.UploadFile" Color="Color.Warning" Size="Size.Large" />
+                    <MudText Typo="Typo.subtitle1">Przeciągnij plik backupu JSON tutaj</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Albo kliknij box, wybierz plik i uruchom walidację przed restore.
+                    </MudText>
+                </label>
+
+                @if (!string.IsNullOrWhiteSpace(_restoreFileName))
+                {
+                    <MudText Typo="Typo.caption" Class="hb-muted">Wybrany plik: @_restoreFileName</MudText>
+                }
+
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.FactCheck"
+                               ButtonType="ButtonType.Button"
+                               OnClick="ValidateRestoreAsync"
+                               Disabled="@(_isBusy || _restoreFileContent.Length == 0)">
+                        Waliduj backup
+                    </MudButton>
+                </MudStack>
+
+                @if (_restorePreview is not null)
+                {
+                    <MudAlert Severity="@(_restorePreview.IsAllowed ? Severity.Success : Severity.Error)" Dense="true">
+                        @(_restorePreview.IsAllowed ? "Backup przeszedł walidację i może zostać przywrócony." : "Backup nie może zostać przywrócony.")
+                    </MudAlert>
+                    @if (_restorePreview.CountsByTable.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2">Restore preview counts</MudText>
+                        <MudList T="KeyValuePair<string, int>" Dense="true">
+                            @foreach (var count in _restorePreview.CountsByTable.OrderBy(x => x.Key, StringComparer.Ordinal))
+                            {
+                                <MudListItem T="KeyValuePair<string, int>">@count.Key: @count.Value</MudListItem>
+                            }
+                        </MudList>
+                    }
+                    @foreach (var error in _restorePreview.Errors)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Error">@error</MudText>
+                    }
+                    @foreach (var warning in _restorePreview.Warnings)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">@warning</MudText>
+                    }
+                }
+
+                <MudTextField T="string"
+                              Label="Wpisz RESTORE BACKUP"
+                              @bind-Value="_restoreConfirmation"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Restore"
+                           ButtonType="ButtonType.Button"
+                           OnClick="RestoreBackupAsync"
+                           Disabled="@(_isBusy || _restoreFileContent.Length == 0 || _restorePreview?.IsAllowed != true || _restoreConfirmation != RestoreConfirmationPhrase)">
+                    Przywróć backup
+                </MudButton>
+
+                @if (_lastRestoreResult is not null)
+                {
+                    <MudAlert Severity="@(_lastRestoreResult.IsSuccess ? Severity.Success : Severity.Error)" Dense="true">
+                        @_lastRestoreResult.Message
+                        @if (!string.IsNullOrWhiteSpace(_lastRestoreResult.PreRestoreBackupPath))
+                        {
+                            <span> Pre-restore backup: @_lastRestoreResult.PreRestoreBackupPath</span>
+                        }
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mt-4 hb-panel">
+            <MudStack Spacing="3">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6">Harmonogram backupu</MudText>
+                    <MudText Typo="Typo.body2" Class="hb-muted">
+                        Scheduled backup writes selected sections to a configured local path.
+                    </MudText>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                    Harmonogram działa tylko wtedy, gdy proces aplikacji jest uruchomiony. Jeśli hosting usypia aplikację
+                    albo nikt jej nie używa, background task nie wykona backupu do czasu ponownego wybudzenia.
+                    Dla krytycznych backupów użyj zewnętrznego schedulera lub ręcznego `Run backup now`.
+                </MudAlert>
+
+                <MudSwitch T="bool" Label="Automatyczny backup włączony" Color="Color.Success" @bind-Value="_scheduleEnabled" />
+
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudTextField T="string" Label="Ścieżka backupu" @bind-Value="_schedulePath" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="BackupScheduleFrequency" Label="Częstotliwość" @bind-Value="_scheduleFrequency" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="BackupScheduleFrequency.Daily">Daily</MudSelectItem>
+                            <MudSelectItem Value="BackupScheduleFrequency.Weekly">Weekly</MudSelectItem>
+                            <MudSelectItem Value="BackupScheduleFrequency.Monthly">Monthly</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField T="string" Label="Lokalny czas HH:mm" @bind-Value="_scheduleLocalTimeInput" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Label="Budget data" @bind-Value="_scheduleBudget" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Label="Profiles and PIN hashes" @bind-Value="_scheduleProfiles" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Label="Categories and tags" @bind-Value="_scheduleTaxonomy" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Label="Audit" @bind-Value="_scheduleAudit" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Label="Logs" @bind-Value="_scheduleLogs" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Label="Settings metadata" @bind-Value="_scheduleSettingsMetadata" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               ButtonType="ButtonType.Button"
+                               OnClick="SaveScheduleAsync"
+                               Disabled="_isBusy">
+                        Zapisz harmonogram
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               ButtonType="ButtonType.Button"
+                               OnClick="RunBackupNowAsync"
+                               Disabled="_isBusy">
+                        Run backup now
+                    </MudButton>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Last-run status: @(_scheduleLastStatus ?? "brak uruchomień")
+                    @if (_scheduleLastRunAtUtc is not null)
+                    {
+                        <span> (@_scheduleLastRunAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))</span>
+                    }
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    private const string RestoreConfirmationPhrase = "RESTORE BACKUP";
+
+    private bool _isBusy;
+    private string? _statusMessage;
+    private Severity _statusSeverity = Severity.Info;
+
+    private int _csvYear = DateTime.Now.Year;
+    private int? _csvMonth = DateTime.Now.Month;
+    private BackupCsvExportKind _csvKind = BackupCsvExportKind.ExpensesAndIncomes;
+    private bool _csvIncludeDeleted;
+
+    private bool _manualBudget = true;
+    private bool _manualProfiles = true;
+    private bool _manualTaxonomy = true;
+    private bool _manualAudit = true;
+    private bool _manualLogs = true;
+    private bool _manualSettingsMetadata = true;
+    private List<string> _lastBackupWarnings = [];
+
+    private byte[] _restoreFileContent = [];
+    private string _restoreFileName = string.Empty;
+    private string _restoreConfirmation = string.Empty;
+    private BackupRestorePreviewDto? _restorePreview;
+    private BackupRestoreResultDto? _lastRestoreResult;
+
+    private bool _scheduleEnabled;
+    private string _schedulePath = string.Empty;
+    private BackupScheduleFrequency _scheduleFrequency = BackupScheduleFrequency.Daily;
+    private string _scheduleLocalTimeInput = "02:00";
+    private bool _scheduleBudget = true;
+    private bool _scheduleProfiles = true;
+    private bool _scheduleTaxonomy = true;
+    private bool _scheduleAudit = true;
+    private bool _scheduleLogs = true;
+    private bool _scheduleSettingsMetadata = true;
+    private DateTime? _scheduleLastRunAtUtc;
+    private string? _scheduleLastStatus;
+
+    private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsAdminSession)
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
+        await LoadScheduleAsync();
+    }
+
+    private async Task LoadScheduleAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            var settings = await BackupService.GetBackupSettingsAsync(CancellationToken.None);
+            _scheduleEnabled = settings.IsEnabled;
+            _schedulePath = settings.BackupPath;
+            _scheduleFrequency = settings.Frequency;
+            _scheduleLocalTimeInput = settings.LocalTime.ToString("HH:mm");
+            _scheduleLastRunAtUtc = settings.LastRunAtUtc;
+            _scheduleLastStatus = settings.LastStatus;
+            ApplyScheduleSections(settings.Sections);
+        });
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            var result = await BackupService.ExportCsvAsync(
+                new ExportCsvRequest
+                {
+                    Year = _csvYear,
+                    Month = _csvMonth,
+                    Kind = _csvKind,
+                    IncludeDeleted = _csvIncludeDeleted
+                },
+                CancellationToken.None);
+
+            await DownloadAsync(result.FileName, result.Content, result.ContentType);
+            ShowSuccess($"CSV gotowy: {result.ExpenseRowCount} wydatków, {result.IncomeRowCount} wpływów.");
+        });
+    }
+
+    private async Task CreateJsonBackupAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            var result = await BackupService.CreateBackupAsync(
+                new CreateBackupRequest
+                {
+                    Sections = BuildManualSections(),
+                    IncludeAllBudgetOwners = BuildManualSections().HasFlag(BackupSection.Profiles)
+                },
+                CancellationToken.None);
+
+            _lastBackupWarnings = result.Warnings.ToList();
+            await DownloadAsync(result.FileName, result.Content, result.ContentType);
+            ShowSuccess($"Backup JSON gotowy: {result.FileName}");
+        });
+    }
+
+    private async Task OnRestoreFileSelectedAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        await using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        _restoreFileContent = buffer.ToArray();
+        _restoreFileName = file.Name;
+        _restorePreview = null;
+        _lastRestoreResult = null;
+        _restoreConfirmation = string.Empty;
+    }
+
+    private async Task ValidateRestoreAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            await using var stream = new MemoryStream(_restoreFileContent);
+            _restorePreview = await BackupService.PreviewRestoreAsync(stream, _restoreFileName, CancellationToken.None);
+            if (_restorePreview.IsAllowed)
+            {
+                ShowSuccess("Backup przeszedł walidację. Wpisz RESTORE BACKUP, aby przywrócić dane.");
+            }
+            else
+            {
+                ShowError("Backup nie przeszedł walidacji. Dane nie zostały zmienione.");
+            }
+        });
+    }
+
+    private async Task RestoreBackupAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            await using var stream = new MemoryStream(_restoreFileContent);
+            _lastRestoreResult = await BackupService.RestoreBackupAsync(
+                new RestoreBackupRequest
+                {
+                    Content = stream,
+                    FileName = _restoreFileName,
+                    ConfirmationPhrase = _restoreConfirmation
+                },
+                CancellationToken.None);
+
+            if (_lastRestoreResult.IsSuccess)
+            {
+                ShowSuccess(_lastRestoreResult.Message);
+            }
+            else
+            {
+                ShowError(_lastRestoreResult.Message);
+            }
+        });
+    }
+
+    private async Task SaveScheduleAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            if (!TimeOnly.TryParse(_scheduleLocalTimeInput, out var localTime))
+            {
+                ShowError("Podaj lokalny czas w formacie HH:mm.");
+                return;
+            }
+
+            var settings = await BackupService.SaveBackupSettingsAsync(
+                new SaveBackupSettingsRequest
+                {
+                    IsEnabled = _scheduleEnabled,
+                    BackupPath = _schedulePath,
+                    Frequency = _scheduleFrequency,
+                    LocalTime = localTime,
+                    Sections = BuildScheduleSections()
+                },
+                CancellationToken.None);
+
+            _scheduleLastRunAtUtc = settings.LastRunAtUtc;
+            _scheduleLastStatus = settings.LastStatus;
+            ShowSuccess("Harmonogram backupu zapisany.");
+        });
+    }
+
+    private async Task RunBackupNowAsync()
+    {
+        await RunAdminActionAsync(async () =>
+        {
+            var result = await BackupService.RunScheduledBackupNowAsync(CancellationToken.None);
+            ShowSuccess($"Run backup now zapisano plik: {result.WrittenPath ?? result.FileName}");
+            await LoadScheduleAsync();
+        });
+    }
+
+    private BackupSection BuildManualSections()
+        => BuildSections(_manualBudget, _manualProfiles, _manualTaxonomy, _manualAudit, _manualLogs, _manualSettingsMetadata);
+
+    private BackupSection BuildScheduleSections()
+        => BuildSections(_scheduleBudget, _scheduleProfiles, _scheduleTaxonomy, _scheduleAudit, _scheduleLogs, _scheduleSettingsMetadata);
+
+    private static BackupSection BuildSections(
+        bool budget,
+        bool profiles,
+        bool taxonomy,
+        bool audit,
+        bool logs,
+        bool settingsMetadata)
+    {
+        var sections = BackupSection.None;
+        if (budget) sections |= BackupSection.Budget;
+        if (profiles) sections |= BackupSection.Profiles;
+        if (taxonomy) sections |= BackupSection.Taxonomy;
+        if (audit) sections |= BackupSection.Audit;
+        if (logs) sections |= BackupSection.Logs;
+        if (settingsMetadata) sections |= BackupSection.SettingsMetadata;
+        return sections == BackupSection.None ? BackupSection.Budget : sections;
+    }
+
+    private void ApplyScheduleSections(BackupSection sections)
+    {
+        _scheduleBudget = sections.HasFlag(BackupSection.Budget);
+        _scheduleProfiles = sections.HasFlag(BackupSection.Profiles);
+        _scheduleTaxonomy = sections.HasFlag(BackupSection.Taxonomy);
+        _scheduleAudit = sections.HasFlag(BackupSection.Audit);
+        _scheduleLogs = sections.HasFlag(BackupSection.Logs);
+        _scheduleSettingsMetadata = sections.HasFlag(BackupSection.SettingsMetadata);
+    }
+
+    private async Task DownloadAsync(string fileName, byte[] content, string contentType)
+    {
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(content), contentType);
+    }
+
+    private async Task RunAdminActionAsync(Func<Task> action)
+    {
+        _isBusy = true;
+        _statusMessage = null;
+
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void ShowSuccess(string message)
+    {
+        _statusMessage = message;
+        _statusSeverity = Severity.Success;
+    }
+
+    private void ShowError(string message)
+    {
+        _statusMessage = message;
+        _statusSeverity = Severity.Error;
+    }
+}

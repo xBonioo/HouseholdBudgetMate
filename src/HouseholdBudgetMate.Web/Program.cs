@@ -172,6 +172,8 @@ builder.Services.AddScoped<IIncomeService, IncomeService>();
 builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IBackupService, BackupService>();
+builder.Services.AddScoped<IBackupSettingsStore, RuntimeBackupSettingsStore>();
 builder.Services.AddScoped<IAdminConfigurationService, AdminConfigurationService>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<UnsavedChangesTracker>();
@@ -192,6 +194,7 @@ var applicationConfig = builder.Configuration.GetSection("Application").Get<Appl
                         ?? throw new InvalidOperationException("Application configuration is missing");
 builder.Services.AddSingleton(applicationConfig);
 builder.Services.AddOperationalLogCleanup();
+builder.Services.AddHostedService<ScheduledBackupService>();
 // builder.WebHost.UseUrls("https://0.0.0.0:5001");
 // builder.WebHost.UseUrls("http://0.0.0.0:5000");
 

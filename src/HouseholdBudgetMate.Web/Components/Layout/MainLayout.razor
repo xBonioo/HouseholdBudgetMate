@@ -98,6 +98,11 @@ else
                     @CurrentUserLabel
                 </MudButton>
 
+                <MudButton Variant="Variant.Text" Class="@GetNavClass("/categories")"
+                           StartIcon="@Icons.Material.Filled.Category" Href="/categories">
+                    Kategorie
+                </MudButton>
+
                 @if (IsAdminSession)
                 {
                     <MudButton Variant="Variant.Text" Class="@GetNavClass("/audit")"
@@ -105,16 +110,19 @@ else
                         Audyt
                     </MudButton>
 
-                    <MudButton Variant="Variant.Text" Class="@GetNavClass("/admin/config")"
-                               StartIcon="@Icons.Material.Filled.AdminPanelSettings" Href="/admin/config">
-                        Admin
-                    </MudButton>
+                    <MudMenu Variant="Variant.Text"
+                             Color="Color.Inherit"
+                             Label="Admin"
+                             Class="@GetNavClass("/admin")"
+                             StartIcon="@Icons.Material.Filled.AdminPanelSettings">
+                        <MudMenuItem Href="/admin/config" Icon="@Icons.Material.Filled.Settings">
+                            Konfiguracja
+                        </MudMenuItem>
+                        <MudMenuItem Href="/admin/backup" Icon="@Icons.Material.Filled.Backup">
+                            Backup
+                        </MudMenuItem>
+                    </MudMenu>
                 }
-
-                <MudButton Variant="Variant.Text" Class="@GetNavClass("/categories")"
-                           StartIcon="@Icons.Material.Filled.Category" Href="/categories">
-                    Kategorie
-                </MudButton>
 
                 <MudMenu Variant="Variant.Text" Color="Color.Inherit" Label="Archiwum" Class="appbar-button"
                          StartIcon="@Icons.Material.Filled.DateRange" MaxHeight="400">
@@ -185,8 +193,11 @@ else
                     {
                         <MudNavLink Class="mobile-nav-link" Href="/audit"
                                     Icon="@Icons.Material.Filled.ManageSearch" OnClick="CloseDrawer">Audyt</MudNavLink>
+                        <MudText Typo="Typo.caption" Class="px-2 pt-2 hb-muted">Admin</MudText>
                         <MudNavLink Class="mobile-nav-link" Href="/admin/config"
-                                    Icon="@Icons.Material.Filled.AdminPanelSettings" OnClick="CloseDrawer">Administracja</MudNavLink>
+                                    Icon="@Icons.Material.Filled.Settings" OnClick="CloseDrawer">Konfiguracja</MudNavLink>
+                        <MudNavLink Class="mobile-nav-link" Href="/admin/backup"
+                                    Icon="@Icons.Material.Filled.Backup" OnClick="CloseDrawer">Backup</MudNavLink>
                     }
                     <MudNavLink Class="mobile-nav-link" Icon="@Icons.Material.Filled.Person" OnClick="SwitchUserFromMobileAsync">
                         @CurrentUserLabel

@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HouseholdBudgetMate.Abstractions.Contracts.Backup;
+using HouseholdBudgetMate.Abstractions.Contracts.Backup.Dto;
 using HouseholdBudgetMate.Abstractions.Enums;
 
 namespace HouseholdBudgetMate.Web.Setup;
@@ -13,11 +15,13 @@ public sealed class RuntimeConfigurationState
     private HouseholdMode _householdMode = HouseholdMode.SharedBudget;
     private IReadOnlyList<string> _sharedWithUserIds = [];
     private bool _localAccessRecoveryEnabled;
+    private BackupSettingsDto _backupSettings;
 
     public RuntimeConfigurationState(string baseDirectory)
     {
         BaseDirectory = baseDirectory;
         ConfigFilePath = Path.Combine(baseDirectory, ConfigFileName);
+        _backupSettings = CreateDefaultBackupSettings(baseDirectory);
         LoadFromDisk();
     }
 
@@ -76,6 +80,14 @@ public sealed class RuntimeConfigurationState
         }
     }
 
+    public BackupSettingsDto GetBackupSettings()
+    {
+        lock (_lock)
+        {
+            return CloneBackupSettings(_backupSettings);
+        }
+    }
+
     public void ReloadFromDisk()
     {
         lock (_lock)
@@ -108,6 +120,14 @@ public sealed class RuntimeConfigurationState
         }
     }
 
+    public void SetBackupSettings(BackupSettingsDto backupSettings)
+    {
+        lock (_lock)
+        {
+            _backupSettings = CloneBackupSettings(backupSettings);
+        }
+    }
+
     private void LoadFromDisk()
     {
         lock (_lock)
@@ -122,6 +142,7 @@ public sealed class RuntimeConfigurationState
         _householdMode = HouseholdMode.SharedBudget;
         _sharedWithUserIds = [];
         _localAccessRecoveryEnabled = false;
+        _backupSettings = CreateDefaultBackupSettings(BaseDirectory);
 
         if (!File.Exists(ConfigFilePath))
         {
@@ -132,6 +153,8 @@ public sealed class RuntimeConfigurationState
         {
             var json = File.ReadAllText(ConfigFilePath);
             var config = JsonSerializer.Deserialize<RuntimeAppConfiguration>(json, JsonOptions);
+
+            _backupSettings = NormalizeBackupSettings(config?.BackupSettings, BaseDirectory);
 
             if (config?.Database is null
                 || string.IsNullOrWhiteSpace(config.Database.Host)
@@ -158,6 +181,7 @@ public sealed class RuntimeConfigurationState
         public HouseholdMode HouseholdMode { get; init; } = HouseholdMode.SharedBudget;
         public IReadOnlyList<string> SharedWithUserIds { get; init; } = [];
         public bool LocalAccessRecoveryEnabled { get; init; }
+        public BackupSettingsDto BackupSettings { get; init; } = CreateDefaultBackupSettings(AppContext.BaseDirectory);
     }
 
     public static IReadOnlyList<string> NormalizeUserIds(IEnumerable<string>? userIds)
@@ -167,5 +191,55 @@ public sealed class RuntimeConfigurationState
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
+    }
+
+    public static BackupSettingsDto CreateDefaultBackupSettings(string baseDirectory)
+    {
+        return new BackupSettingsDto
+        {
+            IsEnabled = false,
+            BackupPath = Path.Combine(baseDirectory, "backups"),
+            Frequency = BackupScheduleFrequency.Daily,
+            LocalTime = new TimeOnly(2, 0),
+            Sections = BackupSection.FullApp
+        };
+    }
+
+    public static BackupSettingsDto NormalizeBackupSettings(
+        BackupSettingsDto? settings,
+        string baseDirectory)
+    {
+        var defaults = CreateDefaultBackupSettings(baseDirectory);
+        if (settings is null)
+        {
+            return defaults;
+        }
+
+        return new BackupSettingsDto
+        {
+            IsEnabled = settings.IsEnabled,
+            BackupPath = string.IsNullOrWhiteSpace(settings.BackupPath)
+                ? defaults.BackupPath
+                : settings.BackupPath.Trim(),
+            Frequency = Enum.IsDefined(settings.Frequency) ? settings.Frequency : defaults.Frequency,
+            LocalTime = settings.LocalTime,
+            Sections = settings.Sections == BackupSection.None ? defaults.Sections : settings.Sections,
+            LastRunAtUtc = settings.LastRunAtUtc,
+            LastStatus = settings.LastStatus
+        };
+    }
+
+    private static BackupSettingsDto CloneBackupSettings(BackupSettingsDto settings)
+    {
+        return new BackupSettingsDto
+        {
+            IsEnabled = settings.IsEnabled,
+            BackupPath = settings.BackupPath,
+            Frequency = settings.Frequency,
+            LocalTime = settings.LocalTime,
+            Sections = settings.Sections,
+            LastRunAtUtc = settings.LastRunAtUtc,
+            LastStatus = settings.LastStatus
+        };
     }
 }

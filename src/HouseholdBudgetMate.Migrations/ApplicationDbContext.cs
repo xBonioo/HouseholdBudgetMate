@@ -67,17 +67,17 @@ public class ApplicationDbContext(
         var now = DateTime.UtcNow;
 
         EnsureUserScopedWriteAccess();
-        StampUserScope(ChangeTracker.Entries<Account>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<AccountMonthBalance>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<AnnualPlan>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<Expense>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<ExpenseLineItem>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<Income>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<Loan>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<MonthPlan>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<MonthSavingsTransferItem>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<RegularExpenseDefinition>(), (entity, userId) => entity.UserId = userId);
-        StampUserScope(ChangeTracker.Entries<RegularIncomeDefinition>(), (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<Account>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<AccountMonthBalance>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<AnnualPlan>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<Expense>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<ExpenseLineItem>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<Income>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<Loan>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<MonthPlan>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<MonthSavingsTransferItem>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<RegularExpenseDefinition>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
+        StampUserScope(ChangeTracker.Entries<RegularIncomeDefinition>(), entity => entity.UserId, (entity, userId) => entity.UserId = userId);
 
         foreach (var entry in ChangeTracker.Entries<ITimestampable>())
         {
@@ -102,6 +102,7 @@ public class ApplicationDbContext(
 
     private void StampUserScope<TEntity>(
         IEnumerable<EntityEntry<TEntity>> entries,
+        Func<TEntity, string?> getUserId,
         Action<TEntity, string> setUserId)
         where TEntity : class
     {
@@ -109,6 +110,12 @@ public class ApplicationDbContext(
         {
             if (entry.State == EntityState.Added)
             {
+                if (currentUserContext?.IsSystemOperation == true
+                    && !string.IsNullOrWhiteSpace(getUserId(entry.Entity)))
+                {
+                    continue;
+                }
+
                 setUserId(entry.Entity, RequireBudgetOwnerUserId());
             }
         }

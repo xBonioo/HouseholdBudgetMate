@@ -91,7 +91,8 @@ public sealed class AdminConfigurationService(
             Database = configuration.Database,
             HouseholdMode = householdMode,
             SharedWithUserIds = configuration.SharedWithUserIds,
-            LocalAccessRecoveryEnabled = configuration.LocalAccessRecoveryEnabled
+            LocalAccessRecoveryEnabled = configuration.LocalAccessRecoveryEnabled,
+            BackupSettings = configuration.BackupSettings
         };
 
         return await WriteTypedConfigurationAsync(
@@ -119,7 +120,8 @@ public sealed class AdminConfigurationService(
             Database = databaseConfiguration,
             HouseholdMode = configuration.HouseholdMode,
             SharedWithUserIds = configuration.SharedWithUserIds,
-            LocalAccessRecoveryEnabled = configuration.LocalAccessRecoveryEnabled
+            LocalAccessRecoveryEnabled = configuration.LocalAccessRecoveryEnabled,
+            BackupSettings = configuration.BackupSettings
         };
 
         return await WriteTypedConfigurationAsync(
@@ -140,7 +142,8 @@ public sealed class AdminConfigurationService(
             Database = configuration.Database,
             HouseholdMode = configuration.HouseholdMode,
             SharedWithUserIds = normalizedUserIds,
-            LocalAccessRecoveryEnabled = configuration.LocalAccessRecoveryEnabled
+            LocalAccessRecoveryEnabled = configuration.LocalAccessRecoveryEnabled,
+            BackupSettings = configuration.BackupSettings
         };
 
         return await WriteTypedConfigurationAsync(

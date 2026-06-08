@@ -1,6 +1,6 @@
 # Sprint 10 Export And Backup - Plan Brief
 
-> Full plan: `context/changes/sprint-10-export-backup/plan.md`
+> Full plan: `context/archive/2026-06-08-sprint-10-export-backup/plan.md`
 
 ## What & Why
 

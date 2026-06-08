@@ -53,7 +53,7 @@ Stan kodu na `2026-05-25` (automatycznie zbadany i potwierdzony przez uĹĽytkow
 - **Backend / API:** present - warstwa aplikacyjna rejestruje i wykorzystuje serwisy wydatkĂłw, kont, dochodĂłw, uĹĽytkownikĂłw oraz audytu (`src/HouseholdBudgetMate.Web/Program.cs:165`, `src/HouseholdBudgetMate.Application/Services/ExpenseService.cs:45`).
 - **Data:** present - kontekst danych i migracje obejmujÄ… plany miesiÄ™cy, wydatki i uĹĽytkownikĂłw (`src/HouseholdBudgetMate.Migrations/ApplicationDbContext.cs:16`, `src/HouseholdBudgetMate.Migrations/Migrations/20260407061343_Initial.cs:72`).
 - **Auth:** present - logowanie profilem PIN, sesja uĹĽytkownika i hashowanie PIN sÄ… obecne (`src/HouseholdBudgetMate.Web/Services/UserSessionService.cs:83`, `src/HouseholdBudgetMate.Application/Security/PinHasher.cs:20`).
-- **Deploy / infra:** partial - istniejÄ… kontener, deklaracja Ĺ›rodowiska docelowego i plan wdroĹĽenia, ale uruchomienie docelowych zasobĂłw oraz decyzja o trwaĹ‚ym przechowywaniu danych wymagajÄ… domkniÄ™cia (`Dockerfile:1`, `render.yaml:1`, `context/deployment/deploy-plan.md:27`).
+- **Deploy / infra:** partial - istniejÄ… kontener, deklaracja Ĺ›rodowiska docelowego i plan wdroĹĽenia, ale uruchomienie docelowych zasobĂłw oraz decyzja o trwaĹ‚ym przechowywaniu danych wymagajÄ… domkniÄ™cia (`Dockerfile:1`, `render.yaml:1`, `context/foundation/deploy-plan.md:27`).
 - **Observability:** partial - aplikacja ma logowanie oraz audyt zmian, ale brak potwierdzonego monitoringu dziaĹ‚ania Ĺ›rodowiska docelowego (`src/HouseholdBudgetMate.Application/Auditing/AuditSaveChangesInterceptor.cs:11`).
 
 ## Foundations

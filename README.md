@@ -30,8 +30,7 @@ src/
   HouseholdBudgetMate.Tray/          # pomocnicza aplikacja tray dla lokalnego użycia
   HouseholdBudgetMate.Installer/     # projekt instalatora MSI
   HouseholdBudgetMate.Tests/         # testy usług, setupu, UI contract i architektury
-docs/                                # dokumenty architektury i deploymentu
-context/                             # notatki planistyczne i robocze projektu
+context/                             # wymagania, architektura, test plan, wdroĹĽenie, zmiany i archiwum
 ```
 
 ## Zasady architektury

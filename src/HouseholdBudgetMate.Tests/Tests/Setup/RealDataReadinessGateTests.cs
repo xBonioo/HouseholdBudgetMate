@@ -34,7 +34,7 @@ public sealed class RealDataReadinessGateTests
     [Fact]
     public void DeploymentPlan_Should_Keep_PostgreSql_Rollback_Boundary_Explicit()
     {
-        var deployPlan = ReadRepoFile("context/deployment/deploy-plan.md");
+        var deployPlan = ReadRepoFile("context/foundation/deploy-plan.md");
 
         deployPlan.Should().Contain("local `pg_dump` backup before first real data");
         deployPlan.Should().Contain("restore smoke-test notes");

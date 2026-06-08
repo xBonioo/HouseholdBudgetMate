@@ -1,14 +1,16 @@
 <Solution>
-    <Folder Name="/docs/">
-        <File Path="docs/DOMAIN.md" />
-        <File Path="docs/Plan Apki.txt" />
-        <File Path="docs/sprints.md" />
+    <Folder Name="/context/foundation/">
+        <File Path="context/foundation/domain.md" />
+        <File Path="context/foundation/plan-apki.txt" />
+        <File Path="context/foundation/deploy-plan.md" />
+        <File Path="context/foundation/render-deploy.md" />
+        <File Path="context/foundation/bootstrap-verification.md" />
     </Folder>
-    <Folder Name="/docs/architecture/">
-        <File Path="docs/architecture/architecture-guide.md" />
+    <Folder Name="/context/foundation/architecture/">
+        <File Path="context/foundation/architecture/architecture-guide.md" />
     </Folder>
-    <Folder Name="/docs/performance/">
-        <File Path="docs/performance/optimization.md" />
+    <Folder Name="/context/foundation/performance/">
+        <File Path="context/foundation/performance/optimization.md" />
     </Folder>
     <Folder Name="/src/">
         <Project Path="src/HouseholdBudgetMate.Abstractions/HouseholdBudgetMate.Abstractions.csproj" />

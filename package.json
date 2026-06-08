@@ -4,7 +4,7 @@
   "description": "Household Budget Mate to webowa aplikacja do prowadzenia budżetu domowego. Aktualny zakres projektu to aplikacja web dla jednego gospodarstwa domowego: planowanie miesiąca, zapisywanie rzeczywistych i nieoczekiwanych wydatków, przychody, konta, kredyty, oszczędności, profile PIN oraz audyt zmian.",
   "main": "index.js",
   "directories": {
-    "doc": "docs"
+    "doc": "context/foundation"
   },
   "scripts": {},
   "repository": {

@@ -32,6 +32,9 @@ public sealed class BackupUiTests
         page.Should().Contain("BackupService.RestoreBackupAsync");
         page.Should().Contain("BackupService.PreviewRestoreAsync");
         page.Should().Contain("BackupService.RunScheduledBackupNowAsync");
+        page.Should().Contain("OpenBackupFolderPickerAsync");
+        page.Should().Contain("BackupFolderPickerDialog");
+        page.Should().Contain("Icons.Material.Filled.FolderOpen");
         page.Should().Contain("Immediate=\"true\"");
         page.Should().Contain("Disabled=\"@(!CanRestoreBackup)\"");
         page.Should().Contain("HasValidRestoreRequest");
@@ -52,6 +55,12 @@ public sealed class BackupUiTests
         js.Should().Contain("dragover");
         js.Should().Contain("new DataTransfer()");
         js.Should().Contain("input.dispatchEvent(new Event('change'");
+
+        var folderPicker = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Dialogs/BackupFolderPickerDialog.razor");
+        folderPicker.Should().Contain("Directory.GetLogicalDrives()");
+        folderPicker.Should().Contain("EnumerateDirectories");
+        folderPicker.Should().Contain("DialogResult.Ok(_currentPath)");
+        folderPicker.Should().Contain("Folder jeszcze nie istnieje");
     }
 
     [Fact]

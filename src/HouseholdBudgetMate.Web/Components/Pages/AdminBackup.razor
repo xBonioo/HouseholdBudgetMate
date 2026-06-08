@@ -10,10 +10,9 @@
 @inject IUserSessionService UserSessionService
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
+@inject IDialogService DialogService
 
 @implements IAsyncDisposable
-
-<PageTitle>Backup</PageTitle>
 
 @if (!IsAdminSession)
 {
@@ -284,6 +283,15 @@ else
                 <MudGrid>
                     <MudItem xs="12" md="6">
                         <MudTextField T="string" Label="Ścieżka backupu" @bind-Value="_schedulePath" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                                   ButtonType="ButtonType.Button"
+                                   OnClick="OpenBackupFolderPickerAsync"
+                                   Disabled="_isBusy"
+                                   Class="mt-1">
+                            Wybierz folder
+                        </MudButton>
                     </MudItem>
                     <MudItem xs="12" md="3">
                         <MudSelect T="BackupScheduleFrequency" Label="Częstotliwość" @bind-Value="_scheduleFrequency" Variant="Variant.Outlined" Margin="Margin.Dense">
@@ -566,6 +574,33 @@ else
             _scheduleLastStatus = settings.LastStatus;
             ShowSuccess("Harmonogram backupu zapisany.");
         });
+    }
+
+    private async Task OpenBackupFolderPickerAsync()
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(BackupFolderPickerDialog.CurrentPath)] = _schedulePath
+        };
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            FullWidth = true,
+            MaxWidth = MaxWidth.Medium
+        };
+
+        var dialog = await DialogService.ShowAsync<BackupFolderPickerDialog>(
+            "Wybierz folder backupu",
+            parameters,
+            options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string selectedPath }
+            && !string.IsNullOrWhiteSpace(selectedPath))
+        {
+            _schedulePath = selectedPath;
+        }
     }
 
     private async Task RunBackupNowAsync()

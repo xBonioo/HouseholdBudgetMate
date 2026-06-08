@@ -1,0 +1,234 @@
+@using System.IO
+@using MudBlazor
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Wybierz folder backupu</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudAlert Severity="Severity.Info" Dense="true">
+                To jest explorer folderów widocznych dla procesu aplikacji. Backup zostanie zapisany dokładnie w wybranej ścieżce.
+            </MudAlert>
+
+            <MudTextField T="string"
+                          Label="Aktualna ścieżka"
+                          Value="_currentPath"
+                          ValueChanged="SetCurrentPathAsync"
+                          Immediate="true"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+
+            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Home"
+                           OnClick="OpenUserProfileAsync">
+                    Profil
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.ArrowUpward"
+                           OnClick="OpenParentAsync"
+                           Disabled="@(!CanOpenParent)">
+                    Poziom wyżej
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="RefreshAsync">
+                    Odśwież
+                </MudButton>
+            </MudStack>
+
+            @if (_drives.Count > 0)
+            {
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                    @foreach (var drive in _drives)
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Storage"
+                                   OnClick="() => OpenFolderAsync(drive)">
+                            @drive
+                        </MudButton>
+                    }
+                </MudStack>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">@_error</MudAlert>
+            }
+
+            <MudPaper Class="pa-2" Outlined="true" Style="max-height:360px;overflow:auto;">
+                @if (_directories.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="hb-muted">Brak podfolderów albo brak uprawnień do odczytu.</MudText>
+                }
+                else
+                {
+                    <MudList T="FolderEntry" Dense="true">
+                        @foreach (var folder in _directories)
+                        {
+                            <MudListItem T="FolderEntry"
+                                         Icon="@Icons.Material.Filled.Folder"
+                                         OnClick="() => OpenFolderAsync(folder.FullName)">
+                                <MudText Typo="Typo.body2">@folder.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="hb-muted">@folder.FullName</MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudPaper>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Anuluj</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Check"
+                   OnClick="ChooseCurrentFolder"
+                   Disabled="@(!IsCurrentPathUsable)">
+            Wybierz ten folder
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string? CurrentPath { get; set; }
+
+    private string _currentPath = string.Empty;
+    private List<string> _drives = [];
+    private List<FolderEntry> _directories = [];
+    private string? _error;
+
+    private bool IsCurrentPathUsable => !string.IsNullOrWhiteSpace(_currentPath);
+    private bool CanOpenParent => GetParentPath(_currentPath) is not null;
+
+    protected override Task OnInitializedAsync()
+    {
+        _drives = GetSafeLogicalDrives();
+        _currentPath = ResolveInitialPath(CurrentPath);
+        return LoadCurrentDirectoryAsync();
+    }
+
+    private async Task SetCurrentPathAsync(string? path)
+    {
+        _currentPath = path?.Trim() ?? string.Empty;
+        await LoadCurrentDirectoryAsync();
+    }
+
+    private Task OpenUserProfileAsync()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return OpenFolderAsync(string.IsNullOrWhiteSpace(userProfile) ? AppContext.BaseDirectory : userProfile);
+    }
+
+    private Task OpenParentAsync()
+    {
+        var parentPath = GetParentPath(_currentPath);
+        return parentPath is null ? Task.CompletedTask : OpenFolderAsync(parentPath);
+    }
+
+    private Task RefreshAsync()
+    {
+        return LoadCurrentDirectoryAsync();
+    }
+
+    private async Task OpenFolderAsync(string path)
+    {
+        _currentPath = path;
+        await LoadCurrentDirectoryAsync();
+    }
+
+    private Task LoadCurrentDirectoryAsync()
+    {
+        _error = null;
+        _directories = [];
+
+        if (string.IsNullOrWhiteSpace(_currentPath))
+        {
+            _error = "Podaj ścieżkę folderu albo wybierz dysk.";
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(_currentPath);
+            _currentPath = fullPath;
+
+            if (!Directory.Exists(fullPath))
+            {
+                _error = "Folder jeszcze nie istnieje. Możesz go wybrać, a aplikacja utworzy go przy zapisie backupu.";
+                return Task.CompletedTask;
+            }
+
+            _directories = Directory
+                .EnumerateDirectories(fullPath)
+                .Select(path => new DirectoryInfo(path))
+                .OrderBy(directory => directory.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(directory => new FolderEntry(directory.Name, directory.FullName))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _error = ex.Message;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ChooseCurrentFolder()
+    {
+        MudDialog.Close(DialogResult.Ok(_currentPath));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private static string ResolveInitialPath(string? currentPath)
+    {
+        if (!string.IsNullOrWhiteSpace(currentPath))
+        {
+            return currentPath.Trim();
+        }
+
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        return string.IsNullOrWhiteSpace(documents) ? AppContext.BaseDirectory : documents;
+    }
+
+    private static List<string> GetSafeLogicalDrives()
+    {
+        try
+        {
+            return Directory.GetLogicalDrives().OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static string? GetParentPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Directory.GetParent(Path.GetFullPath(path))?.FullName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed record FolderEntry(string Name, string FullName);
+}

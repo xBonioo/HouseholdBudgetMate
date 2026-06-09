@@ -230,6 +230,7 @@ public sealed class LoanService(
         ApplyLoanPrepaymentValidator.ValidateOrThrowBadRequest(request);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var today = dateTimeProvider.GetLocalDateOnly();
 
         var loan = await dbContext.Loans
                        .Include(x => x.Tag)
@@ -311,9 +312,9 @@ public sealed class LoanService(
             });
         }
 
+        await UpsertPrepaymentExpenseAsync(dbContext, loan, request.Amount, today, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var today = dateTimeProvider.GetLocalDateOnly();
         await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
 
         return await BuildLoanDtoAsync(dbContext, loan.Id, cancellationToken);
@@ -600,6 +601,72 @@ public sealed class LoanService(
                    ?? throw new NotFoundException("Loan not found.");
 
         return loan.MapToDto();
+    }
+
+    private static async Task UpsertPrepaymentExpenseAsync(
+        ApplicationDbContext dbContext,
+        Loan loan,
+        decimal amount,
+        DateOnly prepaymentDate,
+        CancellationToken cancellationToken)
+    {
+        var monthPlan = await dbContext.MonthPlans
+            .FirstOrDefaultAsync(x => x.Year == prepaymentDate.Year && x.Month == prepaymentDate.Month, cancellationToken);
+        var monthPlanWasCreated = false;
+
+        if (monthPlan is null)
+        {
+            monthPlan = new MonthPlan
+            {
+                Year = prepaymentDate.Year,
+                Month = prepaymentDate.Month,
+                IsClosed = false
+            };
+            dbContext.MonthPlans.Add(monthPlan);
+            monthPlanWasCreated = true;
+        }
+
+        if (monthPlan.IsClosed)
+        {
+            throw new BadRequestException("Month is closed. Editing is disabled.");
+        }
+
+        var categoryId = await GetOrCreateLoanCategoryIdAsync(dbContext, cancellationToken);
+        var expenseName = $"{loan.Name} - nadpłata";
+        var existingExpense = monthPlanWasCreated
+            ? null
+            : await dbContext.Expenses
+                .Where(x => x.MonthPlanId == monthPlan.Id)
+                .Where(x => x.CategoryId == categoryId)
+                .Where(x => loan.TagId.HasValue ? x.TagId == loan.TagId.Value : x.TagId == null)
+                .Where(x => x.LoanInstallmentId == null)
+                .Where(x => x.RegularExpenseDefinitionId == null)
+                .FirstOrDefaultAsync(x => x.Name == expenseName, cancellationToken);
+
+        if (existingExpense is not null)
+        {
+            existingExpense.ActualAmount = amount;
+            return;
+        }
+
+        var nextOrder = monthPlanWasCreated
+            ? 1
+            : await dbContext.Expenses
+                .Where(x => x.MonthPlanId == monthPlan.Id)
+                .Select(x => (int?)x.Order)
+                .MaxAsync(cancellationToken) + 1 ?? 1;
+
+        dbContext.Expenses.Add(new Expense
+        {
+            MonthPlan = monthPlan,
+            Order = nextOrder,
+            Name = expenseName,
+            CategoryId = categoryId,
+            TagId = loan.TagId,
+            PlannedAmount = 0,
+            ActualAmount = amount,
+            ShowRemainingInUI = true
+        });
     }
 
     private static async Task RegenerateInstallmentsAsync(

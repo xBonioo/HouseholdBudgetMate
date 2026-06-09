@@ -6,7 +6,10 @@
   "directories": {
     "doc": "context/foundation"
   },
-  "scripts": {},
+  "scripts": {
+    "depcruise": "depcruise --config .dependency-cruiser.cjs --output-type err-long e2e playwright.config.ts src/HouseholdBudgetMate.Web/wwwroot/js src/HouseholdBudgetMate.Web/Components",
+    "depcruise:graph": "depcruise --config .dependency-cruiser.cjs --output-type mermaid --output-to artifacts/dependency-cruiser.mmd e2e playwright.config.ts src/HouseholdBudgetMate.Web/wwwroot/js src/HouseholdBudgetMate.Web/Components"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xBonioo/HouseholdBudgetMate.git"
@@ -21,6 +24,7 @@
   "homepage": "https://github.com/xBonioo/HouseholdBudgetMate#readme",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.1"
+    "@types/node": "^25.9.1",
+    "dependency-cruiser": "^17.4.3"
   }
 }

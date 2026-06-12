@@ -7,6 +7,9 @@
     "doc": "context/foundation"
   },
   "scripts": {
+    "ast-grep": "ast-grep",
+    "ast-grep:scan": "ast-grep scan --config sgconfig.yml",
+    "ast-grep:test": "ast-grep test --config sgconfig.yml",
     "depcruise": "depcruise --config .dependency-cruiser.cjs --output-type err-long e2e playwright.config.ts src/HouseholdBudgetMate.Web/wwwroot/js src/HouseholdBudgetMate.Web/Components",
     "depcruise:graph": "depcruise --config .dependency-cruiser.cjs --output-type mermaid --output-to artifacts/dependency-cruiser.mmd e2e playwright.config.ts src/HouseholdBudgetMate.Web/wwwroot/js src/HouseholdBudgetMate.Web/Components"
   },
@@ -23,6 +26,7 @@
   },
   "homepage": "https://github.com/xBonioo/HouseholdBudgetMate#readme",
   "devDependencies": {
+    "@ast-grep/cli": "^0.43.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1",
     "dependency-cruiser": "^17.4.3"

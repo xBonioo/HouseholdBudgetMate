@@ -106,30 +106,25 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseNonNegativeAmountOrWarn(_newExpensePlannedAmountInput, out var plannedAmount)
+            || !TryParseNonNegativeAmountOrWarn(_newExpenseActualAmountInput, out var actualAmount))
         {
-            if (!TryParseNonNegativeAmountOrWarn(_newExpensePlannedAmountInput, out var plannedAmount)
-                || !TryParseNonNegativeAmountOrWarn(_newExpenseActualAmountInput, out var actualAmount))
-            {
-                return;
-            }
-
-            _newExpense.PlannedAmount = plannedAmount;
-            _newExpense.ActualAmount = SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpense.TagId)
-                ? 0
-                : actualAmount;
-            _newExpense.Year = Year;
-            _newExpense.Month = Month;
-
-            await ExpenseService.CreateExpenseAsync(_newExpense, CancellationToken.None);
-
-            ResetCreateExpenseForm();
-            await LoadAsync();
-            Snackbar.Add("Dodano wydatek.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _newExpense.PlannedAmount = plannedAmount;
+        _newExpense.ActualAmount = SupportsLineItemsForSelection(_newExpense.CategoryId, _newExpense.TagId)
+            ? 0
+            : actualAmount;
+        _newExpense.Year = Year;
+        _newExpense.Month = Month;
+
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.CreateExpenseAsync(_newExpense, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            ResetCreateExpenseForm))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Dodano wydatek.", Severity.Success);
         }
     }
 
@@ -195,27 +190,23 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseNonNegativeAmountOrWarn(_editExpensePlannedAmountInput, out var plannedAmount)
+            || !TryParseNonNegativeAmountOrWarn(_editExpenseActualAmountInput, out var actualAmount))
         {
-            if (!TryParseNonNegativeAmountOrWarn(_editExpensePlannedAmountInput, out var plannedAmount)
-                || !TryParseNonNegativeAmountOrWarn(_editExpenseActualAmountInput, out var actualAmount))
-            {
-                return;
-            }
-
-            _editExpense.PlannedAmount = plannedAmount;
-            _editExpense.ActualAmount = SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId)
-                ? 0
-                : actualAmount;
-
-            await ExpenseService.UpdateExpenseAsync(_editExpense, CancellationToken.None);
-            CancelEdit();
-            await LoadAsync();
-            Snackbar.Add("Zapisano wydatek.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _editExpense.PlannedAmount = plannedAmount;
+        _editExpense.ActualAmount = SupportsLineItemsForSelection(_editExpense.CategoryId, _editExpense.TagId)
+            ? 0
+            : actualAmount;
+
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.UpdateExpenseAsync(_editExpense, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            CancelEdit))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Zapisano wydatek.", Severity.Success);
         }
     }
 
@@ -232,16 +223,12 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.DeleteExpenseAsync(new DeleteExpenseRequest { Id = expenseId },
+                CancellationToken.None),
+            PostSaveRefreshMode.FullReload))
         {
-            await ExpenseService.DeleteExpenseAsync(new DeleteExpenseRequest { Id = expenseId },
-                CancellationToken.None);
-            await LoadAsync();
             Snackbar.Add("Usunięto wydatek.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
         }
     }
 
@@ -274,19 +261,12 @@ public partial class PlanPage
 
         (ordered[index], ordered[newIndex]) = (ordered[newIndex], ordered[index]);
 
-        try
-        {
-            await ExpenseService.ReorderExpensesAsync(new ReorderExpensesRequest
+        await ExecutePostSaveAsync(
+            () => ExpenseService.ReorderExpensesAsync(new ReorderExpensesRequest
             {
                 ExpenseIds = ordered.Select(x => x.Id).ToList()
-            }, CancellationToken.None);
-
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-        }
+            }, CancellationToken.None),
+            PostSaveRefreshMode.FullReload);
     }
 
     private void ToggleCopyMode()
@@ -337,27 +317,34 @@ public partial class PlanPage
             return;
         }
 
-        try
+        var orderedSelectedExpenseIds = OrderedExpenses
+            .Where(x => _selectedExpenseIdsForCopy.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToList();
+
+        int copiedCount = 0;
+
+        if (await ExecutePostSaveAsync(
+            async () =>
+            {
+                copiedCount = await ExpenseService.CopySelectedExpensesToMonthAsync(
+                    new CopySelectedExpensesToMonthRequest
+                    {
+                        Year = Year,
+                        Month = Month,
+                        TargetYear = _copyTargetYear,
+                        TargetMonth = _copyTargetMonth,
+                        ExpenseIds = orderedSelectedExpenseIds
+                    },
+                    CancellationToken.None);
+            },
+            PostSaveRefreshMode.NoCurrentMonthReload,
+            () =>
+            {
+                _selectedExpenseIdsForCopy.Clear();
+                _isCopyMode = false;
+            }))
         {
-            var orderedSelectedExpenseIds = OrderedExpenses
-                .Where(x => _selectedExpenseIdsForCopy.Contains(x.Id))
-                .Select(x => x.Id)
-                .ToList();
-
-            var copiedCount = await ExpenseService.CopySelectedExpensesToMonthAsync(
-                new CopySelectedExpensesToMonthRequest
-                {
-                    Year = Year,
-                    Month = Month,
-                    TargetYear = _copyTargetYear,
-                    TargetMonth = _copyTargetMonth,
-                    ExpenseIds = orderedSelectedExpenseIds
-                },
-                CancellationToken.None);
-
-            _selectedExpenseIdsForCopy.Clear();
-            _isCopyMode = false;
-
             if (copiedCount == 0)
             {
                 Snackbar.Add("Nie skopiowano żadnej pozycji. Wybrane pozycje mogły zostać już uzupełnione automatycznie.", Severity.Info);
@@ -365,10 +352,6 @@ public partial class PlanPage
             }
 
             Snackbar.Add($"Skopiowano {copiedCount} pozycji do {targetMonthLabel}.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
         }
     }
 
@@ -427,24 +410,29 @@ public partial class PlanPage
             });
         }
 
-        try
+        int createdCount = 0;
+
+        if (await ExecutePostSaveAsync(
+            async () =>
+            {
+                createdCount = await ExpenseService.ApplyMonthPlanSuggestionsAsync(
+                    new ApplyMonthPlanSuggestionsRequest
+                    {
+                        Year = Year,
+                        Month = Month,
+                        Suggestions = selectedRequests
+                    },
+                    CancellationToken.None);
+            },
+            PostSaveRefreshMode.BypassPreparation,
+            () =>
+            {
+                _isCopyMode = false;
+                _selectedExpenseIdsForCopy.Clear();
+                ClearMonthPreparation();
+            },
+            RefreshArchiveMonthsCacheAsync))
         {
-            var createdCount = await ExpenseService.ApplyMonthPlanSuggestionsAsync(
-                new ApplyMonthPlanSuggestionsRequest
-                {
-                    Year = Year,
-                    Month = Month,
-                    Suggestions = selectedRequests
-                },
-                CancellationToken.None);
-
-            _isCopyMode = false;
-            _selectedExpenseIdsForCopy.Clear();
-            ClearMonthPreparation();
-
-            await RefreshArchiveMonthsCacheAsync();
-            await LoadAsync(bypassPreparation: true);
-
             var totalSelected = selectedRequests.Count;
             if (createdCount == 0)
             {
@@ -460,10 +448,6 @@ public partial class PlanPage
 
             Snackbar.Add($"Dodano {createdCount} propozycji historycznych.", Severity.Success);
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-        }
     }
 
     private async Task SkipMonthPlanSuggestionsAsync()
@@ -473,20 +457,18 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (await ExecutePostSaveAsync(
+            () => Task.CompletedTask,
+            PostSaveRefreshMode.BypassPreparation,
+            () =>
+            {
+                _isCopyMode = false;
+                _selectedExpenseIdsForCopy.Clear();
+                ClearMonthPreparation();
+            },
+            afterRefreshAsync: RefreshArchiveMonthsCacheAsync))
         {
-            _isCopyMode = false;
-            _selectedExpenseIdsForCopy.Clear();
-            ClearMonthPreparation();
-
-            await LoadAsync(bypassPreparation: true);
-            await RefreshArchiveMonthsCacheAsync();
-
             Snackbar.Add("Miesiąc został utworzony bez propozycji historycznych. Cykliczne wydatki dodano automatycznie.", Severity.Info);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
         }
     }
 

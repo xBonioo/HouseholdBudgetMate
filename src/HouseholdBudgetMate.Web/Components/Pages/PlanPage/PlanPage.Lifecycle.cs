@@ -102,6 +102,63 @@ public partial class PlanPage : IAsyncDisposable
         }
     }
 
+    private enum PostSaveRefreshMode
+    {
+        FullReload,
+        BypassPreparation,
+        NoCurrentMonthReload
+    }
+
+    private async Task<bool> ExecutePostSaveAsync(
+        Func<Task> saveAsync,
+        PostSaveRefreshMode refreshMode,
+        Action? cleanup = null,
+        Func<Task>? beforeRefreshAsync = null,
+        Func<Task>? afterRefreshAsync = null)
+    {
+        try
+        {
+            await saveAsync();
+            cleanup?.Invoke();
+
+            if (beforeRefreshAsync is not null)
+            {
+                await beforeRefreshAsync();
+            }
+
+            await RefreshAfterSaveAsync(refreshMode);
+
+            if (afterRefreshAsync is not null)
+            {
+                await afterRefreshAsync();
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return false;
+        }
+    }
+
+    private async Task RefreshAfterSaveAsync(PostSaveRefreshMode refreshMode)
+    {
+        switch (refreshMode)
+        {
+            case PostSaveRefreshMode.FullReload:
+                await LoadAsync();
+                break;
+            case PostSaveRefreshMode.BypassPreparation:
+                await LoadAsync(bypassPreparation: true);
+                break;
+            case PostSaveRefreshMode.NoCurrentMonthReload:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(refreshMode), refreshMode, null);
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)

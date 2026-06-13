@@ -88,31 +88,28 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseAmountOrWarn(_newIncomeAmountInput, out var incomeAmount))
         {
-            if (!TryParseAmountOrWarn(_newIncomeAmountInput, out var incomeAmount))
-            {
-                return;
-            }
-
-            _newIncome.Year = Year;
-            _newIncome.Month = Month;
-            _newIncome.IsRegular = false;
-            _newIncome.Amount = incomeAmount;
-
-            await IncomeService.CreateIncomeAsync(_newIncome, CancellationToken.None);
-
-            _newIncome.Name = string.Empty;
-            _newIncome.Amount = 0;
-            _newIncomeAmountInput = FormatDecimalInput(0);
-            _newIncome.ExpectedDayOfMonth = new DateOnly(Year, Month, 1);
-
-            await LoadAsync();
-            Snackbar.Add("Dodano wpływ.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _newIncome.Year = Year;
+        _newIncome.Month = Month;
+        _newIncome.IsRegular = false;
+        _newIncome.Amount = incomeAmount;
+
+        if (await ExecutePostSaveAsync(
+            () => IncomeService.CreateIncomeAsync(_newIncome, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            () =>
+            {
+                _newIncome.Name = string.Empty;
+                _newIncome.Amount = 0;
+                _newIncomeAmountInput = FormatDecimalInput(0);
+                _newIncome.ExpectedDayOfMonth = new DateOnly(Year, Month, 1);
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Dodano wpływ.", Severity.Success);
         }
     }
 
@@ -148,25 +145,24 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseAmountOrWarn(_editIncomeAmountInput, out var incomeAmount))
         {
-            if (!TryParseAmountOrWarn(_editIncomeAmountInput, out var incomeAmount))
-            {
-                return;
-            }
-
-            _editIncome.Amount = incomeAmount;
-            _editIncome.ExpectedDayOfMonth = _editIncomeDate;
-            await IncomeService.UpdateIncomeAsync(_editIncome, CancellationToken.None);
-
-            _editIncome = null;
-            _editIncomeAmountInput = FormatDecimalInput(0);
-            await LoadAsync();
-            Snackbar.Add("Zapisano wpływ.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _editIncome.Amount = incomeAmount;
+        _editIncome.ExpectedDayOfMonth = _editIncomeDate;
+
+        if (await ExecutePostSaveAsync(
+            () => IncomeService.UpdateIncomeAsync(_editIncome, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            () =>
+            {
+                _editIncome = null;
+                _editIncomeAmountInput = FormatDecimalInput(0);
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Zapisano wpływ.", Severity.Success);
         }
     }
 
@@ -183,15 +179,11 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (await ExecutePostSaveAsync(
+            () => IncomeService.DeleteIncomeAsync(new DeleteIncomeRequest { Id = incomeId }, CancellationToken.None),
+            PostSaveRefreshMode.FullReload))
         {
-            await IncomeService.DeleteIncomeAsync(new DeleteIncomeRequest { Id = incomeId }, CancellationToken.None);
-            await LoadAsync();
             Snackbar.Add("Usunięto wpływ.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
         }
     }
 

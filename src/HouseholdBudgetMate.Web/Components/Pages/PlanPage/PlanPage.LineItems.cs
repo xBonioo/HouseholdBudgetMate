@@ -47,33 +47,35 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseAmountOrWarn(GetLineItemCreateAmountInput(expenseId), out var lineItemAmount))
         {
-            if (!TryParseAmountOrWarn(GetLineItemCreateAmountInput(expenseId), out var lineItemAmount))
-            {
-                return;
-            }
+            return;
+        }
 
-            model.Amount = lineItemAmount;
+        model.Amount = lineItemAmount;
 
-            await ExpenseService.CreateExpenseLineItemAsync(new CreateExpenseLineItemRequest
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.CreateExpenseLineItemAsync(new CreateExpenseLineItemRequest
             {
                 ExpenseId = expenseId,
                 Description = model.Description,
                 Amount = model.Amount,
                 OccurredAt = model.OccurredAt,
                 TagId = model.TagId
-            }, CancellationToken.None);
-
-            _lineItemCreateModels[expenseId] = new LineItemCreateDto();
-            _lineItemCreateAmountInputs[expenseId] = FormatDecimalInput(0);
-            await LoadAsync();
-            _expandedExpenseIds.Add(expenseId);
-            Snackbar.Add("Dodano pozycję.", Severity.Success);
-        }
-        catch (Exception ex)
+            }, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            () =>
+            {
+                _lineItemCreateModels[expenseId] = new LineItemCreateDto();
+                _lineItemCreateAmountInputs[expenseId] = FormatDecimalInput(0);
+            },
+            afterRefreshAsync: () =>
+            {
+                _expandedExpenseIds.Add(expenseId);
+                return Task.CompletedTask;
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Dodano pozycję.", Severity.Success);
         }
     }
 
@@ -100,30 +102,30 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseAmountOrWarn(_editLineItemAmountInput, out var lineItemAmount))
         {
-            if (!TryParseAmountOrWarn(_editLineItemAmountInput, out var lineItemAmount))
-            {
-                return;
-            }
-
-            _editLineItem.Amount = lineItemAmount;
-            _editLineItem.OccurredAt = _editLineItemDate;
-            await ExpenseService.UpdateExpenseLineItemAsync(_editLineItem, CancellationToken.None);
-
-            var expandedExpenseId = _editLineItemExpenseId;
-            CancelLineItemEdit();
-            await LoadAsync();
-            if (expandedExpenseId.HasValue)
-            {
-                _expandedExpenseIds.Add(expandedExpenseId.Value);
-            }
-
-            Snackbar.Add("Zapisano pozycję.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _editLineItem.Amount = lineItemAmount;
+        _editLineItem.OccurredAt = _editLineItemDate;
+
+        var expandedExpenseId = _editLineItemExpenseId;
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.UpdateExpenseLineItemAsync(_editLineItem, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            CancelLineItemEdit,
+            afterRefreshAsync: () =>
+            {
+                if (expandedExpenseId.HasValue)
+                {
+                    _expandedExpenseIds.Add(expandedExpenseId.Value);
+                }
+
+                return Task.CompletedTask;
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Zapisano pozycję.", Severity.Success);
         }
     }
 
@@ -143,21 +145,21 @@ public partial class PlanPage
             return;
         }
 
-        try
-        {
-            await ExpenseService.DeleteExpenseLineItemAsync(new DeleteExpenseLineItemRequest { Id = lineItemId },
-                CancellationToken.None);
-            await LoadAsync();
-            if (expenseId > 0)
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.DeleteExpenseLineItemAsync(new DeleteExpenseLineItemRequest { Id = lineItemId },
+                CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            afterRefreshAsync: () =>
             {
-                _expandedExpenseIds.Add(expenseId);
-            }
+                if (expenseId > 0)
+                {
+                    _expandedExpenseIds.Add(expenseId);
+                }
 
-            Snackbar.Add("Usunięto pozycję.", Severity.Success);
-        }
-        catch (Exception ex)
+                return Task.CompletedTask;
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Usunięto pozycję.", Severity.Success);
         }
     }
 }

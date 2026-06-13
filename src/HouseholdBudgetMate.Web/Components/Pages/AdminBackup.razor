@@ -698,15 +698,22 @@ else
 
     public async ValueTask DisposeAsync()
     {
-        if (_backupDropZoneRegistration is not null)
+        try
         {
-            await _backupDropZoneRegistration.InvokeVoidAsync("dispose");
-            await _backupDropZoneRegistration.DisposeAsync();
-        }
+            if (_backupDropZoneRegistration is not null)
+            {
+                await _backupDropZoneRegistration.InvokeVoidAsync("dispose");
+                await _backupDropZoneRegistration.DisposeAsync();
+            }
 
-        if (_backupDropZoneModule is not null)
+            if (_backupDropZoneModule is not null)
+            {
+                await _backupDropZoneModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
         {
-            await _backupDropZoneModule.DisposeAsync();
+            // The Blazor Server circuit can already be gone while the component is being disposed.
         }
     }
 }

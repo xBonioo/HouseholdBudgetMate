@@ -54,6 +54,11 @@ public sealed class MonthlyBudgetingLoopUiTests
         lifecycle.Should().Contain("IncomeService.GetLiveBalanceAsync");
         lifecycle.Should().Contain("ExpenseService.CloseMonthAsync");
         lifecycle.Should().Contain("ExpenseService.OpenMonthAsync");
+        lifecycle.Should().Contain("ExecutePostSaveAsync");
+        lifecycle.Should().Contain("RefreshAfterSaveAsync");
+        lifecycle.Should().Contain("PostSaveRefreshMode.FullReload");
+        lifecycle.Should().Contain("PostSaveRefreshMode.BypassPreparation");
+        lifecycle.Should().Contain("PostSaveRefreshMode.NoCurrentMonthReload");
         lifecycle.Should().Contain("bypassPreparation");
 
         expenses.Should().Contain("ApplyMonthPlanSuggestionsAsync");
@@ -66,14 +71,88 @@ public sealed class MonthlyBudgetingLoopUiTests
         expenses.Should().Contain("MatchesExpensePaymentFilter");
         expenses.Should().Contain("ExpensePaymentFilter.RemainingToPay");
         expenses.Should().Contain("ExpensePaymentFilter.PaidOff");
-        expenses.Should().Contain("expense.ActualAmount <= 0");
-        expenses.Should().Contain("expense.ActualAmount > 0");
+        expenses.Should().Contain("ExecutePostSaveAsync");
+        expenses.Should().Contain("PostSaveRefreshMode.FullReload");
+        expenses.Should().Contain("PostSaveRefreshMode.BypassPreparation");
+        expenses.Should().Contain("PostSaveRefreshMode.NoCurrentMonthReload");
+        expenses.Should().Contain("RefreshArchiveMonthsCacheAsync");
+        expenses.Should().NotContain("LoadAsync()");
+        expenses.Should().NotContain("LoadAsync(bypassPreparation: true)");
         expenses.Should().Contain("Wyczy\u015b\u0107 filtry, aby zmieni\u0107 kolejno\u015b\u0107 wydatk\u00f3w.");
 
         page.Should().Contain(PreviousClosingBalanceGuidance);
         page.Should().Contain(StoredZeroBalanceGuidance);
         page.Should().Contain("MissingBalanceAccountNames");
         AssertNoSafeToSpend(page);
+    }
+
+    [Fact]
+    public void PlanPage_Should_Preserve_Save_Handler_Wiring_And_Refresh_Modes()
+    {
+        var lifecycle = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Lifecycle.cs");
+        var expenses = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Expenses.cs");
+        var incomes = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Incomes.cs");
+        var savingsTransfers = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.SavingsTransfers.cs");
+        var lineItems = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.LineItems.cs");
+
+        lifecycle.Should().Contain("LoadAsync(bool bypassPreparation = false)");
+        lifecycle.Should().Contain("ExpenseService.CloseMonthAsync");
+        lifecycle.Should().Contain("ExpenseService.OpenMonthAsync");
+        lifecycle.Should().Contain("RefreshArchiveMonthsCacheAsync");
+        lifecycle.Should().Contain("bypassPreparation");
+
+        expenses.Should().Contain("CreateExpenseAsync");
+        expenses.Should().Contain("SaveEditAsync");
+        expenses.Should().Contain("DeleteExpenseAsync");
+        expenses.Should().Contain("MoveExpenseAsync");
+        expenses.Should().Contain("CopySelectedExpensesAsync");
+        expenses.Should().Contain("ApplyMonthPlanSuggestionsAsync");
+        expenses.Should().Contain("SkipMonthPlanSuggestionsAsync");
+        expenses.Should().Contain("ResetCopyTargetToNextMonth");
+        expenses.Should().Contain("ClearMonthPreparation");
+        expenses.Should().Contain("ConfirmAsync");
+
+        incomes.Should().Contain("CreateIncomeAsync");
+        incomes.Should().Contain("SaveIncomeEditAsync");
+        incomes.Should().Contain("DeleteIncomeAsync");
+        incomes.Should().Contain("ExecutePostSaveAsync");
+        incomes.Should().Contain("PostSaveRefreshMode.FullReload");
+
+        savingsTransfers.Should().Contain("CreateSavingsTransferAsync");
+        savingsTransfers.Should().Contain("SaveSavingsTransferEditAsync");
+        savingsTransfers.Should().Contain("DeleteSavingsTransferAsync");
+        savingsTransfers.Should().Contain("ExecutePostSaveAsync");
+        savingsTransfers.Should().Contain("PostSaveRefreshMode.FullReload");
+
+        lineItems.Should().Contain("CreateLineItemAsync");
+        lineItems.Should().Contain("SaveLineItemEditAsync");
+        lineItems.Should().Contain("DeleteLineItemAsync");
+        lineItems.Should().Contain("ExecutePostSaveAsync");
+        lineItems.Should().Contain("PostSaveRefreshMode.FullReload");
+        lineItems.Should().Contain("_expandedExpenseIds.Add(expenseId)");
+    }
+
+    [Fact]
+    public void PlanPage_Should_Preserve_Expense_Special_Save_Flow_Contracts()
+    {
+        var expenses = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Expenses.cs");
+
+        var copySelected = ExtractMethodBlock(expenses, "private async Task CopySelectedExpensesAsync()");
+        copySelected.Should().Contain("ExpenseService.CopySelectedExpensesToMonthAsync");
+        copySelected.Should().Contain("PostSaveRefreshMode.NoCurrentMonthReload");
+        copySelected.Should().NotContain("LoadAsync(");
+
+        var applySuggestions = ExtractMethodBlock(expenses, "private async Task ApplyMonthPlanSuggestionsAsync()");
+        applySuggestions.Should().Contain("ExpenseService.ApplyMonthPlanSuggestionsAsync");
+        applySuggestions.Should().Contain("PostSaveRefreshMode.BypassPreparation");
+        applySuggestions.Should().Contain("RefreshArchiveMonthsCacheAsync))");
+        applySuggestions.Should().NotContain("afterRefreshAsync: RefreshArchiveMonthsCacheAsync");
+        AssertOccursBefore(applySuggestions, "ClearMonthPreparation();", "RefreshArchiveMonthsCacheAsync))");
+
+        var skipSuggestions = ExtractMethodBlock(expenses, "private async Task SkipMonthPlanSuggestionsAsync()");
+        skipSuggestions.Should().Contain("PostSaveRefreshMode.BypassPreparation");
+        skipSuggestions.Should().Contain("afterRefreshAsync: RefreshArchiveMonthsCacheAsync");
+        AssertOccursBefore(skipSuggestions, "ClearMonthPreparation();", "afterRefreshAsync: RefreshArchiveMonthsCacheAsync");
     }
 
     [Fact]
@@ -192,6 +271,44 @@ public sealed class MonthlyBudgetingLoopUiTests
         }
 
         throw new FileNotFoundException($"Could not find repository file '{relativePath}'.", relativePath);
+    }
+
+    private static string ExtractMethodBlock(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0, $"method signature '{signature}' should exist");
+
+        var openBrace = source.IndexOf('{', start);
+        openBrace.Should().BeGreaterThanOrEqualTo(start, $"method signature '{signature}' should have a body");
+
+        var depth = 0;
+        for (var i = openBrace; i < source.Length; i++)
+        {
+            if (source[i] == '{')
+            {
+                depth++;
+            }
+            else if (source[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return source.Substring(start, i - start + 1);
+                }
+            }
+        }
+
+        throw new InvalidOperationException($"Could not extract method body for '{signature}'.");
+    }
+
+    private static void AssertOccursBefore(string source, string earlier, string later)
+    {
+        var earlierIndex = source.IndexOf(earlier, StringComparison.Ordinal);
+        var laterIndex = source.IndexOf(later, StringComparison.Ordinal);
+
+        earlierIndex.Should().BeGreaterThanOrEqualTo(0, $"'{earlier}' should exist");
+        laterIndex.Should().BeGreaterThanOrEqualTo(0, $"'{later}' should exist");
+        earlierIndex.Should().BeLessThan(laterIndex, $"'{earlier}' should occur before '{later}'");
     }
 
     private static void AssertNoSafeToSpend(string source)

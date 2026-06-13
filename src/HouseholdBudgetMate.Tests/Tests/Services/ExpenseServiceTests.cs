@@ -326,6 +326,7 @@ public sealed class ExpenseServiceTests
 
         var expenseDto = Assert.Single(month.Expenses);
         Assert.Equal(2, expenseDto.LineItems.Count);
+        Assert.Equal(30m, expenseDto.ActualAmount);
         Assert.Equal(firstLineItemId, expenseDto.LineItems[0].Id);
         Assert.Equal(secondLineItemId, expenseDto.LineItems[1].Id);
     }
@@ -3255,6 +3256,78 @@ public sealed class ExpenseServiceTests
         Assert.False(result.ShowRemainingInUI);
     }
 
+    /// <summary>
+    /// Updates an expense that already has line items and verifies that request ActualAmount is ignored.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseAsync_Should_Ignore_Request_ActualAmount_When_LineItems_Exist()
+    {
+        int expenseId;
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#43A047", SupportsLineItems = true };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy",
+                CategoryId = categoryId,
+                PlannedAmount = 200m,
+                ActualAmount = 10m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+
+            context.ExpenseLineItems.AddRange(
+                new ExpenseLineItem
+                {
+                    ExpenseId = expenseId,
+                    Description = "Chleb",
+                    Amount = 40m,
+                    OccurredAt = new DateOnly(2026, 4, 5)
+                },
+                new ExpenseLineItem
+                {
+                    ExpenseId = expenseId,
+                    Description = "Mleko",
+                    Amount = 30m,
+                    OccurredAt = new DateOnly(2026, 4, 6)
+                });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.UpdateExpenseAsync(new UpdateExpenseRequest
+        {
+            Id = expenseId,
+            Name = "Zakupy zaktualizowane",
+            CategoryId = categoryId,
+            PlannedAmount = 220m,
+            ActualAmount = 999m,
+            ShowRemainingInUI = false
+        }, CancellationToken.None);
+
+        Assert.Equal("Zakupy zaktualizowane", result.Name);
+        Assert.Equal(220m, result.PlannedAmount);
+        Assert.Equal(70m, result.ActualAmount);
+        Assert.False(result.ShowRemainingInUI);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(70m, updatedExpense.ActualAmount);
+    }
+
     // ─── DeleteExpenseAsync ─────────────────────────────────────────────────────
 
     /// <summary>
@@ -3540,6 +3613,62 @@ public sealed class ExpenseServiceTests
         // After deleting one of two line items, ActualAmount is recalculated to remaining line item sum.
         var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
         Assert.Equal(30m, updatedExpense.ActualAmount);
+    }
+
+    /// <summary>
+    /// Deletes the final line item and verifies the parent expense keeps its last calculated ActualAmount.
+    /// </summary>
+    [Fact]
+    public async Task DeleteExpenseLineItemAsync_Should_Preserve_Last_Calculated_ActualAmount_When_Last_LineItem_Is_Removed()
+    {
+        int lineItemId;
+        int expenseId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#43A047", SupportsLineItems = true };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Tygodniowe zakupy",
+                CategoryId = category.Id,
+                PlannedAmount = 150m,
+                ActualAmount = 70m,
+                ShowRemainingInUI = true
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+
+            var lineItem = new ExpenseLineItem
+            {
+                ExpenseId = expenseId,
+                Description = "Herbata",
+                Amount = 70m,
+                OccurredAt = new DateOnly(2026, 4, 5)
+            };
+            context.ExpenseLineItems.Add(lineItem);
+            await context.SaveChangesAsync();
+            lineItemId = lineItem.Id;
+        }
+
+        var service = CreateService();
+        await service.DeleteExpenseLineItemAsync(
+            new DeleteExpenseLineItemRequest { Id = lineItemId }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var lineItemExists = await verifyContext.ExpenseLineItems.AnyAsync(x => x.Id == lineItemId);
+        Assert.False(lineItemExists);
+
+        var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(70m, updatedExpense.ActualAmount);
     }
 
     /// <summary>

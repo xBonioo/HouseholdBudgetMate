@@ -2409,9 +2409,7 @@ public sealed class ExpenseService(
 
     private static decimal GetExpenseActualAmountForSuggestion(Expense expense)
     {
-        return expense.LineItems.Count > 0
-            ? expense.LineItems.Sum(x => x.Amount)
-            : expense.ActualAmount;
+        return ExpenseActualAmountCalculator.GetEffectiveActualAmount(expense);
     }
 
     private static bool IsHistoricalSuggestionAvailable(
@@ -2748,7 +2746,7 @@ public sealed class ExpenseService(
             return;
         }
 
-        expense.ActualAmount = expense.LineItems.Sum(x => x.Amount);
+        expense.ActualAmount = ExpenseActualAmountCalculator.GetEffectiveActualAmount(expense);
     }
 
     private static async Task<ExpenseDto> BuildExpenseDtoAsync(

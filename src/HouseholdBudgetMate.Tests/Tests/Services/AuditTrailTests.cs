@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Audit.Requests;
 using HouseholdBudgetMate.Application.Auditing;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
@@ -7,6 +8,7 @@ using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
+using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace HouseholdBudgetMate.Tests.Tests.Services;
@@ -358,6 +360,84 @@ public sealed class AuditTrailTests
         auditLog.EntityId.Should().Be(lineItemId);
         var newValues = DeserializeValues(auditLog.NewValuesJson);
         newValues["Description"].GetString().Should().Be("Płatność za elewację");
+    }
+
+    [Fact]
+    public async Task SaveChanges_WhenExpenseLineItemIsDeleted_Should_LogLineItemDeleteAndParentExpenseUpdate()
+    {
+        var currentUser = CreateCurrentUserContext("actor-user", "owner-user");
+        var options = NewOptions(currentUser);
+        int expenseId;
+        int lineItemId;
+
+        await using (var setupContext = new ApplicationDbContext(options, currentUser))
+        {
+            SeedUsers(setupContext);
+            setupContext.Categories.Add(new Category { Name = "Dom", Color = "#123456", SupportsLineItems = true });
+            setupContext.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 5 });
+            await setupContext.SaveChangesAsync();
+
+            var categoryId = await setupContext.Categories.Select(x => x.Id).SingleAsync();
+            var monthPlanId = await setupContext.MonthPlans.Select(x => x.Id).SingleAsync();
+            setupContext.Expenses.Add(new Expense
+            {
+                MonthPlanId = monthPlanId,
+                Name = "Zakupy",
+                CategoryId = categoryId,
+                PlannedAmount = 100,
+                ActualAmount = 70,
+                Order = 1
+            });
+            await setupContext.SaveChangesAsync();
+            expenseId = await setupContext.Expenses.Select(x => x.Id).SingleAsync();
+
+            setupContext.ExpenseLineItems.AddRange(
+                new ExpenseLineItem
+                {
+                    ExpenseId = expenseId,
+                    Description = "Chleb",
+                    Amount = 40,
+                    OccurredAt = new DateOnly(2026, 5, 5)
+                },
+                new ExpenseLineItem
+                {
+                    ExpenseId = expenseId,
+                    Description = "Mleko",
+                    Amount = 30,
+                    OccurredAt = new DateOnly(2026, 5, 6)
+                });
+            await setupContext.SaveChangesAsync();
+
+            lineItemId = await setupContext.ExpenseLineItems
+                .Where(x => x.ExpenseId == expenseId && x.Description == "Chleb")
+                .Select(x => x.Id)
+                .SingleAsync();
+        }
+
+        var expenseService = new ExpenseService(
+            new TestContextFactory(options, currentUser),
+            new StaticDateTimeProvider(DateTime.UtcNow),
+            new RecordingAppEventPublisher(),
+            new NoOpIncomeService(),
+            new NoOpLoanService());
+
+        await expenseService.DeleteExpenseLineItemAsync(new DeleteExpenseLineItemRequest { Id = lineItemId }, CancellationToken.None);
+
+        await using var verifyContext = new ApplicationDbContext(options, currentUser);
+        var latestLineItemLog = await verifyContext.AuditLogs
+            .Where(x => x.EntityType == nameof(ExpenseLineItem) && x.EntityId == lineItemId)
+            .OrderByDescending(x => x.Id)
+            .FirstAsync();
+        latestLineItemLog.Operation.Should().Be("Delete");
+
+        var latestExpenseLog = await verifyContext.AuditLogs
+            .Where(x => x.EntityType == nameof(Expense) && x.EntityId == expenseId)
+            .OrderByDescending(x => x.Id)
+            .FirstAsync();
+        latestExpenseLog.Operation.Should().Be("Update");
+
+        var updatedExpenseValues = DeserializeValues(latestExpenseLog.NewValuesJson);
+        updatedExpenseValues["ActualAmount"].GetDecimal().Should().Be(30);
     }
 
     [Fact]

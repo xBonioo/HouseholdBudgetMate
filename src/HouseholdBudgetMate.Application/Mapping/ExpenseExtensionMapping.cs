@@ -1,4 +1,5 @@
-﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
+using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Domain.Entities;
 
 namespace HouseholdBudgetMate.Application.Mapping;
@@ -20,7 +21,7 @@ public static class ExpenseExtensionMapping
             TagId = expense.TagId,
             TagName = expense.Tag?.Name,
             PlannedAmount = expense.PlannedAmount,
-            ActualAmount = expense.LineItems.Count > 0 ? expense.LineItems.Sum(li => li.Amount) : expense.ActualAmount,
+            ActualAmount = ExpenseActualAmountCalculator.GetEffectiveActualAmount(expense),
             SupportsLineItems = expense.Tag?.SupportsLineItemsOverride ?? expense.Category.SupportsLineItems,
             ShowRemainingInUI = expense.ShowRemainingInUI,
             LineItems = expense.LineItems

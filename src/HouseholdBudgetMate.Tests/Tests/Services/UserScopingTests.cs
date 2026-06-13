@@ -1,8 +1,11 @@
 using FluentAssertions;
+using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Enums;
+using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
+using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace HouseholdBudgetMate.Tests.Tests.Services;
@@ -18,6 +21,18 @@ public sealed class UserScopingTests
 
     private static CurrentUserContext CreateCurrentUserContext(string userId, string? budgetOwnerUserId = null) =>
         new() { UserId = userId, BudgetOwnerUserId = budgetOwnerUserId ?? userId };
+
+    private sealed class CurrentUserDbContextFactory(
+        DbContextOptions<ApplicationDbContext> options,
+        CurrentUserContext currentUserContext) : IDbContextFactory<ApplicationDbContext>
+    {
+        public ApplicationDbContext CreateDbContext() => new(options, currentUserContext);
+
+        public Task<ApplicationDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CreateDbContext());
+        }
+    }
 
     private static Loan CreateLoan(string name) => new()
     {
@@ -144,6 +159,62 @@ public sealed class UserScopingTests
             loans.Should().HaveCount(2);
             loans.Select(x => x.UserId).Should().OnlyContain(x => x == "user-a");
         }
+    }
+
+    /// <summary>
+    /// Verifies that an application service save path still writes data under the budget owner's scope.
+    /// </summary>
+    [Fact]
+    public async Task ExpenseService_Save_Path_Should_Respect_Shared_Budget_Scope()
+    {
+        var options = NewOptions();
+
+        await using (var setupContext = new ApplicationDbContext(options, CreateCurrentUserContext("owner-user")))
+        {
+            setupContext.Users.AddRange(
+                new User { Id = "owner-user", Username = "owner-user", PasswordHash = "hash-a" },
+                new User
+                {
+                    Id = "spouse-user",
+                    Username = "spouse-user",
+                    PasswordHash = "hash-b",
+                    HouseholdMode = (int)HouseholdMode.SharedBudget,
+                    BudgetOwnerUserId = "owner-user"
+                });
+            setupContext.Categories.Add(new Category { Name = "Dom", Color = "#123456" });
+            setupContext.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 4 });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var currentUser = CreateCurrentUserContext("spouse-user", "owner-user");
+        var factory = new CurrentUserDbContextFactory(options, currentUser);
+        var service = new ExpenseService(
+            factory,
+            new StaticDateTimeProvider(DateTime.UtcNow),
+            new RecordingAppEventPublisher(),
+            new NoOpIncomeService(),
+            new NoOpLoanService());
+
+        int categoryId;
+        await using (var categoryContext = new ApplicationDbContext(options, currentUser))
+        {
+            categoryId = await categoryContext.Categories.Select(x => x.Id).SingleAsync();
+        }
+
+        var created = await service.CreateExpenseAsync(new CreateExpenseRequest
+        {
+            Year = 2026,
+            Month = 4,
+            Name = "Czynsz",
+            CategoryId = categoryId,
+            PlannedAmount = 1000m,
+            ActualAmount = 450m,
+            ShowRemainingInUI = true
+        }, CancellationToken.None);
+
+        await using var verifyContext = new ApplicationDbContext(options, currentUser);
+        var storedExpense = await verifyContext.Expenses.IgnoreQueryFilters().SingleAsync(x => x.Id == created.Id);
+        storedExpense.UserId.Should().Be("owner-user");
     }
 
     // ── Timestamps ───────────────────────────────────────────────────────────

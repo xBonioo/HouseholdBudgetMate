@@ -13,29 +13,26 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseAmountOrWarn(_newSavingsTransferAmountInput, out var savingsAmount))
         {
-            if (!TryParseAmountOrWarn(_newSavingsTransferAmountInput, out var savingsAmount))
-            {
-                return;
-            }
-
-            _newSavingsTransfer.Year = Year;
-            _newSavingsTransfer.Month = Month;
-            _newSavingsTransfer.Amount = savingsAmount;
-
-            await ExpenseService.CreateMonthSavingsTransferItemAsync(_newSavingsTransfer, CancellationToken.None);
-
-            _newSavingsTransfer.Amount = 0;
-            _newSavingsTransferAmountInput = FormatDecimalInput(0);
-            _newSavingsTransfer.TransferDate = new DateOnly(Year, Month, 1);
-
-            await LoadAsync();
-            Snackbar.Add("Dodano pozycję oszczędności.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _newSavingsTransfer.Year = Year;
+        _newSavingsTransfer.Month = Month;
+        _newSavingsTransfer.Amount = savingsAmount;
+
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.CreateMonthSavingsTransferItemAsync(_newSavingsTransfer, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            () =>
+            {
+                _newSavingsTransfer.Amount = 0;
+                _newSavingsTransferAmountInput = FormatDecimalInput(0);
+                _newSavingsTransfer.TransferDate = new DateOnly(Year, Month, 1);
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Dodano pozycję oszczędności.", Severity.Success);
         }
     }
 
@@ -67,25 +64,24 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (!TryParseAmountOrWarn(_editSavingsTransferAmountInput, out var savingsAmount))
         {
-            if (!TryParseAmountOrWarn(_editSavingsTransferAmountInput, out var savingsAmount))
-            {
-                return;
-            }
-
-            _editSavingsTransfer.Amount = savingsAmount;
-            _editSavingsTransfer.TransferDate = _editSavingsTransferDate;
-            await ExpenseService.UpdateMonthSavingsTransferItemAsync(_editSavingsTransfer, CancellationToken.None);
-
-            _editSavingsTransfer = null;
-            _editSavingsTransferAmountInput = FormatDecimalInput(0);
-            await LoadAsync();
-            Snackbar.Add("Zapisano pozycję oszczędności.", Severity.Success);
+            return;
         }
-        catch (Exception ex)
+
+        _editSavingsTransfer.Amount = savingsAmount;
+        _editSavingsTransfer.TransferDate = _editSavingsTransferDate;
+
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.UpdateMonthSavingsTransferItemAsync(_editSavingsTransfer, CancellationToken.None),
+            PostSaveRefreshMode.FullReload,
+            () =>
+            {
+                _editSavingsTransfer = null;
+                _editSavingsTransferAmountInput = FormatDecimalInput(0);
+            }))
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add("Zapisano pozycję oszczędności.", Severity.Success);
         }
     }
 
@@ -96,16 +92,12 @@ public partial class PlanPage
             return;
         }
 
-        try
+        if (await ExecutePostSaveAsync(
+            () => ExpenseService.DeleteMonthSavingsTransferItemAsync(
+                new DeleteMonthSavingsTransferItemRequest { Id = id }, CancellationToken.None),
+            PostSaveRefreshMode.FullReload))
         {
-            await ExpenseService.DeleteMonthSavingsTransferItemAsync(
-                new DeleteMonthSavingsTransferItemRequest { Id = id }, CancellationToken.None);
-            await LoadAsync();
             Snackbar.Add("Usunięto pozycję oszczędności.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
         }
     }
 }

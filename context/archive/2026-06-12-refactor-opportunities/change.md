@@ -1,10 +1,10 @@
 ---
 change_id: refactor-opportunities
 title: Rank refactor opportunities from post-flow analysis
-status: impl_reviewed
+status: archived
 created: 2026-06-12
 updated: 2026-06-13
-archived_at: null
+archived_at: 2026-06-13T11:18:33Z
 ---
 
 ## Notes

@@ -1,10 +1,10 @@
 ---
 change_id: domain-refactor
 title: Refactor domain layer around monthly reconciliation
-status: implemented
+status: archived
 created: 2026-06-14
 updated: 2026-06-14
-archived_at: null
+archived_at: 2026-06-14T18:59:12Z
 ---
 
 ## Notes

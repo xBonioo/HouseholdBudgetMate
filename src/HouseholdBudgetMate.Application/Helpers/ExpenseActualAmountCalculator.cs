@@ -12,4 +12,11 @@ internal static class ExpenseActualAmountCalculator
             ? expense.LineItems.Sum(x => x.Amount)
             : expense.ActualAmount;
     }
+
+    public static decimal GetEffectiveActualTotal(IEnumerable<Expense> expenses)
+    {
+        ArgumentNullException.ThrowIfNull(expenses);
+
+        return expenses.Sum(GetEffectiveActualAmount);
+    }
 }

@@ -30,6 +30,7 @@ public sealed class MonthlyBudgetingLoopUiTests
         markup.Should().Contain("KOPIUJ DO WYBRANEGO MIESI\u0104CA");
         markup.Should().Contain("Pomi\u0144 propozycje");
         markup.Should().Contain("Utw\u00f3rz miesi\u0105c z wybranych");
+        markup.Should().Contain("Disabled=\"@IsMonthClosed\"");
         markup.Should().Contain("Filtry wydatk\u00f3w");
         markup.Should().Contain("Kategoria");
         markup.Should().Contain("Status");
@@ -49,9 +50,8 @@ public sealed class MonthlyBudgetingLoopUiTests
         code.Should().NotContain("IsSelected = suggestion.IsAvailable");
 
         lifecycle.Should().Contain("ExpenseService.GetMonthPlanPreparationAsync");
-        lifecycle.Should().Contain("ExpenseService.GetMonthAsync");
+        lifecycle.Should().Contain("ExpenseService.GetMonthlyFinancialPictureAsync");
         lifecycle.Should().Contain("ExpenseService.GetDashboardSummaryAsync");
-        lifecycle.Should().Contain("IncomeService.GetLiveBalanceAsync");
         lifecycle.Should().Contain("ExpenseService.CloseMonthAsync");
         lifecycle.Should().Contain("ExpenseService.OpenMonthAsync");
         lifecycle.Should().Contain("ExecutePostSaveAsync");
@@ -191,8 +191,7 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsMarkup.Should().Contain("Salda kont");
         accountsMarkup.Should().NotContain(RemainingInPlanLabel);
 
-        accountsCode.Should().Contain("IncomeService.GetLiveBalanceAsync");
-        accountsCode.Should().Contain("ExpenseService.GetMonthAsync");
+        accountsCode.Should().Contain("ExpenseService.GetMonthlyFinancialPictureAsync");
         accountsCode.Should().Contain("HasCompleteBalanceBase");
         accountsCode.Should().Contain("MissingBalanceAccountNames");
         accountsCode.Should().Contain(PreviousClosingBalanceGuidance);

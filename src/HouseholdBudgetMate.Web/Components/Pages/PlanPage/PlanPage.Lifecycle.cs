@@ -56,11 +56,12 @@ public partial class PlanPage : IAsyncDisposable
             }
 
             ClearMonthPreparation();
-            _monthPlan = await ExpenseService.GetMonthAsync(Year, Month, CancellationToken.None);
+            var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(Year, Month, CancellationToken.None);
+            _monthPlan = monthlyPicture.MonthPlan;
             _dashboardSummary = await ExpenseService.GetDashboardSummaryAsync(Year, Month, CancellationToken.None);
 
             _incomes = (await IncomeService.GetMonthIncomesAsync(Year, Month, CancellationToken.None)).ToList();
-            _liveBalance = await IncomeService.GetLiveBalanceAsync(Year, Month, CancellationToken.None);
+            _liveBalance = monthlyPicture.LiveBalance;
 
             _expandedExpenseIds.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));
             _selectedExpenseIdsForCopy.RemoveWhere(id => _monthPlan.Expenses.All(x => x.Id != id));

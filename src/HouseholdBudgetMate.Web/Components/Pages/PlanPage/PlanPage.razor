@@ -254,19 +254,22 @@
                           Value="_newSavingsTransferAmountInput"
                           ValueChanged="SetNewSavingsTransferAmountInputAsync"
                           Label="Kwota do odłożenia"
-                          Variant="Variant.Outlined"/>
+                          Variant="Variant.Outlined"
+                          Disabled="@IsMonthClosed"/>
         </MudItem>
         <MudItem xs="12" md="5">
             <MudDatePicker
                 Date="@_newSavingsTransfer.TransferDate.ToDateTime(TimeOnly.MinValue)"
                 DateChanged="(date) => UpdateDateIfProvided(date, value => _newSavingsTransfer.TransferDate = value)"
-                Label="Data przelewu" Variant="Variant.Outlined"/>
+                Label="Data przelewu" Variant="Variant.Outlined"
+                Disabled="@IsMonthClosed"/>
         </MudItem>
         <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
             <MudButton
                 Variant="Variant.Filled"
                 Color="Color.Primary"
-                ButtonType="ButtonType.Submit">
+                ButtonType="ButtonType.Submit"
+                Disabled="@IsMonthClosed">
                 DODAJ
             </MudButton>
         </MudItem>
@@ -288,13 +291,15 @@
                         <MudTextField T="string"
                                       Value="_editSavingsTransferAmountInput"
                                       ValueChanged="SetEditSavingsTransferAmountInputAsync"
-                                      Variant="Variant.Outlined"/>
+                                      Variant="Variant.Outlined"
+                                      Disabled="@IsMonthClosed"/>
                     </MudTd>
                     <MudTd>
                         <MudDatePicker
                             Date="@_editSavingsTransferDate.ToDateTime(TimeOnly.MinValue)"
                             DateChanged="(date) => UpdateDateIfProvided(date, value => _editSavingsTransferDate = value)"
-                            Variant="Variant.Outlined"/>
+                            Variant="Variant.Outlined"
+                            Disabled="@IsMonthClosed"/>
                     </MudTd>
                     <MudTd>
                         <MudButton
@@ -302,14 +307,16 @@
                             Color="Color.Primary"
                             Size="Size.Small"
                             ButtonType="ButtonType.Button"
-                            OnClick="SaveSavingsTransferEditAsync">
+                            OnClick="SaveSavingsTransferEditAsync"
+                            Disabled="@IsMonthClosed">
                             Zapisz
                         </MudButton>
                         <MudButton
                             Variant="Variant.Text"
                             Size="Size.Small"
                             ButtonType="ButtonType.Button"
-                            OnClick="CancelSavingsTransferEdit">
+                            OnClick="CancelSavingsTransferEdit"
+                            Disabled="@IsMonthClosed">
                             Anuluj
                         </MudButton>
                     </MudTd>
@@ -319,8 +326,18 @@
                     <MudTd>@item.Amount.ToString("0.00", Culture)zł</MudTd>
                     <MudTd>@item.TransferDate.ToString("yyyy-MM-dd")</MudTd>
                     <MudTd>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="() => StartSavingsTransferEdit(item)">EDYTUJ</MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteSavingsTransferAsync(item.Id)">USUŃ</MudButton>
+                        <MudButton
+                            Variant="Variant.Outlined"
+                            Color="Color.Primary"
+                            Size="Size.Small"
+                            OnClick="() => StartSavingsTransferEdit(item)"
+                            Disabled="@IsMonthClosed">EDYTUJ</MudButton>
+                        <MudButton
+                            Variant="Variant.Outlined"
+                            Color="Color.Error"
+                            Size="Size.Small"
+                            OnClick="() => DeleteSavingsTransferAsync(item.Id)"
+                            Disabled="@IsMonthClosed">USUŃ</MudButton>
                     </MudTd>
                 }
             </RowTemplate>

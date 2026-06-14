@@ -26,6 +26,7 @@ public interface IExpenseService
     Task<IReadOnlyList<AvailableMonthDto>> GetAvailableMonthsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<RegularExpenseDefinitionDto>> GetRegularExpenseDefinitionsAsync(CancellationToken cancellationToken);
     Task<MonthPlanPreparationDto> GetMonthPlanPreparationAsync(int year, int month, CancellationToken cancellationToken);
+    Task<MonthlyFinancialPictureDto> GetMonthlyFinancialPictureAsync(int year, int month, CancellationToken cancellationToken);
 
     Task<MonthSavingsTransferItemDto> CreateMonthSavingsTransferItemAsync(CreateMonthSavingsTransferItemRequest request,
         CancellationToken cancellationToken);

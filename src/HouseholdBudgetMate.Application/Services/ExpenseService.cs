@@ -422,6 +422,21 @@ public sealed class ExpenseService(
         return BuildMonthPlanDto(monthPlan, expenses, savingsTransfers);
     }
 
+    public async Task<MonthlyFinancialPictureDto> GetMonthlyFinancialPictureAsync(
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var monthPlan = await GetMonthAsync(year, month, cancellationToken);
+        var liveBalance = await incomeService.GetLiveBalanceAsync(year, month, cancellationToken);
+
+        return new MonthlyFinancialPictureDto
+        {
+            MonthPlan = monthPlan,
+            LiveBalance = liveBalance
+        };
+    }
+
     public async Task<DashboardSummaryDto> GetDashboardSummaryAsync(int year, int month, CancellationToken cancellationToken)
     {
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));

@@ -477,10 +477,13 @@ public sealed class IncomeService(
 
         if (monthPlan is not null)
         {
-            expensesTotal = await dbContext.Expenses
+            var expenses = await dbContext.Expenses
                 .AsNoTracking()
                 .Where(x => x.MonthPlanId == monthPlan.Id)
-                .SumAsync(x => x.ActualAmount, cancellationToken);
+                .Include(x => x.LineItems)
+                .ToListAsync(cancellationToken);
+
+            expensesTotal = ExpenseActualAmountCalculator.GetEffectiveActualTotal(expenses);
 
             savingsTransfersTotal = await dbContext.MonthSavingsTransferItems
                 .AsNoTracking()

@@ -337,6 +337,7 @@ public sealed class BackupServiceTests
         Assert.True(File.Exists(restoreResult.PreRestoreBackupPath!));
         Assert.Equal("Rent, utilities", restoredExpense.Name);
         Assert.Equal(1200m, restoredExpense.PlannedAmount);
+        Assert.Equal(45.50m, restoredExpense.ActualAmount);
         Assert.Equal(5000m, restoredIncome.Amount);
         Assert.Equal(2024, historicalExpensePlan.Year);
         Assert.Equal(7, historicalExpensePlan.Month);

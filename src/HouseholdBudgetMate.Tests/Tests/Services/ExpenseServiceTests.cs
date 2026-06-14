@@ -332,6 +332,72 @@ public sealed class ExpenseServiceTests
     }
 
     /// <summary>
+    /// Seeds an expense whose persisted ActualAmount differs from the line-item sum and verifies
+    /// that the month projection reports the effective actual amount without rewriting storage.
+    /// </summary>
+    [Fact]
+    public async Task GetMonthAsync_Should_Use_Effective_Actual_Amount_When_LineItems_Exist()
+    {
+        int expenseId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category
+            {
+                Name = "Zakupy",
+                Color = "#43A047",
+                SupportsLineItems = true
+            };
+            var monthPlan = new MonthPlan
+            {
+                Year = 2026,
+                Month = 4
+            };
+
+            context.Categories.Add(category);
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Paragon",
+                CategoryId = category.Id,
+                PlannedAmount = 100m,
+                ActualAmount = 999m,
+                ShowRemainingInUI = true
+            };
+
+            expense.LineItems.Add(new ExpenseLineItem
+            {
+                Description = "Pozycja 1",
+                Amount = 40m,
+                OccurredAt = new DateOnly(2026, 4, 10)
+            });
+            expense.LineItems.Add(new ExpenseLineItem
+            {
+                Description = "Pozycja 2",
+                Amount = 30m,
+                OccurredAt = new DateOnly(2026, 4, 11)
+            });
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+        }
+
+        var service = CreateService();
+        var month = await service.GetMonthAsync(2026, 4, CancellationToken.None);
+
+        var expenseDto = Assert.Single(month.Expenses);
+        Assert.Equal(70m, expenseDto.ActualAmount);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var storedExpense = await verifyContext.Expenses.AsNoTracking().SingleAsync(x => x.Id == expenseId);
+        Assert.Equal(999m, storedExpense.ActualAmount);
+    }
+
+    /// <summary>
     /// Seeds expenses with a root and child tag, plus a line item with the child tag.
     /// Verifies that GetTagUsageCountsAsync returns count=1 for the root tag and count=2 for the child tag.
     /// </summary>
@@ -1826,6 +1892,52 @@ public sealed class ExpenseServiceTests
         var storedExpenses = await verifyContext.Expenses
             .IgnoreQueryFilters()
             .Where(x => x.MonthPlanId == reloadedMonth.Id)
+            .ToListAsync();
+
+        Assert.Single(storedExpenses);
+        Assert.True(storedExpenses[0].IsDeleted);
+    }
+
+    /// <summary>
+    /// Verifies that a soft-deleted generated recurring expense still blocks re-adding the same
+    /// regular definition to the month because the duplicate check intentionally ignores filters.
+    /// </summary>
+    [Fact]
+    public async Task AddRegularExpenseDefinitionToMonthAsync_Should_Return_False_When_SoftDeleted_Generated_Row_Exists()
+    {
+        int categoryId;
+        int definitionId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Subskrypcje", Color = "#5E35B1" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        var service = CreateService();
+        var definition = await service.CreateRegularExpenseDefinitionAsync(new CreateRegularExpenseDefinitionRequest
+        {
+            Name = "Netflix",
+            CategoryId = categoryId,
+            Amount = 60m
+        }, CancellationToken.None);
+        definitionId = definition.Id;
+
+        var initialMonth = await service.GetMonthAsync(2026, 11, CancellationToken.None);
+        var recurringExpense = Assert.Single(initialMonth.Expenses, x => x.Name == "Netflix");
+
+        await service.DeleteExpenseAsync(new DeleteExpenseRequest { Id = recurringExpense.Id }, CancellationToken.None);
+
+        var addedAgain = await service.AddRegularExpenseDefinitionToMonthAsync(definitionId, 2026, 11, CancellationToken.None);
+
+        Assert.False(addedAgain);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var storedExpenses = await verifyContext.Expenses
+            .IgnoreQueryFilters()
+            .Where(x => x.MonthPlanId == initialMonth.Id)
             .ToListAsync();
 
         Assert.Single(storedExpenses);
@@ -3462,6 +3574,24 @@ public sealed class ExpenseServiceTests
             }, CancellationToken.None));
     }
 
+    /// <summary>
+    /// Verifies that negative line item amounts are rejected at the service boundary.
+    /// </summary>
+    [Fact]
+    public async Task CreateExpenseLineItemAsync_Should_Reject_Negative_Amount()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateExpenseLineItemAsync(
+            new CreateExpenseLineItemRequest
+            {
+                ExpenseId = 1,
+                Description = "Ujemna pozycja",
+                Amount = -1m,
+                OccurredAt = new DateOnly(2026, 1, 1)
+            }, CancellationToken.None));
+    }
+
     // ─── UpdateExpenseLineItemAsync ─────────────────────────────────────────────
 
     /// <summary>
@@ -3541,6 +3671,24 @@ public sealed class ExpenseServiceTests
                 Id = 99999,
                 Description = "Ghost",
                 Amount = 10m,
+                OccurredAt = new DateOnly(2026, 1, 1)
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that editing a line item cannot introduce a negative amount.
+    /// </summary>
+    [Fact]
+    public async Task UpdateExpenseLineItemAsync_Should_Reject_Negative_Amount()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateExpenseLineItemAsync(
+            new UpdateExpenseLineItemRequest
+            {
+                Id = 1,
+                Description = "Ujemna pozycja",
+                Amount = -1m,
                 OccurredAt = new DateOnly(2026, 1, 1)
             }, CancellationToken.None));
     }

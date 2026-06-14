@@ -232,6 +232,18 @@ public sealed class MonthlyBudgetingLoopTests
             spentAmount: 625m,
             unplannedSpentAmount: 125m,
             savingsTransferredAmount: 900m);
+
+        var monthlyPicture = await services.ExpenseService.GetMonthlyFinancialPictureAsync(Year, Month, CancellationToken.None);
+        Assert.Equal(finalState.Month.Year, monthlyPicture.Year);
+        Assert.Equal(finalState.Month.Month, monthlyPicture.Month);
+        Assert.Equal(finalState.Month.IsClosed, monthlyPicture.IsClosed);
+        Assert.Equal(finalState.Month.Kpi.PlannedTotal, monthlyPicture.MonthPlan.Kpi.PlannedTotal);
+        Assert.Equal(finalState.Month.Kpi.RemainingTotal, monthlyPicture.Kpi.RemainingTotal);
+        Assert.Equal(finalState.LiveBalance.CurrentBalance, monthlyPicture.LiveBalance.CurrentBalance);
+        Assert.Equal(finalState.LiveBalance.HasCompleteBalanceBase, monthlyPicture.HasCompleteBalanceBase);
+        Assert.Equal(finalState.LiveBalance.MissingBalanceAccountNames, monthlyPicture.MissingBalanceAccountNames);
+        Assert.Equal(finalState.Month.SavingsTransfers.Count, monthlyPicture.SavingsTransfers.Count);
+        Assert.Equal(finalState.Month.Expenses.Count, monthlyPicture.Expenses.Count);
     }
 
     [Fact]
@@ -341,13 +353,13 @@ public sealed class MonthlyBudgetingLoopTests
     private static LoopServices CreateServices(IDbContextFactory<ApplicationDbContext> factory)
     {
         var dateTimeProvider = new StaticDateTimeProvider(TodayUtc);
+        var incomeService = new IncomeService(factory, dateTimeProvider);
         var expenseService = new ExpenseService(
             factory,
             dateTimeProvider,
             new RecordingAppEventPublisher(),
-            new NoOpIncomeService(),
+            incomeService,
             new NoOpLoanService());
-        var incomeService = new IncomeService(factory, dateTimeProvider);
 
         return new LoopServices(expenseService, incomeService);
     }

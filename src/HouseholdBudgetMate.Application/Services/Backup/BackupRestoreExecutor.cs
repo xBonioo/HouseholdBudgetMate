@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using HouseholdBudgetMate.Abstractions.Contracts.Backup.Dto;
+using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
@@ -332,6 +333,7 @@ internal sealed class BackupRestoreExecutor
         restoredCounts["expenses"] = expenses.Count;
 
         var lineItems = envelope.Payload.Budget?.Records.Where(x => x.Table == "expenseLineItems").ToList() ?? [];
+        var affectedExpenseIds = new HashSet<int>();
         foreach (var record in lineItems)
         {
             var lineItem = new ExpenseLineItem();
@@ -340,8 +342,11 @@ internal sealed class BackupRestoreExecutor
             await dbContext.SaveChangesAsync(cancellationToken);
             state.Map(record.PortableId, lineItem.Id);
             state.MarkHandled(record.PortableId);
+            affectedExpenseIds.Add(lineItem.ExpenseId);
         }
         restoredCounts["expenseLineItems"] = lineItems.Count;
+
+        await RecalculateRestoredExpenseActualAmountsAsync(dbContext, affectedExpenseIds, cancellationToken);
 
         var transfers = envelope.Payload.Budget?.Records.Where(x => x.Table == "monthSavingsTransferItems").ToList() ?? [];
         foreach (var record in transfers)
@@ -354,6 +359,29 @@ internal sealed class BackupRestoreExecutor
             state.MarkHandled(record.PortableId);
         }
         restoredCounts["monthSavingsTransferItems"] = transfers.Count;
+    }
+
+    private static async Task RecalculateRestoredExpenseActualAmountsAsync(
+        ApplicationDbContext dbContext,
+        IReadOnlyCollection<int> expenseIds,
+        CancellationToken cancellationToken)
+    {
+        if (expenseIds.Count == 0)
+        {
+            return;
+        }
+
+        var expenses = await dbContext.Expenses
+            .Include(x => x.LineItems)
+            .Where(x => expenseIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var expense in expenses)
+        {
+            expense.ActualAmount = ExpenseActualAmountCalculator.GetEffectiveActualAmount(expense);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task RestoreAuditAndLogsAsync(

@@ -284,6 +284,10 @@ public sealed class CreateExpenseLineItemRequestValidator : AbstractValidator<Cr
         RuleFor(x => x.TagId)
             .GreaterThan(0)
             .When(x => x.TagId.HasValue);
+
+        RuleFor(x => x.Amount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Kwota pozycji wydatku musi być większa lub równa zero.");
     }
 
     protected override bool PreValidate(ValidationContext<CreateExpenseLineItemRequest> context, ValidationResult result)
@@ -312,6 +316,10 @@ public sealed class UpdateExpenseLineItemRequestValidator : AbstractValidator<Up
         RuleFor(x => x.TagId)
             .GreaterThan(0)
             .When(x => x.TagId.HasValue);
+
+        RuleFor(x => x.Amount)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Kwota pozycji wydatku musi być większa lub równa zero.");
     }
 
     protected override bool PreValidate(ValidationContext<UpdateExpenseLineItemRequest> context, ValidationResult result)

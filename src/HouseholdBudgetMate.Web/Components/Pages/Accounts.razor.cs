@@ -120,8 +120,9 @@ public partial class Accounts
 
             _canEditSelectedMonth = !IsSelectedMonthClosed();
             _hasSelectedMonthPlan = _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == _selectedMonth);
-            _selectedMonthPlan = await ExpenseService.GetMonthAsync(_selectedYear, _selectedMonth, CancellationToken.None);
-            _liveBalance = await IncomeService.GetLiveBalanceAsync(_selectedYear, _selectedMonth, CancellationToken.None);
+            var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
+            _selectedMonthPlan = monthlyPicture.MonthPlan;
+            _liveBalance = monthlyPicture.LiveBalance;
             _loans = await LoanService.GetAllAsync(CancellationToken.None);
 
             SyncSelectedMonthAmounts();
@@ -237,8 +238,9 @@ public partial class Accounts
         {
             _canEditSelectedMonth = !IsSelectedMonthClosed();
             _hasSelectedMonthPlan = _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == _selectedMonth);
-            _selectedMonthPlan = await ExpenseService.GetMonthAsync(_selectedYear, _selectedMonth, CancellationToken.None);
-            _liveBalance = await IncomeService.GetLiveBalanceAsync(_selectedYear, _selectedMonth, CancellationToken.None);
+            var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
+            _selectedMonthPlan = monthlyPicture.MonthPlan;
+            _liveBalance = monthlyPicture.LiveBalance;
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
             MarkDirtyStatePristine();

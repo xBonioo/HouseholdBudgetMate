@@ -1703,6 +1703,64 @@ public sealed class IncomeServiceTests
     }
 
     /// <summary>
+    /// GetLiveBalanceAsync uses the effective actual amount when an expense has line items.
+    /// The persisted parent ActualAmount may differ, but the live balance should follow the line items.
+    /// </summary>
+    [Fact]
+    public async Task GetLiveBalanceAsync_Should_Use_LineItem_Sum_When_Expense_Has_LineItems()
+    {
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            var category = new Category { Name = "Spozywcze", Color = "#43A047", SupportsLineItems = true };
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.Accounts.Add(account);
+            context.Categories.Add(category);
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = account.Id,
+                Year = 2026,
+                Month = 3,
+                ClosingBalance = 1000m
+            });
+
+            var expense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy",
+                CategoryId = category.Id,
+                PlannedAmount = 200m,
+                ActualAmount = 999m
+            };
+
+            expense.LineItems.Add(new ExpenseLineItem
+            {
+                Description = "Mleko",
+                Amount = 40m,
+                OccurredAt = new DateOnly(2026, 4, 5)
+            });
+            expense.LineItems.Add(new ExpenseLineItem
+            {
+                Description = "Chleb",
+                Amount = 30m,
+                OccurredAt = new DateOnly(2026, 4, 6)
+            });
+
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var liveBalance = await service.GetLiveBalanceAsync(2026, 4, CancellationToken.None);
+
+        Assert.Equal(70m, liveBalance.ExpensesTotal);
+        Assert.Equal(930m, liveBalance.CurrentBalance);
+    }
+
+    /// <summary>
     /// GetLiveBalanceAsync returns zero balance when no accounts or historical balances exist.
     /// All components are zero, CurrentBalance = 0.
     /// </summary>

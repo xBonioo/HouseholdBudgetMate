@@ -80,6 +80,12 @@ else if (isPublishedExecutable && !hasExplicitUrls)
     builder.WebHost.ConfigureKestrel(startupHostingOptions.ConfigureKestrel);
 }
 
+var shouldOpenBrowserForLocalDevelopment = LocalBrowserStartup.ShouldOpenBrowser(
+    builder.Environment,
+    builder.Configuration,
+    isPublishedExecutable,
+    isContainerOrCloud);
+
 var runtimeConfigurationState = new RuntimeConfigurationState(appDataDirectory);
 builder.Services.AddSingleton(runtimeConfigurationState);
 
@@ -359,6 +365,11 @@ try
     if (startupHostingOptions is not null)
     {
         app.Lifetime.ApplicationStarted.Register(() => startupHostingOptions.OpenBrowserIfEnabled(app.Logger));
+    }
+    else
+    {
+        app.Lifetime.ApplicationStarted.Register(() =>
+            LocalBrowserStartup.OpenBrowserIfEnabled(shouldOpenBrowserForLocalDevelopment, app.Urls, app.Logger));
     }
 
     app.Run();

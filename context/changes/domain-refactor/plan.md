@@ -403,48 +403,48 @@ If implementation discovers widespread existing drift between parent actual and 
 
 #### Automated
 
-- [x] 1.1 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopTests"`
-- [x] 1.2 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~IncomeServiceTests"`
-- [x] 1.3 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopUiTests"`
-- [x] 1.4 `dotnet build HouseholdBudgetMate.slnx -c Release`
-- [x] 1.5 `git diff --check -- .`
+- [x] 1.1 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopTests"` - 285b07b
+- [x] 1.2 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~IncomeServiceTests"` - 285b07b
+- [x] 1.3 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopUiTests"` - 285b07b
+- [x] 1.4 `dotnet build HouseholdBudgetMate.slnx -c Release` - 285b07b
+- [x] 1.5 `git diff --check -- .` - 285b07b
 
 #### Manual
 
-- [x] 1.6 Review `MonthlyFinancialPictureDto` and confirm it reads as the accepted monthly contract, not a resurrected `Safe-to-spend`
-- [x] 1.7 Compare a known month through existing Plan/Accounts UI and confirm values still match the new monthly picture tests
+- [x] 1.6 Review `MonthlyFinancialPictureDto` and confirm it reads as the accepted monthly contract, not a resurrected `Safe-to-spend` - 285b07b
+- [x] 1.7 Compare a known month through existing Plan/Accounts UI and confirm values still match the new monthly picture tests - 285b07b
 
 ### Phase 2: Effective Actual and Restore Hardening
 
 #### Automated
 
-- [x] 2.1 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~ExpenseServiceTests"`
-- [x] 2.2 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~IncomeServiceTests"`
-- [x] 2.3 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~BackupServiceTests"`
-- [x] 2.4 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopTests"`
-- [x] 2.5 `dotnet build HouseholdBudgetMate.slnx -c Release`
-- [x] 2.6 `git diff --check -- .`
+- [x] 2.1 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~ExpenseServiceTests"` - 285b07b
+- [x] 2.2 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~IncomeServiceTests"` - 285b07b
+- [x] 2.3 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~BackupServiceTests"` - 285b07b
+- [x] 2.4 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopTests"` - 285b07b
+- [x] 2.5 `dotnet build HouseholdBudgetMate.slnx -c Release` - 285b07b
+- [x] 2.6 `git diff --check -- .` - 285b07b
 
 #### Manual
 
-- [x] 2.7 Review that no migration or EF snapshot changed
-- [x] 2.8 Review backup restore behavior with a backup containing expenses plus line items and confirm parent actual is recalculated after restore
-- [x] 2.9 Confirm final-line-item deletion tests still assert the preserved current behavior
+- [x] 2.7 Review that no migration or EF snapshot changed - 285b07b
+- [x] 2.8 Review backup restore behavior with a backup containing expenses plus line items and confirm parent actual is recalculated after restore - 285b07b
+- [x] 2.9 Confirm final-line-item deletion tests still assert the preserved current behavior - 285b07b
 
 ### Phase 3: UI Alignment, Recurring Documentation, and Evidence
 
 #### Automated
 
-- [x] 3.1 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopTests|FullyQualifiedName~MonthlyBudgetingLoopUiTests|FullyQualifiedName~MonthlyBudgetingLoopRenderedTests"`
-- [x] 3.2 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~ExpenseServiceTests|FullyQualifiedName~IncomeServiceTests|FullyQualifiedName~BackupServiceTests|FullyQualifiedName~AccountServiceTests"`
-- [x] 3.3 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release`
-- [x] 3.4 `dotnet build HouseholdBudgetMate.slnx -c Release`
-- [x] 3.5 `git diff --check -- .`
+- [x] 3.1 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~MonthlyBudgetingLoopTests|FullyQualifiedName~MonthlyBudgetingLoopUiTests|FullyQualifiedName~MonthlyBudgetingLoopRenderedTests"` - 285b07b
+- [x] 3.2 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release --filter "FullyQualifiedName~ExpenseServiceTests|FullyQualifiedName~IncomeServiceTests|FullyQualifiedName~BackupServiceTests|FullyQualifiedName~AccountServiceTests"` - 285b07b
+- [x] 3.3 `dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release` - 285b07b
+- [x] 3.4 `dotnet build HouseholdBudgetMate.slnx -c Release` - 285b07b
+- [x] 3.5 `git diff --check -- .` - 285b07b
 
 #### Manual
 
-- [x] 3.6 Start the app and inspect a known monthly scenario on Plan and Accounts
-- [x] 3.7 Confirm `Live balance`, `Pozostalo w planie`, savings transfer timing, and incomplete-balance guidance still match accepted behavior
-- [x] 3.8 Confirm closed-month savings-transfer actions are visibly non-editable and still blocked by service guards
-- [x] 3.9 Restore a backup with line items and confirm restored monthly totals agree across Plan and live balance
-- [x] 3.10 Review `acceptance-evidence.md` before archiving
+- [x] 3.6 Start the app and inspect a known monthly scenario on Plan and Accounts - 285b07b
+- [x] 3.7 Confirm `Live balance`, `Pozostalo w planie`, savings transfer timing, and incomplete-balance guidance still match accepted behavior - 285b07b
+- [x] 3.8 Confirm closed-month savings-transfer actions are visibly non-editable and still blocked by service guards - 285b07b
+- [x] 3.9 Restore a backup with line items and confirm restored monthly totals agree across Plan and live balance - 285b07b
+- [x] 3.10 Review `acceptance-evidence.md` before archiving - 285b07b

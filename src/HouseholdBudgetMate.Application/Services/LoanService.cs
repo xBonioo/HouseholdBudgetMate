@@ -218,6 +218,8 @@ public sealed class LoanService(
         await RebuildInstallmentsFromAsync(dbContext, loan, request.EffectiveFrom, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        await SyncOpenLoanInstallmentPlansAsync(request.EffectiveFrom, loan.EndDate, cancellationToken);
+
         var today = dateTimeProvider.GetLocalDateOnly();
         await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
 
@@ -314,6 +316,8 @@ public sealed class LoanService(
 
         await UpsertPrepaymentExpenseAsync(dbContext, loan, request.Amount, today, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        await SyncOpenLoanInstallmentPlansAsync(scheduleStart, scheduleEnd, cancellationToken);
 
         await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
 
@@ -583,6 +587,36 @@ public sealed class LoanService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SyncOpenLoanInstallmentPlansAsync(
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        if (to < from)
+        {
+            return;
+        }
+
+        var fromMonthKey = (from.Year * 12) + from.Month;
+        var toMonthKey = (to.Year * 12) + to.Month;
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var openPlans = await dbContext.MonthPlans
+            .AsNoTracking()
+            .Where(x => !x.IsClosed)
+            .Where(x => ((x.Year * 12) + x.Month) >= fromMonthKey)
+            .Where(x => ((x.Year * 12) + x.Month) <= toMonthKey)
+            .Select(x => new { x.Year, x.Month })
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .ToListAsync(cancellationToken);
+
+        foreach (var plan in openPlans)
+        {
+            await SyncLoanInstallmentsForMonthAsync(plan.Year, plan.Month, cancellationToken);
+        }
     }
 
     private static async Task<LoanDto> BuildLoanDtoAsync(

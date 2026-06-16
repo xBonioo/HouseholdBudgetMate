@@ -389,7 +389,7 @@ Complete `/admin/backup`, navigation, documentation/evidence, and final regressi
 
 #### 4. Acceptance Evidence
 
-**File**: `context/archive/2026-06-08-sprint-10-export-backup/acceptance-evidence.md`
+**File**: `context/archive/2026-06-07-sprint-10-export-backup/acceptance-evidence.md`
 
 **Intent**: Record automated and manual evidence for the Definition of Done.
 

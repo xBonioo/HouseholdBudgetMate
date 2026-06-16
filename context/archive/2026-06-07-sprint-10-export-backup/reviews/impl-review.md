@@ -1,7 +1,7 @@
 <!-- IMPL-REVIEW-REPORT -->
 # Implementation Review: Sprint 10 Export and Backup
 
-- **Plan**: `context/archive/2026-06-08-sprint-10-export-backup/plan.md`
+- **Plan**: `context/archive/2026-06-07-sprint-10-export-backup/plan.md`
 - **Scope**: Full Sprint 10 implementation
 - **Date**: 2026-06-08
 - **Verdict**: APPROVED

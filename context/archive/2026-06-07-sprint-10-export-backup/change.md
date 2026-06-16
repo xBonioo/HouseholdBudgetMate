@@ -1,9 +1,10 @@
 ---
 change_id: sprint-10-export-backup
 title: Sprint 10 Export And Backup
-status: implemented
+status: archived
 created: 2026-06-07
 updated: 2026-06-08
+archived_at: 2026-06-08T00:00:00Z
 ---
 
 ## Notes

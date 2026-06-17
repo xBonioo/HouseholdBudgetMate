@@ -1,9 +1,10 @@
 ---
 change_id: loan-ui-ux-redesign
 title: Loan UI/UX Redesign
-status: implementing
+status: archived
 created: 2026-06-16
-updated: 2026-06-16
+updated: 2026-06-17
+archived_at: 2026-06-17T05:28:03Z
 ---
 
 ## Notes

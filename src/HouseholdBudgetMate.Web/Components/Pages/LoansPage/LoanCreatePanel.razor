@@ -1,0 +1,211 @@
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests
+@using HouseholdBudgetMate.Abstractions.Enums
+@using HouseholdBudgetMate.Abstractions.Extensions
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6" Class="mb-3">Nowy kredyt</MudText>
+    <ActionForm OnSubmit="@OnSubmit">
+    <MudGrid>
+
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Podstawowe</MudText>
+            <MudDivider Class="mb-2"/>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="Model.Name" Label="Nazwa" Variant="Variant.Outlined"/>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="LoanType" @bind-Value="Model.LoanType" Label="Typ kredytu" Variant="Variant.Outlined">
+                @foreach (var type in LoanTypes)
+                {
+                    <MudSelectItem Value="@type">@type.GetDisplayName()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="int?" @bind-Value="Model.TagId" Label="Tag (kategoria: Kredyt)"
+                       Variant="Variant.Outlined">
+                <MudSelectItem T="int?" Value="@((int?)null)">(bez tagu)</MudSelectItem>
+                @foreach (var tag in GetLoanRootTags(Model.TagId))
+                {
+                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" Class="mt-3">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Kwota</MudText>
+            <MudDivider Class="mb-2"/>
+        </MudItem>
+        <MudItem xs="12">
+            <MudSwitch T="bool" Value="@CreateAlreadyRepaying" ValueChanged="OnCreateAlreadyRepayingChanged" Color="Color.Info"
+                       Label="Już spłacam ten kredyt — dodaję kredyt przejęty w trakcie spłaty"/>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudTextField T="string" Value="@CreatePrincipalInput" ValueChanged="OnCreatePrincipalInputChanged"
+                          Label="@(CreateAlreadyRepaying ? "Aktualne zadłużenie (pozostałe)" : "Kwota kredytu")"
+                          Variant="Variant.Outlined"
+                          HelperText="@(CreateAlreadyRepaying ? "Ile zostało do spłaty, np. 770 000" : "")"/>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudNumericField T="int?" @bind-Value="Model.GracePeriodMonths"
+                             Label="Karencja (mies.)" Variant="Variant.Outlined" Min="0"
+                             HelperText="Miesiące bez spłaty kapitału"/>
+        </MudItem>
+        @if (CreateAlreadyRepaying)
+        {
+            <MudItem xs="12" md="3">
+                <MudTextField T="string" Value="@CreateOriginalPrincipalInput" ValueChanged="OnCreateOriginalPrincipalInputChanged"
+                              Label="Kwota pierwotna kredytu" Variant="Variant.Outlined"
+                              HelperText="Oryginalna wartość kredytu, np. 800 000"/>
+            </MudItem>
+        }
+
+        <MudItem xs="12" Class="mt-3">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Oprocentowanie</MudText>
+            <MudDivider Class="mb-2"/>
+        </MudItem>
+        @if (Model.LoanType == LoanType.Cash)
+        {
+            <MudItem xs="12" md="3">
+                <MudTextField T="string" Value="@CreateRateInput" ValueChanged="OnCreateRateInputChanged" Label="Oprocentowanie stałe %"
+                              Variant="Variant.Outlined"/>
+            </MudItem>
+        }
+        else
+        {
+            <MudItem xs="12" md="3">
+                <MudSelect T="LoanInterestMode" @bind-Value="Model.InterestMode" Label="Tryb oprocentowania"
+                           Variant="Variant.Outlined">
+                    @foreach (var mode in InterestModes)
+                    {
+                        <MudSelectItem Value="@mode">@mode.GetDisplayName()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            @if (Model.InterestMode == LoanInterestMode.Fixed)
+            {
+                <MudItem xs="12" md="3">
+                    <MudTextField T="string" Value="@CreateRateInput" ValueChanged="OnCreateRateInputChanged" Label="Stałe oprocentowanie (5 lat) %"
+                                  Variant="Variant.Outlined"/>
+                </MudItem>
+            }
+            <MudItem xs="12" md="2">
+                <MudSelect T="WiborPeriodType?" @bind-Value="Model.WiborPeriodType" Label="Typ WIBOR"
+                           Variant="Variant.Outlined">
+                    @foreach (var type in WiborTypes)
+                    {
+                        <MudSelectItem T="WiborPeriodType?" Value="@type">@type.GetDisplayName()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" Value="@CreateMarginRateInput" ValueChanged="OnCreateMarginRateInputChanged" Label="Marża %"
+                              Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" Value="@CreateInitialWiborInput" ValueChanged="OnCreateInitialWiborInputChanged" Label="WIBOR startowy %"
+                              Variant="Variant.Outlined"/>
+            </MudItem>
+        }
+
+        <MudItem xs="12" Class="mt-3">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Harmonogram spłat</MudText>
+            <MudDivider Class="mb-2"/>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudDatePicker Label="Data uruchomienia" Date="@CreateStartDate" DateChanged="OnCreateStartDateChanged"
+                           Variant="Variant.Outlined"/>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudDatePicker Label="Data zakończenia" Date="@CreateEndDate" DateChanged="OnCreateEndDateChanged"
+                           Variant="Variant.Outlined"/>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudNumericField T="int" @bind-Value="Model.RepaymentDayOfMonth"
+                             Label="Dzień spłaty (1-31)" Variant="Variant.Outlined"
+                             Min="1" Max="31" Immediate="true"/>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-end pb-1">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" FullWidth="true">
+                Dodaj kredyt
+            </MudButton>
+        </MudItem>
+
+    </MudGrid>
+    </ActionForm>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public CreateLoanRequest Model { get; set; } = default!;
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public IReadOnlyList<LoanType> LoanTypes { get; set; } = [];
+    [Parameter] public IReadOnlyList<LoanInterestMode> InterestModes { get; set; } = [];
+    [Parameter] public IReadOnlyList<WiborPeriodType> WiborTypes { get; set; } = [];
+    [Parameter] public Func<int?, IReadOnlyList<TagDto>> GetLoanRootTags { get; set; } = default!;
+    [Parameter] public bool CreateAlreadyRepaying { get; set; }
+    [Parameter] public EventCallback<bool> CreateAlreadyRepayingChanged { get; set; }
+    [Parameter] public string CreatePrincipalInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> CreatePrincipalInputChanged { get; set; }
+    [Parameter] public string CreateOriginalPrincipalInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> CreateOriginalPrincipalInputChanged { get; set; }
+    [Parameter] public string CreateRateInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> CreateRateInputChanged { get; set; }
+    [Parameter] public string CreateMarginRateInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> CreateMarginRateInputChanged { get; set; }
+    [Parameter] public string CreateInitialWiborInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> CreateInitialWiborInputChanged { get; set; }
+    [Parameter] public DateTime? CreateStartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> CreateStartDateChanged { get; set; }
+    [Parameter] public DateTime? CreateEndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> CreateEndDateChanged { get; set; }
+
+    private async Task OnCreateAlreadyRepayingChanged(bool value)
+    {
+        CreateAlreadyRepaying = value;
+        await CreateAlreadyRepayingChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreatePrincipalInputChanged(string value)
+    {
+        CreatePrincipalInput = value;
+        await CreatePrincipalInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreateOriginalPrincipalInputChanged(string value)
+    {
+        CreateOriginalPrincipalInput = value;
+        await CreateOriginalPrincipalInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreateRateInputChanged(string value)
+    {
+        CreateRateInput = value;
+        await CreateRateInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreateMarginRateInputChanged(string value)
+    {
+        CreateMarginRateInput = value;
+        await CreateMarginRateInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreateInitialWiborInputChanged(string value)
+    {
+        CreateInitialWiborInput = value;
+        await CreateInitialWiborInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreateStartDateChanged(DateTime? value)
+    {
+        CreateStartDate = value;
+        await CreateStartDateChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCreateEndDateChanged(DateTime? value)
+    {
+        CreateEndDate = value;
+        await CreateEndDateChanged.InvokeAsync(value);
+    }
+}

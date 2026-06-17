@@ -23,6 +23,7 @@ public sealed class LoanService(
     private static readonly UpdateLoanRequestValidator UpdateLoanValidator = new();
     private static readonly AddLoanRateEntryRequestValidator AddLoanRateEntryValidator = new();
     private static readonly ApplyLoanPrepaymentRequestValidator ApplyLoanPrepaymentValidator = new();
+    private static readonly ApplyLoanInstallmentAmountChangeRequestValidator ApplyInstallmentAmountChangeValidator = new();
     private static readonly CreateLoanChargeRequestValidator CreateLoanChargeValidator = new();
     private static readonly UpdateLoanChargeRequestValidator UpdateLoanChargeValidator = new();
     private static readonly DeleteLoanChargeRequestValidator DeleteLoanChargeValidator = new();
@@ -324,6 +325,109 @@ public sealed class LoanService(
         return await BuildLoanDtoAsync(dbContext, loan.Id, cancellationToken);
     }
 
+    public async Task<LoanDto> ApplyLoanInstallmentAmountChangeAsync(
+        ApplyLoanInstallmentAmountChangeRequest request,
+        CancellationToken cancellationToken)
+    {
+        ApplyInstallmentAmountChangeValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var today = dateTimeProvider.GetLocalDateOnly();
+
+        var loan = await dbContext.Loans
+                       .Include(x => x.Tag)
+                       .Include(x => x.RateEntries)
+                       .Include(x => x.Charges)
+                       .Include(x => x.Installments)
+                       .ThenInclude(x => x.Expense)
+                       .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
+                   ?? throw new NotFoundException("Loan installment not found.");
+
+        var targetInstallment = loan.Installments.First(x => x.Id == request.LoanInstallmentId);
+        if (targetInstallment.IsPaid)
+        {
+            throw new BadRequestException("Cannot change installment amount for paid installment.");
+        }
+
+        var affectedInstallments = loan.Installments
+            .Where(x => !x.IsPaid && x.DueDate >= targetInstallment.DueDate)
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToList();
+
+        if (affectedInstallments.Count == 0)
+        {
+            throw new BadRequestException("No installments available for amount recalculation.");
+        }
+
+        var remainingPrincipal = decimal.Round(affectedInstallments.Sum(x => x.PrincipalAmount), 2, MidpointRounding.AwayFromZero);
+        var scheduleStart = affectedInstallments[0].DueDate;
+        if (request.LastInstallmentDate < scheduleStart)
+        {
+            throw new BadRequestException("Last installment date must be greater than or equal to schedule start.");
+        }
+
+        if (request.LastInstallmentDate > loan.EndDate)
+        {
+            throw new BadRequestException("Last installment date cannot extend the current loan period.");
+        }
+
+        var targetPrincipal = ResolvePrincipalForTargetInstallmentAmount(
+            loan,
+            request.InstallmentAmount,
+            scheduleStart,
+            request.LastInstallmentDate,
+            remainingPrincipal);
+
+        if (targetPrincipal > remainingPrincipal)
+        {
+            throw new BadRequestException("Installment amount does not imply a lower remaining principal.");
+        }
+
+        var prepaymentAmount = decimal.Round(remainingPrincipal - targetPrincipal, 2, MidpointRounding.AwayFromZero);
+        foreach (var installment in affectedInstallments)
+        {
+            if (installment.Expense is null)
+            {
+                continue;
+            }
+
+            installment.Expense.IsDeleted = true;
+            installment.Expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
+        }
+
+        dbContext.LoanInstallments.RemoveRange(affectedInstallments);
+
+        loan.EndDate = request.LastInstallmentDate;
+
+        var schedule = BuildSchedule(loan, targetPrincipal, scheduleStart, loan.EndDate);
+        foreach (var row in schedule)
+        {
+            dbContext.LoanInstallments.Add(new LoanInstallment
+            {
+                LoanId = loan.Id,
+                Year = row.Year,
+                Month = row.Month,
+                DueDate = row.DueDate,
+                Amount = row.Amount,
+                PrincipalAmount = row.PrincipalAmount,
+                InterestAmount = row.InterestAmount,
+                IsPaid = false
+            });
+        }
+
+        if (prepaymentAmount > 0)
+        {
+            await UpsertPrepaymentExpenseAsync(dbContext, loan, prepaymentAmount, today, cancellationToken);
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await SyncOpenLoanInstallmentPlansAsync(scheduleStart, loan.EndDate, cancellationToken);
+        await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
+
+        return await BuildLoanDtoAsync(dbContext, loan.Id, cancellationToken);
+    }
+
     public async Task<LoanChargeDto> CreateLoanChargeAsync(CreateLoanChargeRequest request,
         CancellationToken cancellationToken)
     {
@@ -543,6 +647,11 @@ public sealed class LoanService(
         foreach (var installment in installments.OrderBy(x => x.DueDate).ThenBy(x => x.Id))
         {
             if (deletedSet.Contains(installment.Id))
+            {
+                continue;
+            }
+
+            if (installment.IsPaid)
             {
                 continue;
             }
@@ -1092,6 +1201,74 @@ public sealed class LoanService(
         var rate = (double)monthlyRate;
         var factor = Math.Pow(1 + rate, months);
         return decimal.Round(principal * (decimal)(rate * factor / (factor - 1)), 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal ResolvePrincipalForTargetInstallmentAmount(
+        Loan loan,
+        decimal targetInstallmentAmount,
+        DateOnly scheduleStart,
+        DateOnly scheduleEnd,
+        decimal maxPrincipal)
+    {
+        var maxSchedule = BuildSchedule(loan, maxPrincipal, scheduleStart, scheduleEnd);
+        var maxInstallmentAmount = maxSchedule[0].Amount;
+        if (targetInstallmentAmount > maxInstallmentAmount)
+        {
+            var suggestedLastInstallmentDate = FindSuggestedLastInstallmentDate(
+                loan,
+                targetInstallmentAmount,
+                scheduleStart,
+                scheduleEnd,
+                maxPrincipal);
+
+            var message = suggestedLastInstallmentDate.HasValue
+                ? $"Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty. Spróbuj podać wcześniejszą datę ostatniej raty, na przykład {suggestedLastInstallmentDate:yyyy-MM-dd}."
+                : "Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty.";
+
+            throw new BadRequestException(message);
+        }
+
+        if (targetInstallmentAmount == maxInstallmentAmount)
+        {
+            return maxPrincipal;
+        }
+
+        var low = 0m;
+        var high = maxPrincipal;
+        for (var i = 0; i < 80; i++)
+        {
+            var mid = (low + high) / 2m;
+            var probe = BuildSchedule(loan, mid, scheduleStart, scheduleEnd);
+            if (probe[0].Amount > targetInstallmentAmount)
+            {
+                high = mid;
+            }
+            else
+            {
+                low = mid;
+            }
+        }
+
+        return decimal.Round(low, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static DateOnly? FindSuggestedLastInstallmentDate(
+        Loan loan,
+        decimal targetInstallmentAmount,
+        DateOnly scheduleStart,
+        DateOnly selectedLastInstallmentDate,
+        decimal maxPrincipal)
+    {
+        for (var candidate = selectedLastInstallmentDate.AddMonths(-1); candidate >= scheduleStart; candidate = candidate.AddMonths(-1))
+        {
+            var schedule = BuildSchedule(loan, maxPrincipal, scheduleStart, candidate);
+            if (schedule[0].Amount >= targetInstallmentAmount)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     private static DateOnly ResolveShortenedEndDate(

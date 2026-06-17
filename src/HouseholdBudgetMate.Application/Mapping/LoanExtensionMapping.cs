@@ -50,6 +50,24 @@ public static class LoanExtensionMapping
                 .ThenByDescending(x => x.Month)
                 .Select(x =>
                 {
+                    decimal? storedAmount = null;
+                    if (x.Expense is not null)
+                    {
+                        if (x.Expense.ActualAmount > 0)
+                        {
+                            storedAmount = x.Expense.ActualAmount;
+                        }
+                        else if (x.Expense.PlannedAmount > 0)
+                        {
+                            storedAmount = x.Expense.PlannedAmount;
+                        }
+                    }
+
+                    if (storedAmount.HasValue)
+                    {
+                        return x.MapToDto(storedAmount.Value);
+                    }
+
                     var outstandingBalance = loan.Installments
                         .Where(i => i.DueDate >= x.DueDate)
                         .Sum(i => i.PrincipalAmount);
@@ -104,6 +122,24 @@ public static class LoanExtensionMapping
             Month = installment.Month,
             DueDate = installment.DueDate,
             Amount = installment.Amount + chargesAmount,
+            PrincipalAmount = installment.PrincipalAmount,
+            InterestAmount = installment.InterestAmount,
+            IsPaid = installment.IsPaid,
+            PaidAtUtc = installment.PaidAtUtc,
+            ExpenseId = installment.Expense?.Id
+        };
+    }
+
+    private static LoanInstallmentDto MapToDto(this LoanInstallment installment, decimal amount)
+    {
+        return new LoanInstallmentDto
+        {
+            Id = installment.Id,
+            LoanId = installment.LoanId,
+            Year = installment.Year,
+            Month = installment.Month,
+            DueDate = installment.DueDate,
+            Amount = amount,
             PrincipalAmount = installment.PrincipalAmount,
             InterestAmount = installment.InterestAmount,
             IsPaid = installment.IsPaid,

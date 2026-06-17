@@ -1,0 +1,56 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+@using HouseholdBudgetMate.Abstractions.Extensions
+
+<MudPaper Class="pa-4 mt-4 hb-panel">
+    <MudText Typo="Typo.h6" Class="mb-2">Lista kredytów</MudText>
+    <MudTable Items="@Loans" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Nazwa</MudTh>
+            <MudTh>Typ</MudTh>
+            <MudTh>Kwota</MudTh>
+            <MudTh>Pozostały kapitał</MudTh>
+            <MudTh>Oprocentowanie</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="white-space: nowrap;">Akcje</MudTh>
+        </HeaderContent>
+        <NoRecordsContent>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="ma-3">
+                Brak kredytów. Dodaj pierwszy kredyt, żeby rozpocząć obsługę.
+            </MudAlert>
+        </NoRecordsContent>
+        <RowTemplate Context="loan">
+            <MudTd>@loan.Name</MudTd>
+            <MudTd>@loan.LoanType.GetDisplayName()</MudTd>
+            <MudTd>@loan.Principal.ToString("0.00", Culture) zł</MudTd>
+            <MudTd>@loan.RemainingPrincipal.ToString("0.00", Culture) zł</MudTd>
+            <MudTd>@GetInterestLabel(loan)</MudTd>
+            <MudTd>
+                <MudChip T="bool" Color="@(loan.IsActive ? Color.Success : Color.Warning)">
+                    @(loan.IsActive ? "Aktywny" : "Nieaktywny")
+                </MudChip>
+            </MudTd>
+            <MudTd Style="white-space: nowrap;">
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.NoWrap">
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.ManageSearch"
+                               OnClick="() => SelectSchedule.InvokeAsync(loan.Id)">
+                        Zarządzaj
+                    </MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => DeleteLoan.InvokeAsync(loan)">Usuń</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<LoanDto> Loans { get; set; } = [];
+    [Parameter, EditorRequired] public CultureInfo Culture { get; set; } = CultureInfo.InvariantCulture;
+    [Parameter, EditorRequired] public Func<LoanDto, string> GetInterestLabel { get; set; } = default!;
+    [Parameter] public EventCallback<int> SelectSchedule { get; set; }
+    [Parameter] public EventCallback<LoanDto> EditLoan { get; set; }
+    [Parameter] public EventCallback<LoanDto> DeleteLoan { get; set; }
+}

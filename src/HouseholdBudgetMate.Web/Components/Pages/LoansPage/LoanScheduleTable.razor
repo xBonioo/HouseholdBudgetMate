@@ -1,0 +1,198 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+
+<MudPaper Class="pa-4 hb-panel">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+        <MudText Typo="Typo.h6">Harmonogram: @Loan.Name</MudText>
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <MudChip T="int" Color="Color.Primary">@Loan.Installments.Count rat</MudChip>
+            <MudChip T="string" Color="Color.Info">Pozostały kapitał: @Loan.RemainingPrincipal.ToString("0.00", Culture) PLN</MudChip>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Straighten"
+                       Disabled="@(_nextUnpaidInstallment is null)"
+                       OnClick="OnChangeFromNextUnpaid">
+                Skróć od następnej raty
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <LoanScheduleToolbar Class="mt-3"
+                         AvailableYears="@_availableYears"
+                         SelectedYear="@_selectedYear"
+                         SelectedYearChanged="@OnSelectedYearChanged"
+                         StatusFilter="@_statusFilter"
+                         StatusFilterChanged="@OnStatusFilterChanged"
+                         OnResetFilters="@ResetFilters" />
+
+    @if (FilteredInstallments.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            Brak rat pasujących do filtrów. Zmień rok, status albo wyczyść filtry.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@FilteredInstallments"
+                  Dense="true"
+                  Hover="true"
+                  Class="mt-3 loan-schedule-table"
+                  RowClassFunc="GetRowClass"
+                  RowStyleFunc="GetRowStyle">
+            <HeaderContent>
+                <MudTh>Miesiąc</MudTh>
+                <MudTh>Kwota</MudTh>
+                <MudTh>Kapitał</MudTh>
+                <MudTh>Odsetki</MudTh>
+                <MudTh>Koszty</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh Class="loan-schedule-actions-column">Akcje</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="item">
+                <MudTd>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+                        <MudText>@($"{item.Month:D2}/{item.Year}")</MudText>
+                        @if (item.Id == _nextUnpaidInstallmentId)
+                        {
+                            <MudChip T="string" Color="Color.Info" Variant="Variant.Filled" Size="Size.Small">Następna</MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd>@item.Amount.ToString("0.00", Culture) PLN</MudTd>
+                <MudTd>@item.PrincipalAmount.ToString("0.00", Culture) PLN</MudTd>
+                <MudTd>@item.InterestAmount.ToString("0.00", Culture) PLN</MudTd>
+                <MudTd>@((item.Amount - item.PrincipalAmount - item.InterestAmount).ToString("0.00", Culture)) PLN</MudTd>
+                <MudTd>
+                    <MudChip T="bool" Color="@(item.IsPaid ? Color.Success : Color.Warning)">
+                        @(item.IsPaid ? "Zapłacona" : "Do zapłaty")
+                    </MudChip>
+                </MudTd>
+                <MudTd Class="loan-schedule-actions-column">
+                    <LoanScheduleRowActions Installment="@item"
+                                            TogglePaid="@TogglePaid"
+                                            Prepay="@Prepay"
+                                            ChangeFromBank="@ChangeFromBank"
+                                            SyncToMonth="@SyncToMonth"
+                                            EditInstallment="@EditInstallment" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private const string StatusAll = "all";
+    private const string StatusPaid = "paid";
+    private const string StatusUnpaid = "unpaid";
+
+    [Parameter, EditorRequired] public LoanDto Loan { get; set; } = default!;
+    [Parameter, EditorRequired] public CultureInfo Culture { get; set; } = CultureInfo.InvariantCulture;
+    [Parameter] public EventCallback<LoanInstallmentDto> TogglePaid { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> Prepay { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> ChangeFromBank { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> SyncToMonth { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> EditInstallment { get; set; }
+
+    private IReadOnlyList<int> _availableYears = [];
+    private int? _selectedYear;
+    private string _statusFilter = StatusUnpaid;
+    private int _nextUnpaidInstallmentId;
+    private LoanInstallmentDto? _nextUnpaidInstallment;
+
+    protected override void OnParametersSet()
+    {
+        _availableYears = Loan.Installments
+            .Select(x => x.Year)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        _nextUnpaidInstallment = Loan.Installments
+            .Where(x => !x.IsPaid)
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .FirstOrDefault();
+        _nextUnpaidInstallmentId = _nextUnpaidInstallment?.Id ?? 0;
+    }
+
+    private IReadOnlyList<LoanInstallmentDto> FilteredInstallments =>
+        Loan.Installments
+            .Where(ShouldInclude)
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .ToList();
+
+    private bool ShouldInclude(LoanInstallmentDto installment)
+    {
+        if (_selectedYear.HasValue && installment.Year != _selectedYear.Value)
+        {
+            return false;
+        }
+
+        if (string.Equals(_statusFilter, StatusPaid, StringComparison.Ordinal) && !installment.IsPaid)
+        {
+            return false;
+        }
+
+        if (string.Equals(_statusFilter, StatusUnpaid, StringComparison.Ordinal) && installment.IsPaid)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private string GetRowClass(LoanInstallmentDto installment, int index)
+    {
+        if (installment.Id == _nextUnpaidInstallmentId)
+        {
+            return "loan-schedule-row-next";
+        }
+
+        if (installment.IsPaid)
+        {
+            return "loan-schedule-row-paid";
+        }
+
+        return string.Empty;
+    }
+
+    private string GetRowStyle(LoanInstallmentDto installment, int index)
+    {
+        if (installment.Id == _nextUnpaidInstallmentId)
+        {
+            return "background-color: rgba(3, 169, 244, 0.08);";
+        }
+
+        return string.Empty;
+    }
+
+    private Task OnSelectedYearChanged(int? value)
+    {
+        _selectedYear = value;
+        return Task.CompletedTask;
+    }
+
+    private Task OnStatusFilterChanged(string value)
+    {
+        _statusFilter = value;
+        return Task.CompletedTask;
+    }
+
+    private Task ResetFilters()
+    {
+        _selectedYear = null;
+        _statusFilter = StatusUnpaid;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnChangeFromNextUnpaid()
+    {
+        if (_nextUnpaidInstallment is null)
+        {
+            return;
+        }
+
+        await ChangeFromBank.InvokeAsync(_nextUnpaidInstallment);
+    }
+}

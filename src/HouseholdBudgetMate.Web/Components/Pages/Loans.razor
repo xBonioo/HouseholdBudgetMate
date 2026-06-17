@@ -25,446 +25,90 @@
 </MudOverlay>
 
 <MudPaper Class="hb-page-header">
-    <MudText Typo="Typo.h4">Kredyty</MudText>
-    <MudText Typo="Typo.body2" Class="hb-muted">Gotówkowy = stałe oprocentowanie. Hipoteczny = zmienny WIBOR + marża
-        albo stałe 5 lat, potem WIBOR + marża.
-    </MudText>
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <div>
+            <MudText Typo="Typo.h4">Kredyty</MudText>
+            <MudText Typo="Typo.body2" Class="hb-muted">Gotówkowy = stałe oprocentowanie. Hipoteczny = zmienny WIBOR + marża
+                albo stałe 5 lat, potem WIBOR + marża.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="ToggleCreateLoanPanel">
+            Nowy kredyt
+        </MudButton>
+    </MudStack>
 </MudPaper>
 
-<MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6" Class="mb-3">Nowy kredyt</MudText>
-    <ActionForm OnSubmit="CreateLoanAsync">
-    <MudGrid>
+<MudCollapse Expanded="@_createPanelOpen">
+    <LoanCreatePanel Model="_createModel"
+                     OnSubmit="@CreateLoanAsync"
+                     LoanTypes="@_loanTypes"
+                     InterestModes="@_interestModes"
+                     WiborTypes="@_wiborTypes"
+                     GetLoanRootTags="@GetLoanRootTags"
+                     @bind-CreateAlreadyRepaying="_createAlreadyRepaying"
+                     @bind-CreatePrincipalInput="_createPrincipalInput"
+                     @bind-CreateOriginalPrincipalInput="_createOriginalPrincipalInput"
+                     @bind-CreateRateInput="_createRateInput"
+                     @bind-CreateMarginRateInput="_createMarginRateInput"
+                     @bind-CreateInitialWiborInput="_createInitialWiborInput"
+                     @bind-CreateStartDate="_createStartDate"
+                     @bind-CreateEndDate="_createEndDate" />
+</MudCollapse>
 
-        <MudItem xs="12">
-            <MudText Typo="Typo.subtitle2" Class="hb-muted">Podstawowe</MudText>
-            <MudDivider Class="mb-2"/>
-        </MudItem>
-        <MudItem xs="12" md="4">
-            <MudTextField @bind-Value="_createModel.Name" Label="Nazwa" Variant="Variant.Outlined"/>
-        </MudItem>
-        <MudItem xs="12" md="4">
-            <MudSelect T="LoanType" @bind-Value="_createModel.LoanType" Label="Typ kredytu" Variant="Variant.Outlined">
-                @foreach (var type in _loanTypes)
-                {
-                    <MudSelectItem Value="@type">@type.GetDisplayName()</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="4">
-            <MudSelect T="int?" @bind-Value="_createModel.TagId" Label="Tag (kategoria: Kredyt)"
-                       Variant="Variant.Outlined">
-                <MudSelectItem T="int?" Value="@((int?)null)">(bez tagu)</MudSelectItem>
-                @foreach (var tag in GetLoanRootTags(_createModel.TagId))
-                {
-                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
+<LoanListPanel Loans="@_loans"
+               Culture="@_culture"
+               GetInterestLabel="@GetInterestLabel"
+               SelectSchedule="@SelectLoanSchedule"
+               EditLoan="@StartEdit"
+               DeleteLoan="@DeleteLoanAsync" />
 
-        <MudItem xs="12" Class="mt-3">
-            <MudText Typo="Typo.subtitle2" Class="hb-muted">Kwota</MudText>
-            <MudDivider Class="mb-2"/>
-        </MudItem>
-        <MudItem xs="12">
-            <MudSwitch T="bool" @bind-Value="_createAlreadyRepaying" Color="Color.Info"
-                       Label="Już spłacam ten kredyt — dodaję kredyt przejęty w trakcie spłaty"/>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudTextField T="string" @bind-Value="_createPrincipalInput"
-                          Label="@(_createAlreadyRepaying ? "Aktualne zadłużenie (pozostałe)" : "Kwota kredytu")"
-                          Variant="Variant.Outlined"
-                          HelperText="@(_createAlreadyRepaying ? "Ile zostało do spłaty, np. 770 000" : "")"/>
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudNumericField T="int?" @bind-Value="_createModel.GracePeriodMonths"
-                             Label="Karencja (mies.)" Variant="Variant.Outlined" Min="0"
-                             HelperText="Miesiące bez spłaty kapitału"/>
-        </MudItem>
-        @if (_createAlreadyRepaying)
-        {
-            <MudItem xs="12" md="3">
-                <MudTextField T="string" @bind-Value="_createOriginalPrincipalInput"
-                              Label="Kwota pierwotna kredytu" Variant="Variant.Outlined"
-                              HelperText="Oryginalna wartość kredytu, np. 800 000"/>
-            </MudItem>
-        }
-
-        <MudItem xs="12" Class="mt-3">
-            <MudText Typo="Typo.subtitle2" Class="hb-muted">Oprocentowanie</MudText>
-            <MudDivider Class="mb-2"/>
-        </MudItem>
-        @if (_createModel.LoanType == LoanType.Cash)
-        {
-            <MudItem xs="12" md="3">
-                <MudTextField T="string" @bind-Value="_createRateInput" Label="Oprocentowanie stałe %"
-                              Variant="Variant.Outlined"/>
-            </MudItem>
-        }
-        else
-        {
-            <MudItem xs="12" md="3">
-                <MudSelect T="LoanInterestMode" @bind-Value="_createModel.InterestMode" Label="Tryb oprocentowania"
-                           Variant="Variant.Outlined">
-                    @foreach (var mode in _interestModes)
-                    {
-                        <MudSelectItem Value="@mode">@mode.GetDisplayName()</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            @if (_createModel.InterestMode == LoanInterestMode.Fixed)
-            {
-                <MudItem xs="12" md="3">
-                    <MudTextField T="string" @bind-Value="_createRateInput" Label="Stałe oprocentowanie (5 lat) %"
-                                  Variant="Variant.Outlined"/>
-                </MudItem>
-            }
-            <MudItem xs="12" md="2">
-                <MudSelect T="WiborPeriodType?" @bind-Value="_createModel.WiborPeriodType" Label="Typ WIBOR"
-                           Variant="Variant.Outlined">
-                    @foreach (var type in _wiborTypes)
-                    {
-                        <MudSelectItem T="WiborPeriodType?" Value="@type">@type.GetDisplayName()</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" md="2">
-                <MudTextField T="string" @bind-Value="_createMarginRateInput" Label="Marża %"
-                              Variant="Variant.Outlined"/>
-            </MudItem>
-            <MudItem xs="12" md="2">
-                <MudTextField T="string" @bind-Value="_createInitialWiborInput" Label="WIBOR startowy %"
-                              Variant="Variant.Outlined"/>
-            </MudItem>
-        }
-
-        <MudItem xs="12" Class="mt-3">
-            <MudText Typo="Typo.subtitle2" Class="hb-muted">Harmonogram spłat</MudText>
-            <MudDivider Class="mb-2"/>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudDatePicker Label="Data uruchomienia" Date="@_createStartDate" DateChanged="OnCreateStartDateChanged"
-                           Variant="Variant.Outlined"/>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudDatePicker Label="Data zakończenia" Date="@_createEndDate" DateChanged="OnCreateEndDateChanged"
-                           Variant="Variant.Outlined"/>
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudNumericField T="int" @bind-Value="_createModel.RepaymentDayOfMonth"
-                             Label="Dzień spłaty (1-31)" Variant="Variant.Outlined"
-                             Min="1" Max="31" Immediate="true"/>
-        </MudItem>
-        <MudItem xs="12" md="2" Class="d-flex align-end pb-1">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" FullWidth="true">
-                Dodaj kredyt
-            </MudButton>
-        </MudItem>
-
-    </MudGrid>
-    </ActionForm>
-</MudPaper>
-
-<MudPaper Class="pa-4 mt-4 hb-panel">
-    <MudText Typo="Typo.h6" Class="mb-2">Lista kredytów</MudText>
-    <MudTable Items="_loans" Dense="true" Hover="true">
-        <HeaderContent>
-            <MudTh>Nazwa</MudTh>
-            <MudTh>Typ</MudTh>
-            <MudTh>Kwota</MudTh>
-            <MudTh>Pozostały kapitał</MudTh>
-            <MudTh>Oprocentowanie</MudTh>
-            <MudTh>Status</MudTh>
-            <MudTh Style="white-space: nowrap;">Akcje</MudTh>
-        </HeaderContent>
-        <NoRecordsContent>
-            <MudText Typo="Typo.body2" Class="pa-3 hb-muted">Brak kredytów.</MudText>
-        </NoRecordsContent>
-        <RowTemplate Context="loan">
-            <MudTd>@loan.Name</MudTd>
-            <MudTd>@loan.LoanType.GetDisplayName()</MudTd>
-            <MudTd>@loan.Principal.ToString("0.00", _culture)zł</MudTd>
-            <MudTd>@loan.RemainingPrincipal.ToString("0.00", _culture)zł</MudTd>
-            <MudTd>@GetInterestLabel(loan)</MudTd>
-            <MudTd>
-                <MudChip T="bool" Color="@(loan.IsActive ? Color.Success : Color.Warning)">
-                    @(loan.IsActive ? "Aktywny" : "Nieaktywny")
-                </MudChip>
-            </MudTd>
-            <MudTd Style="white-space: nowrap;">
-                <MudStack Row="true" Spacing="1" Wrap="Wrap.NoWrap">
-                    <MudButton Size="Size.Small" OnClick="() => SelectLoanSchedule(loan.Id)">Raty</MudButton>
-                    <MudButton Size="Size.Small" OnClick="() => StartEdit(loan)">Edytuj</MudButton>
-                    <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => DeleteLoanAsync(loan)">Usuń</MudButton>
-                </MudStack>
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
-</MudPaper>
-
-@if (_selectedLoan is not null && _selectedLoanViewMode == LoanViewMode.Edit)
+@if (_selectedLoan is not null)
 {
-    <MudPaper Class="pa-4 mt-4 hb-panel">
-        <MudExpansionPanels MultiExpansion="true">
-            <MudExpansionPanel Text="@($"Edycja i obsługa: {_selectedLoan.Name}")" Expanded="true">
-                <ActionForm OnSubmit="UpdateLoanAsync">
-                <MudGrid>
-
-                    <MudItem xs="12">
-                        <MudText Typo="Typo.subtitle2" Class="hb-muted">Podstawowe</MudText>
-                        <MudDivider Class="mb-2"/>
-                    </MudItem>
-                    <MudItem xs="12" md="5">
-                        <MudTextField @bind-Value="_editModel.Name" Label="Nazwa" Variant="Variant.Outlined"/>
-                    </MudItem>
-                    <MudItem xs="12" md="5">
-                        <MudSelect T="int?" @bind-Value="_editModel.TagId" Label="Tag (kategoria: Kredyt)"
-                                   Variant="Variant.Outlined">
-                            <MudSelectItem T="int?" Value="@((int?)null)">(bez tagu)</MudSelectItem>
-                            @foreach (var tag in GetLoanRootTags(_editModel.TagId))
-                            {
-                                <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="2" Class="d-flex align-center">
-                        <MudSwitch T="bool" @bind-Value="_editModel.IsActive" Color="Color.Primary" Label="Aktywny"/>
-                    </MudItem>
-
-                    <MudItem xs="12" Class="mt-3">
-                        <MudText Typo="Typo.subtitle2" Class="hb-muted">Historia kredytu</MudText>
-                        <MudDivider Class="mb-1"/>
-                        <MudText Typo="Typo.caption" Class="hb-muted">Uzupełnij jeśli kredyt był zaciągnięty na inną kwotę lub miał karencję na początku.</MudText>
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <MudTextField T="string" @bind-Value="_editOriginalPrincipalInput"
-                                      Label="Kwota pierwotna kredytu (opcjonalnie)" Variant="Variant.Outlined"
-                                      HelperText="Oryginalna wartość kredytu, np. 800 000"/>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudNumericField T="int?" @bind-Value="_editModel.GracePeriodMonths"
-                                         Label="Karencja (mies., opcjonalnie)" Variant="Variant.Outlined" Min="0"
-                                         HelperText="Miesiące bez spłaty kapitału"/>
-                    </MudItem>
-
-                    <MudItem xs="12" Class="mt-3">
-                        <MudText Typo="Typo.subtitle2" Class="hb-muted">Harmonogram spłat</MudText>
-                        <MudDivider Class="mb-2"/>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudDatePicker Label="Data uruchomienia" Date="@_editStartDate" DateChanged="OnEditStartDateChanged"
-                                       Variant="Variant.Outlined"/>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudDatePicker Label="Data zakończenia" Date="@_editEndDate" DateChanged="OnEditEndDateChanged"
-                                       Variant="Variant.Outlined"/>
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudNumericField T="int" @bind-Value="_editModel.RepaymentDayOfMonth" Label="Dzień spłaty"
-                                         Variant="Variant.Outlined" Min="1" Max="31" Immediate="true"/>
-                    </MudItem>
-                    <MudItem xs="12" md="2" Class="d-flex align-end pb-1">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" FullWidth="true">
-                            Zapisz zmiany
-                        </MudButton>
-                    </MudItem>
-
-                </MudGrid>
-                </ActionForm>
-
-                @if (_selectedLoan.LoanType == LoanType.Mortgage)
-                {
-                    <MudDivider Class="my-4"/>
-                    <MudText Typo="Typo.h6">Aktualizacja WIBOR</MudText>
-                    <ActionForm OnSubmit="AddRateEntryAsync">
-                    <MudGrid Class="mt-2">
-                        <MudItem xs="12" md="3">
-                            <MudDatePicker Label="Obowiązuję od" Date="@_rateEffectiveFrom"
-                                           DateChanged="OnRateEffectiveFromChanged" Variant="Variant.Outlined"/>
-                        </MudItem>
-                        <MudItem xs="12" md="3">
-                            <MudTextField T="string" @bind-Value="_newReferenceRateInput" Label="Nowy WIBOR %"
-                                          Variant="Variant.Outlined"/>
-                        </MudItem>
-                        <MudItem xs="12" md="3" Class="d-flex align-center">
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">
-                                Aktualizuj WIBOR
-                            </MudButton>
-                        </MudItem>
-                    </MudGrid>
-                    </ActionForm>
-
-                    <MudTable Items="_selectedLoan.RateEntries.OrderByDescending(x => x.EffectiveFrom)" Dense="true"
-                              Hover="true" Class="mt-3">
-                        <HeaderContent>
-                            <MudTh>Data od</MudTh>
-                            <MudTh>WIBOR %</MudTh>
-                        </HeaderContent>
-                        <RowTemplate Context="entry">
-                            <MudTd>@entry.EffectiveFrom.ToString("yyyy-MM-dd")</MudTd>
-                            <MudTd>@entry.ReferenceRate.ToString("0.##", _culture)</MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                }
-
-                <MudDivider Class="my-4"/>
-                <MudText Typo="Typo.h6" Class="mb-2">Koszty kredytu</MudText>
-
-                <ActionForm OnSubmit="CreateLoanChargeAsync">
-                <MudGrid>
-                    <MudItem xs="12" md="3">
-                        <MudTextField @bind-Value="_newLoanCharge.Name" Label="Nazwa" Variant="Variant.Outlined"/>
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudSelect T="LoanChargeType" @bind-Value="_newLoanCharge.ChargeType" Label="Typ"
-                                   Variant="Variant.Outlined">
-                            @foreach (var type in _loanChargeTypes)
-                            {
-                                <MudSelectItem Value="@type">@type.GetDisplayName()</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudSelect T="LoanChargeFrequencyType" @bind-Value="_newLoanCharge.FrequencyType"
-                                   Label="Częstotliwość" Variant="Variant.Outlined">
-                            @foreach (var freq in _loanChargeFrequencies)
-                            {
-                                <MudSelectItem Value="@freq">@freq.GetDisplayName()</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudTextField T="string" @bind-Value="_newLoanChargeAmountInput"
-                                      Label="@(_newLoanCharge.IsPercentageBased ? "Stawka %" : "Kwota (PLN)")"
-                                      Variant="Variant.Outlined"
-                                      HelperText="@(_newLoanCharge.IsPercentageBased ? "np. 0,018 = 0,018% miesięcznie" : "stała miesięczna kwota")"/>
-                    </MudItem>
-                    <MudItem xs="12" md="2" Class="d-flex align-center">
-                        <MudSwitch T="bool" @bind-Value="_newLoanCharge.IsPercentageBased"
-                                   Color="Color.Primary" Label="% zadłużenia"/>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudDatePicker Label="Start" Date="@_newLoanChargeStartDate"
-                                       DateChanged="OnNewLoanChargeStartDateChanged" Variant="Variant.Outlined"/>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudDatePicker Label="Koniec (opcjonalnie)" Date="@_newLoanChargeEndDate"
-                                       DateChanged="OnNewLoanChargeEndDateChanged" Variant="Variant.Outlined"/>
-                    </MudItem>
-                    <MudItem xs="12" md="2" Class="d-flex align-center">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Dodaj
-                            koszt
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
-                </ActionForm>
-
-                @if (_selectedLoan.Charges.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Class="hb-muted mt-3">Brak kosztów dla tego kredytu.</MudText>
-                }
-                else
-                {
-                    <MudTable Items="_selectedLoan.Charges.OrderBy(x => x.Name)" Dense="true" Hover="true" Class="mt-3">
-                        <HeaderContent>
-                            <MudTh>Nazwa</MudTh>
-                            <MudTh>Typ</MudTh>
-                            <MudTh>Częstotliwość</MudTh>
-                            <MudTh>Kwota</MudTh>
-                            <MudTh>Aktywna</MudTh>
-                            <MudTh>Akcje</MudTh>
-                        </HeaderContent>
-                        <RowTemplate Context="item">
-                            <MudTd>@item.Name</MudTd>
-                            <MudTd>@item.ChargeType.GetDisplayName()</MudTd>
-                            <MudTd>@item.FrequencyType.GetDisplayName()</MudTd>
-                            <MudTd>
-                                @if (item.IsPercentageBased)
-                                {
-                                    @($"{item.Amount.ToString("0.####", _culture)}% zadłużenia")
-                                }
-                                else
-                                {
-                                    @($"{item.Amount.ToString("0.00", _culture)} PLN")
-                                }
-                            </MudTd>
-                            <MudTd>
-                                <MudChip T="string"
-                                         Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip>
-                            </MudTd>
-                            <MudTd>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined"
-                                           Color="@(item.IsActive ? Color.Warning : Color.Success)"
-                                           OnClick="() => ToggleLoanChargeActiveAsync(item)">@(item.IsActive ? "Dezaktywuj" : "Aktywuj")</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
-                                           OnClick="() => DeleteLoanChargeAsync(item.Id)">Usun
-                                </MudButton>
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                }
-            </MudExpansionPanel>
-        </MudExpansionPanels>
-    </MudPaper>
+    <LoanWorkspaceTabs Loan="@_selectedLoan"
+                       Culture="@_culture"
+                       ActiveTab="@_selectedLoanTab"
+                       ActiveTabChanged="@OnSelectedLoanTabChanged"
+                       GetInterestLabel="@GetInterestLabel"
+                       NextInstallmentLabel="@GetNextInstallmentLabel(_selectedLoan)"
+                       PaidInstallmentsCount="@GetPaidInstallmentsCount(_selectedLoan)"
+                       OnShowSchedule="@ShowSelectedLoanSchedule"
+                       OnEditLoan="@(() => StartEdit(_selectedLoan))"
+                       OnAddWibor="@AddRateEntryAsync"
+                       OnAddCost="@CreateLoanChargeAsync"
+                       OnUpdateLoan="@UpdateLoanAsync"
+                       TogglePaid="@ToggleInstallmentPaidAsync"
+                       Prepay="@StartPrepayment"
+                       ChangeFromBank="@StartInstallmentAmountChange"
+                       SyncToMonth="@SyncInstallmentToMonthAsync"
+                       EditInstallment="@StartEditInstallment"
+                       LoanChargeTypes="@_loanChargeTypes"
+                       LoanChargeFrequencies="@_loanChargeFrequencies"
+                       NewLoanCharge="@_newLoanCharge"
+                       ToggleLoanChargeActive="@ToggleLoanChargeActiveAsync"
+                       DeleteLoanCharge="@DeleteLoanChargeAsync"
+                       EditModel="@_editModel"
+                       GetLoanRootTags="@GetLoanRootTags"
+                       EditOriginalPrincipalInput="@_editOriginalPrincipalInput"
+                       EditOriginalPrincipalInputChanged="@OnEditOriginalPrincipalInputChanged"
+                       EditStartDate="@_editStartDate"
+                       EditStartDateChanged="@OnEditStartDateChanged"
+                       EditEndDate="@_editEndDate"
+                       EditEndDateChanged="@OnEditEndDateChanged"
+                       RateEffectiveFrom="@_rateEffectiveFrom"
+                       RateEffectiveFromChanged="@OnRateEffectiveFromChanged"
+                       NewReferenceRateInput="@_newReferenceRateInput"
+                       NewReferenceRateInputChanged="@OnNewReferenceRateInputChanged"
+                       NewLoanChargeAmountInput="@_newLoanChargeAmountInput"
+                       NewLoanChargeAmountInputChanged="@OnNewLoanChargeAmountInputChanged"
+                       NewLoanChargeStartDate="@_newLoanChargeStartDate"
+                       NewLoanChargeStartDateChanged="@OnNewLoanChargeStartDateChanged"
+                       NewLoanChargeEndDate="@_newLoanChargeEndDate"
+                       NewLoanChargeEndDateChanged="@OnNewLoanChargeEndDateChanged" />
 }
-
-@if (_selectedLoan is not null && _selectedLoanViewMode == LoanViewMode.Schedule)
+else
 {
-    <MudPaper Class="pa-4 mt-4 hb-panel">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h6">Harmonogram: @_selectedLoan.Name</MudText>
-            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                <MudChip T="int" Color="Color.Primary">@_selectedLoan.Installments.Count rat</MudChip>
-                <MudChip T="string" Color="Color.Info">Pozostały kapitał: @_selectedLoan.RemainingPrincipal.ToString("0.00", _culture) PLN</MudChip>
-            </MudStack>
-        </MudStack>
-
-        <MudTable Items="_selectedLoan.Installments.OrderBy(x => x.Year).ThenBy(x => x.Month)" Dense="true" Hover="true"
-                  Class="mt-2">
-            <HeaderContent>
-                <MudTh>Miesiąc</MudTh>
-                <MudTh>Kwota</MudTh>
-                <MudTh>Kapitał</MudTh>
-                <MudTh>Odsetki</MudTh>
-                <MudTh>Koszty</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Akcja</MudTh>
-            </HeaderContent>
-            <RowTemplate Context="item">
-                <MudTd>@($"{item.Month:D2}/{item.Year}")</MudTd>
-                <MudTd>@item.Amount.ToString("0.00", _culture) PLN</MudTd>
-                <MudTd>@item.PrincipalAmount.ToString("0.00", _culture) PLN</MudTd>
-                <MudTd>@item.InterestAmount.ToString("0.00", _culture) PLN</MudTd>
-                <MudTd>@((item.Amount - item.PrincipalAmount - item.InterestAmount).ToString("0.00", _culture)) PLN</MudTd>
-                <MudTd>
-                    <MudChip T="bool" Color="@(item.IsPaid ? Color.Success : Color.Warning)">
-                        @(item.IsPaid ? "Zapłacona" : "Do zapłaty")
-                    </MudChip>
-                </MudTd>
-                <MudTd>
-                    <MudButton Size="Size.Small" Color="@(item.IsPaid ? Color.Warning : Color.Success)"
-                               OnClick="() => ToggleInstallmentPaidAsync(item)">
-                        @(item.IsPaid ? "Niezapłacona" : "Zapłacona")
-                    </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                               Disabled="@item.IsPaid"
-                               OnClick="() => StartPrepayment(item)">
-                        Nadpłać
-                    </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
-                               OnClick="() => SyncInstallmentToMonthAsync(item)">
-                        Dodaj do miesiąca
-                    </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary"
-                               Disabled="@item.IsPaid"
-                               OnClick="() => StartEditInstallment(item)">
-                        Edytuj
-                    </MudButton>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-
-    </MudPaper>
+    <LoanSelectionPrompt OnCreateLoan="@ToggleCreateLoanPanel" />
 }
 
 <MudDialog @bind-Visible="_editDialogOpen" Options="@(new DialogOptions { CloseOnEscapeKey = true, CloseButton = true })">
@@ -501,6 +145,17 @@
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveInstallmentOverrideAsync">Zapisz</MudButton>
     </DialogActions>
 </MudDialog>
+
+<LoanBankScheduleUpdateDialog Visible="@_installmentAmountChangeDialogOpen"
+                              VisibleChanged="@OnInstallmentAmountChangeDialogVisibleChanged"
+                              Installment="@_installmentAmountChangeInstallment"
+                              BankInstallmentAmountInput="@_bankInstallmentAmountInput"
+                              BankInstallmentAmountInputChanged="@OnBankInstallmentAmountInputChanged"
+                              BankLastInstallmentDate="@_bankLastInstallmentDate"
+                              BankLastInstallmentDateChanged="@OnBankLastInstallmentDateChanged"
+                              GetDirtyState="@GetInstallmentAmountChangeDialogDirtyState"
+                              OnApply="@ApplyInstallmentAmountChangeAsync"
+                              OnCancel="@CancelInstallmentAmountChange" />
 
 <MudDialog @bind-Visible="_prepaymentDialogOpen" Options="@(new DialogOptions { CloseOnEscapeKey = true, CloseButton = true })">
     <TitleContent>
@@ -540,12 +195,6 @@
 
 @code {
 
-    private enum LoanViewMode
-    {
-        Schedule,
-        Edit
-    }
-
     private bool _isLoading;
     private readonly CultureInfo _culture = new("pl-PL");
     private readonly LoanType[] _loanTypes = Enum.GetValues<LoanType>();
@@ -558,7 +207,8 @@
     private List<CategoryDto> _categories = [];
     private List<LoanDto> _loans = [];
     private LoanDto? _selectedLoan;
-    private LoanViewMode _selectedLoanViewMode = LoanViewMode.Schedule;
+    private LoanWorkspaceTab _selectedLoanTab = LoanWorkspaceTab.Schedule;
+    private bool _createPanelOpen;
     private LoanInstallmentDto? _editingInstallment;
     private bool _editDialogOpen;
     private string _editInstallmentPrincipalInput = string.Empty;
@@ -595,6 +245,10 @@
     private bool _prepaymentDialogOpen;
     private string _prepaymentAmountInput = string.Empty;
     private LoanPrepaymentStrategyType _prepaymentStrategy = LoanPrepaymentStrategyType.ReduceInstallment;
+    private LoanInstallmentDto? _installmentAmountChangeInstallment;
+    private bool _installmentAmountChangeDialogOpen;
+    private string _bankInstallmentAmountInput = string.Empty;
+    private DateTime? _bankLastInstallmentDate;
 
     private readonly CreateLoanChargeRequest _newLoanCharge = new()
     {
@@ -622,6 +276,10 @@
             if (_selectedLoan is not null)
             {
                 _selectedLoan = _loans.FirstOrDefault(x => x.Id == _selectedLoan.Id);
+                if (_selectedLoan is null)
+                {
+                    _selectedLoanTab = LoanWorkspaceTab.Schedule;
+                }
             }
             MarkDirtyStatePristine();
         }
@@ -724,6 +382,7 @@
             _createMarginRateInput = string.Empty;
             _createInitialWiborInput = string.Empty;
             await LoadAsync();
+            _createPanelOpen = false;
             Snackbar.Add("Dodano kredyt.", Severity.Success);
         }
         catch (Exception ex)
@@ -815,7 +474,8 @@
     private void SelectLoanSchedule(int loanId)
     {
         _selectedLoan = _loans.FirstOrDefault(x => x.Id == loanId);
-        _selectedLoanViewMode = LoanViewMode.Schedule;
+        _selectedLoanTab = LoanWorkspaceTab.Summary;
+        _createPanelOpen = false;
         MarkDirtyStatePristine();
     }
 
@@ -827,21 +487,26 @@
             return;
         }
 
-        _selectedLoanViewMode = LoanViewMode.Edit;
-        _editModel.Id = _selectedLoan.Id;
-        _editModel.Name = _selectedLoan.Name;
-        _editModel.TagId = _selectedLoan.TagId;
-        _editModel.RepaymentDayOfMonth = _selectedLoan.RepaymentDayOfMonth;
-        _editModel.IsActive = _selectedLoan.IsActive;
-        _editOriginalPrincipalInput = _selectedLoan.OriginalPrincipal.HasValue
-            ? _selectedLoan.OriginalPrincipal.Value.ToString("0.##", _culture)
-            : string.Empty;
-        _editModel.GracePeriodMonths = _selectedLoan.GracePeriodMonths;
-        _editStartDate = _selectedLoan.StartDate.ToDateTime(TimeOnly.MinValue);
-        _editEndDate = _selectedLoan.EndDate.ToDateTime(TimeOnly.MinValue);
-
+        _selectedLoanTab = LoanWorkspaceTab.Settings;
+        _createPanelOpen = false;
+        LoadSelectedLoanEditModel(_selectedLoan);
         ResetLoanChargeForm(_selectedLoan.Id);
         MarkDirtyStatePristine();
+    }
+
+    private void LoadSelectedLoanEditModel(LoanDto loan)
+    {
+        _editModel.Id = loan.Id;
+        _editModel.Name = loan.Name;
+        _editModel.TagId = loan.TagId;
+        _editModel.RepaymentDayOfMonth = loan.RepaymentDayOfMonth;
+        _editModel.IsActive = loan.IsActive;
+        _editOriginalPrincipalInput = loan.OriginalPrincipal.HasValue
+            ? loan.OriginalPrincipal.Value.ToString("0.##", _culture)
+            : string.Empty;
+        _editModel.GracePeriodMonths = loan.GracePeriodMonths;
+        _editStartDate = loan.StartDate.ToDateTime(TimeOnly.MinValue);
+        _editEndDate = loan.EndDate.ToDateTime(TimeOnly.MinValue);
     }
 
     private async Task CreateLoanChargeAsync()
@@ -1056,6 +721,68 @@
         MarkDirtyStatePristine();
     }
 
+    private void StartInstallmentAmountChange(LoanInstallmentDto installment)
+    {
+        _installmentAmountChangeInstallment = installment;
+        _bankInstallmentAmountInput = (installment.PrincipalAmount + installment.InterestAmount).ToString("0.00", _culture);
+        _bankLastInstallmentDate = _selectedLoan?.EndDate.ToDateTime(TimeOnly.MinValue);
+        _installmentAmountChangeDialogOpen = true;
+        MarkDirtyStatePristine();
+    }
+
+    private void CancelInstallmentAmountChange()
+    {
+        _installmentAmountChangeDialogOpen = false;
+        _installmentAmountChangeInstallment = null;
+        _bankInstallmentAmountInput = string.Empty;
+        _bankLastInstallmentDate = null;
+        MarkDirtyStatePristine();
+    }
+
+    private async Task ApplyInstallmentAmountChangeAsync()
+    {
+        if (_installmentAmountChangeInstallment is null
+            || !_bankLastInstallmentDate.HasValue
+            || !LocalizedDecimalParser.TryParse(_bankInstallmentAmountInput, out var installmentAmount))
+        {
+            Snackbar.Add("Podaj poprawną kwotę raty i datę ostatniej raty.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            await LoanService.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanInstallmentId = _installmentAmountChangeInstallment.Id,
+                InstallmentAmount = installmentAmount,
+                LastInstallmentDate = DateOnly.FromDateTime(_bankLastInstallmentDate.Value)
+            }, CancellationToken.None);
+
+            _installmentAmountChangeDialogOpen = false;
+            _installmentAmountChangeInstallment = null;
+            _bankInstallmentAmountInput = string.Empty;
+            _bankLastInstallmentDate = null;
+            await LoadAsync();
+            Snackbar.Add("Zastosowano ratę z banku i przeliczono harmonogram.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void ToggleCreateLoanPanel() => _createPanelOpen = !_createPanelOpen;
+
+    private void ShowSelectedLoanSchedule()
+    {
+        if (_selectedLoan is null)
+        {
+            return;
+        }
+
+        _selectedLoanTab = LoanWorkspaceTab.Schedule;
+    }
+
     private async Task ApplyPrepaymentAsync()
     {
         if (_prepaymentInstallment is null || !LocalizedDecimalParser.TryParse(_prepaymentAmountInput, out var amount))
@@ -1098,13 +825,73 @@
             : $"{loan.WiborPeriodType} + marża = {total.ToString("0.##", _culture)}%";
     }
 
+    private int GetPaidInstallmentsCount(LoanDto loan) => loan.Installments.Count(x => x.IsPaid);
+
+    private string GetNextInstallmentLabel(LoanDto loan)
+    {
+        var next = loan.Installments
+            .Where(x => !x.IsPaid)
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .FirstOrDefault();
+
+        if (next is null)
+        {
+            return "Brak";
+        }
+
+        return $"{next.Month:D2}/{next.Year} - {next.Amount.ToString("0.00", _culture)} PLN";
+    }
+
     private void OnCreateStartDateChanged(DateTime? value) => _createStartDate = value;
     private void OnCreateEndDateChanged(DateTime? value) => _createEndDate = value;
+    private async Task OnEditOriginalPrincipalInputChanged(string value)
+    {
+        _editOriginalPrincipalInput = value;
+        await Task.CompletedTask;
+    }
     private void OnEditStartDateChanged(DateTime? value) => _editStartDate = value;
     private void OnEditEndDateChanged(DateTime? value) => _editEndDate = value;
     private void OnRateEffectiveFromChanged(DateTime? value) => _rateEffectiveFrom = value;
+    private void OnBankLastInstallmentDateChanged(DateTime? value) => _bankLastInstallmentDate = value;
     private void OnNewLoanChargeStartDateChanged(DateTime? value) => _newLoanChargeStartDate = value;
     private void OnNewLoanChargeEndDateChanged(DateTime? value) => _newLoanChargeEndDate = value;
+    private async Task OnNewReferenceRateInputChanged(string value)
+    {
+        _newReferenceRateInput = value;
+        await Task.CompletedTask;
+    }
+    private async Task OnBankInstallmentAmountInputChanged(string value)
+    {
+        _bankInstallmentAmountInput = value;
+        await Task.CompletedTask;
+    }
+    private async Task OnNewLoanChargeAmountInputChanged(string value)
+    {
+        _newLoanChargeAmountInput = value;
+        await Task.CompletedTask;
+    }
+    private async Task OnInstallmentAmountChangeDialogVisibleChanged(bool value)
+    {
+        if (!value)
+        {
+            CancelInstallmentAmountChange();
+            return;
+        }
+
+        _installmentAmountChangeDialogOpen = true;
+        await Task.CompletedTask;
+    }
+    private async Task OnSelectedLoanTabChanged(LoanWorkspaceTab value)
+    {
+        _selectedLoanTab = value;
+        if (_selectedLoan is not null && value == LoanWorkspaceTab.Settings)
+        {
+            LoadSelectedLoanEditModel(_selectedLoan);
+            ResetLoanChargeForm(_selectedLoan.Id);
+        }
+        await Task.CompletedTask;
+    }
 
     private void ResetLoanChargeForm(int loanId)
     {
@@ -1146,7 +933,7 @@
             _createEndDate,
             _createModel.RepaymentDayOfMonth
         },
-        EditLoan = _selectedLoan is null || _selectedLoanViewMode != LoanViewMode.Edit
+        EditLoan = _selectedLoan is null || _selectedLoanTab != LoanWorkspaceTab.Settings
             ? null
             : new
             {
@@ -1160,7 +947,7 @@
                 _editEndDate,
                 _editModel.RepaymentDayOfMonth
             },
-        RateEntry = _selectedLoan is null || _selectedLoanViewMode != LoanViewMode.Edit || _selectedLoan.LoanType != LoanType.Mortgage
+        RateEntry = _selectedLoan is null || _selectedLoanTab != LoanWorkspaceTab.Wibor || _selectedLoan.LoanType != LoanType.Mortgage
             ? null
             : new
             {
@@ -1168,7 +955,7 @@
                 _rateEffectiveFrom,
                 ReferenceRate = _newReferenceRateInput
             },
-        LoanCharge = _selectedLoan is null || _selectedLoanViewMode != LoanViewMode.Edit
+        LoanCharge = _selectedLoan is null || _selectedLoanTab != LoanWorkspaceTab.Costs
             ? null
             : new
             {
@@ -1180,7 +967,7 @@
                 _newLoanCharge.IsPercentageBased,
                 _newLoanChargeStartDate,
                 _newLoanChargeEndDate
-            }
+        }
     };
 
     private object GetInstallmentDialogDirtyState() => new
@@ -1195,6 +982,13 @@
         InstallmentId = _prepaymentInstallment?.Id,
         Amount = _prepaymentAmountInput,
         _prepaymentStrategy
+    };
+
+    private object GetInstallmentAmountChangeDialogDirtyState() => new
+    {
+        InstallmentId = _installmentAmountChangeInstallment?.Id,
+        Amount = _bankInstallmentAmountInput,
+        _bankLastInstallmentDate
     };
 
     private IReadOnlyList<TagDto> GetLoanRootTags(int? selectedTagId)

@@ -21,6 +21,10 @@ public sealed class NoOpLoanService : ILoanService
     public Task<LoanDto> ApplyLoanPrepaymentAsync(ApplyLoanPrepaymentRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
 
+    public Task<LoanDto> ApplyLoanInstallmentAmountChangeAsync(ApplyLoanInstallmentAmountChangeRequest request,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new LoanDto());
+
     public Task<LoanChargeDto> CreateLoanChargeAsync(CreateLoanChargeRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanChargeDto());
 

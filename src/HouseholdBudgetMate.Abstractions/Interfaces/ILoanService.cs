@@ -10,6 +10,7 @@ public interface ILoanService
     Task<LoanDto> UpdateLoanAsync(UpdateLoanRequest request, CancellationToken cancellationToken);
     Task<LoanDto> AddLoanRateEntryAsync(AddLoanRateEntryRequest request, CancellationToken cancellationToken);
     Task<LoanDto> ApplyLoanPrepaymentAsync(ApplyLoanPrepaymentRequest request, CancellationToken cancellationToken);
+    Task<LoanDto> ApplyLoanInstallmentAmountChangeAsync(ApplyLoanInstallmentAmountChangeRequest request, CancellationToken cancellationToken);
     Task<LoanChargeDto> CreateLoanChargeAsync(CreateLoanChargeRequest request, CancellationToken cancellationToken);
     Task<LoanChargeDto> UpdateLoanChargeAsync(UpdateLoanChargeRequest request, CancellationToken cancellationToken);
     Task DeleteLoanChargeAsync(DeleteLoanChargeRequest request, CancellationToken cancellationToken);

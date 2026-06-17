@@ -1,0 +1,46 @@
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
+    <MudButton Size="Size.Small"
+               Variant="Variant.Filled"
+               Color="@(Installment.IsPaid ? Color.Warning : Color.Success)"
+               StartIcon="@(Installment.IsPaid ? Icons.Material.Filled.RemoveDone : Icons.Material.Filled.CheckCircle)"
+               OnClick="() => TogglePaid.InvokeAsync(Installment)">
+        @(Installment.IsPaid ? "Nieopłacona" : "Zapłacona")
+    </MudButton>
+
+    <MudMenu Variant="Variant.Outlined"
+             Color="Color.Primary"
+             StartIcon="@Icons.Material.Filled.MoreVert"
+             Label="Więcej"
+             Dense="true">
+        <MudMenuItem Icon="@Icons.Material.Filled.Paid"
+                     Disabled="@Installment.IsPaid"
+                     OnClick="() => Prepay.InvokeAsync(Installment)">
+            Nadpłać
+        </MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Straighten"
+                     Disabled="@Installment.IsPaid"
+                     OnClick="() => ChangeFromBank.InvokeAsync(Installment)">
+            Skróć okres
+        </MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.EventAvailable"
+                     OnClick="() => SyncToMonth.InvokeAsync(Installment)">
+            Dodaj do miesiąca
+        </MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Edit"
+                     Disabled="@Installment.IsPaid"
+                     OnClick="() => EditInstallment.InvokeAsync(Installment)">
+            Edytuj
+        </MudMenuItem>
+    </MudMenu>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public LoanInstallmentDto Installment { get; set; } = default!;
+    [Parameter] public EventCallback<LoanInstallmentDto> TogglePaid { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> Prepay { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> ChangeFromBank { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> SyncToMonth { get; set; }
+    [Parameter] public EventCallback<LoanInstallmentDto> EditInstallment { get; set; }
+}

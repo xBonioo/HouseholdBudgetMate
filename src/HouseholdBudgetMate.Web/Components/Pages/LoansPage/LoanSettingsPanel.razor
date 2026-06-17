@@ -1,0 +1,102 @@
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests
+@using HouseholdBudgetMate.Abstractions.Extensions
+
+<MudPaper Class="pa-4 hb-panel">
+    <MudText Typo="Typo.h6" Class="mb-2">Ustawienia kredytu</MudText>
+
+    <ActionForm OnSubmit="@OnSubmit">
+    <MudGrid>
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Podstawowe</MudText>
+            <MudDivider Class="mb-2"/>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudTextField @bind-Value="EditModel.Name" Label="Nazwa" Variant="Variant.Outlined"/>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudSelect T="int?" @bind-Value="EditModel.TagId" Label="Tag (kategoria: Kredyt)"
+                       Variant="Variant.Outlined">
+                <MudSelectItem T="int?" Value="@((int?)null)">(bez tagu)</MudSelectItem>
+                @foreach (var tag in GetLoanRootTags(EditModel.TagId))
+                {
+                    <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center">
+            <MudSwitch T="bool" @bind-Value="EditModel.IsActive" Color="Color.Primary" Label="Aktywny"/>
+        </MudItem>
+
+        <MudItem xs="12" Class="mt-3">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Historia kredytu</MudText>
+            <MudDivider Class="mb-1"/>
+            <MudText Typo="Typo.caption" Class="hb-muted">Uzupełnij jeśli kredyt był zaciągnięty na inną kwotę lub miał karencję na początku.</MudText>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField T="string" Value="@EditOriginalPrincipalInput" ValueChanged="OnEditOriginalPrincipalInputChanged"
+                          Label="Kwota pierwotna kredytu (opcjonalnie)" Variant="Variant.Outlined"
+                          HelperText="Oryginalna wartość kredytu, np. 800 000"/>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudNumericField T="int?" @bind-Value="EditModel.GracePeriodMonths"
+                             Label="Karencja (mies., opcjonalnie)" Variant="Variant.Outlined" Min="0"
+                             HelperText="Miesiące bez spłaty kapitału"/>
+        </MudItem>
+
+        <MudItem xs="12" Class="mt-3">
+            <MudText Typo="Typo.subtitle2" Class="hb-muted">Harmonogram spłat</MudText>
+            <MudDivider Class="mb-2"/>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudDatePicker Label="Data uruchomienia" Date="@EditStartDate" DateChanged="OnEditStartDateChanged"
+                           Variant="Variant.Outlined"/>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudDatePicker Label="Data zakończenia" Date="@EditEndDate" DateChanged="OnEditEndDateChanged"
+                           Variant="Variant.Outlined"/>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudNumericField T="int" @bind-Value="EditModel.RepaymentDayOfMonth" Label="Dzień spłaty"
+                             Variant="Variant.Outlined" Min="1" Max="31" Immediate="true"/>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-end pb-1">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" FullWidth="true">
+                Zapisz zmiany
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+    </ActionForm>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public LoanDto Loan { get; set; } = default!;
+    [Parameter, EditorRequired] public UpdateLoanRequest EditModel { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<int?, IReadOnlyList<TagDto>> GetLoanRootTags { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnSubmit { get; set; }
+    [Parameter] public string EditOriginalPrincipalInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> EditOriginalPrincipalInputChanged { get; set; }
+    [Parameter] public DateTime? EditStartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> EditStartDateChanged { get; set; }
+    [Parameter] public DateTime? EditEndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> EditEndDateChanged { get; set; }
+
+    private async Task OnEditOriginalPrincipalInputChanged(string value)
+    {
+        EditOriginalPrincipalInput = value;
+        await EditOriginalPrincipalInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnEditStartDateChanged(DateTime? value)
+    {
+        EditStartDate = value;
+        await EditStartDateChanged.InvokeAsync(value);
+    }
+
+    private async Task OnEditEndDateChanged(DateTime? value)
+    {
+        EditEndDate = value;
+        await EditEndDateChanged.InvokeAsync(value);
+    }
+}

@@ -1,0 +1,140 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests
+@using HouseholdBudgetMate.Abstractions.Enums
+@using HouseholdBudgetMate.Abstractions.Extensions
+
+<MudPaper Class="pa-4 hb-panel">
+    <MudText Typo="Typo.h6" Class="mb-2">Koszty kredytu</MudText>
+
+    <ActionForm OnSubmit="@OnSubmit">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="NewLoanCharge.Name" Label="Nazwa" Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="LoanChargeType" @bind-Value="NewLoanCharge.ChargeType" Label="Typ"
+                           Variant="Variant.Outlined">
+                    @foreach (var type in LoanChargeTypes)
+                    {
+                        <MudSelectItem Value="@type">@type.GetDisplayName()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="LoanChargeFrequencyType" @bind-Value="NewLoanCharge.FrequencyType"
+                           Label="Częstotliwość" Variant="Variant.Outlined">
+                    @foreach (var freq in LoanChargeFrequencies)
+                    {
+                        <MudSelectItem Value="@freq">@freq.GetDisplayName()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" Value="@NewLoanChargeAmountInput" ValueChanged="OnNewLoanChargeAmountInputChanged"
+                              Label="@(NewLoanCharge.IsPercentageBased ? "Stawka %" : "Kwota (PLN)")"
+                              Variant="Variant.Outlined"
+                              HelperText="@(NewLoanCharge.IsPercentageBased ? "np. 0,018 = 0,018% miesięcznie" : "stała miesięczna kwota")"/>
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="NewLoanCharge.IsPercentageBased"
+                           Color="Color.Primary" Label="% zadłużenia"/>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="Start" Date="@NewLoanChargeStartDate"
+                               DateChanged="OnNewLoanChargeStartDateChanged" Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="Koniec (opcjonalnie)" Date="@NewLoanChargeEndDate"
+                               DateChanged="OnNewLoanChargeEndDateChanged" Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Dodaj koszt</MudButton>
+            </MudItem>
+        </MudGrid>
+    </ActionForm>
+
+    @if (Loan.Charges.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+            Brak kosztów dla tego kredytu. Dodaj pierwszy koszt, jeśli chcesz doliczać go do rat.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@Loan.Charges.OrderBy(x => x.Name)" Dense="true" Hover="true" Class="mt-3">
+            <HeaderContent>
+                <MudTh>Nazwa</MudTh>
+                <MudTh>Typ</MudTh>
+                <MudTh>Częstotliwość</MudTh>
+                <MudTh>Kwota</MudTh>
+                <MudTh>Aktywna</MudTh>
+                <MudTh>Akcje</MudTh>
+            </HeaderContent>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="hb-muted pa-3">Brak kosztów dla tego kredytu.</MudText>
+            </NoRecordsContent>
+            <RowTemplate Context="item">
+                <MudTd>@item.Name</MudTd>
+                <MudTd>@item.ChargeType.GetDisplayName()</MudTd>
+                <MudTd>@item.FrequencyType.GetDisplayName()</MudTd>
+                <MudTd>
+                    @if (item.IsPercentageBased)
+                    {
+                        @($"{item.Amount.ToString("0.####", Culture)}% zadłużenia")
+                    }
+                    else
+                    {
+                        @($"{item.Amount.ToString("0.00", Culture)} PLN")
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string"
+                             Color="@(item.IsActive ? Color.Success : Color.Default)">@(item.IsActive ? "Tak" : "Nie")</MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                               Color="@(item.IsActive ? Color.Warning : Color.Success)"
+                               OnClick="() => ToggleLoanChargeActive.InvokeAsync(item)">@(item.IsActive ? "Dezaktywuj" : "Aktywuj")</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               OnClick="() => DeleteLoanCharge.InvokeAsync(item.Id)">Usuń</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public LoanDto Loan { get; set; } = default!;
+    [Parameter, EditorRequired] public CultureInfo Culture { get; set; } = CultureInfo.InvariantCulture;
+    [Parameter, EditorRequired] public CreateLoanChargeRequest NewLoanCharge { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<LoanChargeType> LoanChargeTypes { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<LoanChargeFrequencyType> LoanChargeFrequencies { get; set; } = [];
+    [Parameter, EditorRequired] public EventCallback OnSubmit { get; set; }
+    [Parameter] public string NewLoanChargeAmountInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> NewLoanChargeAmountInputChanged { get; set; }
+    [Parameter] public DateTime? NewLoanChargeStartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> NewLoanChargeStartDateChanged { get; set; }
+    [Parameter] public DateTime? NewLoanChargeEndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> NewLoanChargeEndDateChanged { get; set; }
+    [Parameter] public EventCallback<LoanChargeDto> ToggleLoanChargeActive { get; set; }
+    [Parameter] public EventCallback<int> DeleteLoanCharge { get; set; }
+
+    private async Task OnNewLoanChargeAmountInputChanged(string value)
+    {
+        NewLoanChargeAmountInput = value;
+        await NewLoanChargeAmountInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnNewLoanChargeStartDateChanged(DateTime? value)
+    {
+        NewLoanChargeStartDate = value;
+        await NewLoanChargeStartDateChanged.InvokeAsync(value);
+    }
+
+    private async Task OnNewLoanChargeEndDateChanged(DateTime? value)
+    {
+        NewLoanChargeEndDate = value;
+        await NewLoanChargeEndDateChanged.InvokeAsync(value);
+    }
+}

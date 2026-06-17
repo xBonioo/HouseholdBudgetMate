@@ -1,0 +1,100 @@
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+
+<MudDialog Visible="@_visible"
+           VisibleChanged="OnMudDialogVisibleChanged"
+           Options="@(new DialogOptions { CloseOnEscapeKey = true, CloseButton = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            Zmiana raty z banku @(Installment is not null ? $"{Installment.Month:D2}/{Installment.Year}" : string.Empty)
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <DirtyStateMonitor CurrentState="@GetDirtyState()"
+                           Enabled="_visible"
+                           Label="zmiana raty z banku"/>
+
+        @if (Installment is not null)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+                Zmienimy przyszłe niezapłacone raty od wskazanej raty na podstawie kwoty z banku i daty ostatniej raty.
+            </MudAlert>
+
+            <MudText Typo="Typo.body2" Class="hb-muted mb-3">
+                Startujemy od raty @Installment.Month.ToString("D2")/@Installment.Year.
+                Po zapisaniu przeliczymy dalszy harmonogram i ustawimy nową datę końcową kredytu.
+            </MudText>
+        }
+
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField T="string"
+                              Value="@BankInstallmentAmountInput"
+                              ValueChanged="OnBankInstallmentAmountInputChanged"
+                              Label="Kwota raty z banku"
+                              Variant="Variant.Outlined"
+                              HelperText="Podaj wyłącznie część kapitałowo-odsetkową, bez kosztów dodatkowych."/>
+            </MudItem>
+            <MudItem xs="12">
+                <MudDatePicker Label="Data ostatniej raty"
+                               Date="@BankLastInstallmentDate"
+                               DateChanged="OnBankLastInstallmentDateChanged"
+                               Variant="Variant.Outlined"/>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="OnCancelClicked">
+            Anuluj
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnApplyClicked">
+            Zastosuj
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public LoanInstallmentDto? Installment { get; set; }
+    [Parameter] public string BankInstallmentAmountInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> BankInstallmentAmountInputChanged { get; set; }
+    [Parameter] public DateTime? BankLastInstallmentDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> BankLastInstallmentDateChanged { get; set; }
+    [Parameter, EditorRequired] public Func<object> GetDirtyState { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _visible;
+
+    protected override void OnParametersSet()
+    {
+        _visible = Visible;
+    }
+
+    private async Task OnBankInstallmentAmountInputChanged(string value)
+    {
+        BankInstallmentAmountInput = value;
+        await BankInstallmentAmountInputChanged.InvokeAsync(value);
+    }
+
+    private async Task OnBankLastInstallmentDateChanged(DateTime? value)
+    {
+        BankLastInstallmentDate = value;
+        await BankLastInstallmentDateChanged.InvokeAsync(value);
+    }
+
+    private async Task OnCancelClicked()
+    {
+        _visible = false;
+        await VisibleChanged.InvokeAsync(false);
+        await OnCancel.InvokeAsync();
+    }
+
+    private async Task OnApplyClicked() => await OnApply.InvokeAsync();
+
+    private async Task OnMudDialogVisibleChanged(bool value)
+    {
+        _visible = value;
+        await VisibleChanged.InvokeAsync(value);
+    }
+}

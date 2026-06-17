@@ -1,0 +1,82 @@
+@using System.Globalization
+
+<MudPaper Class="@($"pa-3 loan-schedule-toolbar {Class}")" Elevation="0">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2" Class="loan-schedule-toolbar-filters">
+            <MudSelect T="int?" Value="@SelectedYear" ValueChanged="OnSelectedYearChanged" Label="Rok" Dense="true" Variant="Variant.Outlined" Clearable="true" Class="loan-schedule-toolbar-select">
+                <MudSelectItem T="int?" Value="@((int?)null)">Wszystkie lata</MudSelectItem>
+                @foreach (var year in AvailableYears)
+                {
+                    <MudSelectItem T="int?" Value="@year">@year</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="1">
+                <MudChip T="string"
+                         Variant="@GetChipVariant(StatusAll)"
+                         Color="@GetChipColor(StatusAll)"
+                         OnClick="@(() => OnStatusFilterChanged(StatusAll))"
+                         Class="loan-schedule-filter-chip">
+                    Wszystkie
+                </MudChip>
+                <MudChip T="string"
+                         Variant="@GetChipVariant(StatusPaid)"
+                         Color="@GetChipColor(StatusPaid)"
+                         OnClick="@(() => OnStatusFilterChanged(StatusPaid))"
+                         Class="loan-schedule-filter-chip">
+                    Spłacone
+                </MudChip>
+                <MudChip T="string"
+                         Variant="@GetChipVariant(StatusUnpaid)"
+                         Color="@GetChipColor(StatusUnpaid)"
+                         OnClick="@(() => OnStatusFilterChanged(StatusUnpaid))"
+                         Class="loan-schedule-filter-chip">
+                    Niespłacone
+                </MudChip>
+            </MudStack>
+        </MudStack>
+
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.RestartAlt"
+                   OnClick="OnResetFiltersClicked">
+            Reset filtrów
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private const string StatusAll = "all";
+    private const string StatusPaid = "paid";
+    private const string StatusUnpaid = "unpaid";
+
+    [Parameter, EditorRequired] public IReadOnlyList<int> AvailableYears { get; set; } = [];
+    [Parameter] public string Class { get; set; } = string.Empty;
+    [Parameter] public int? SelectedYear { get; set; }
+    [Parameter] public EventCallback<int?> SelectedYearChanged { get; set; }
+    [Parameter] public string StatusFilter { get; set; } = StatusUnpaid;
+    [Parameter] public EventCallback<string> StatusFilterChanged { get; set; }
+    [Parameter] public EventCallback OnResetFilters { get; set; }
+
+    private async Task OnSelectedYearChanged(int? value)
+    {
+        SelectedYear = value;
+        await SelectedYearChanged.InvokeAsync(value);
+    }
+
+    private async Task OnStatusFilterChanged(string value)
+    {
+        StatusFilter = value;
+        await StatusFilterChanged.InvokeAsync(value);
+    }
+
+    private async Task OnResetFiltersClicked() => await OnResetFilters.InvokeAsync();
+
+    private Variant GetChipVariant(string value) => string.Equals(StatusFilter, value, StringComparison.Ordinal)
+        ? Variant.Filled
+        : Variant.Outlined;
+
+    private Color GetChipColor(string value) => string.Equals(StatusFilter, value, StringComparison.Ordinal)
+        ? Color.Primary
+        : Color.Default;
+}

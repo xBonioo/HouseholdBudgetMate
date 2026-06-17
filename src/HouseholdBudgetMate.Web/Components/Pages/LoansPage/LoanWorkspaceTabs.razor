@@ -1,0 +1,119 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests
+@using HouseholdBudgetMate.Abstractions.Enums
+
+<MudTabs Rounded="true"
+         Border="false"
+         Elevation="0"
+         ActivePanelIndex="@((int)ActiveTab)"
+         ActivePanelIndexChanged="OnActivePanelIndexChanged"
+         Class="mt-4 loan-workspace-tabs">
+    <MudTabPanel Text="Podsumowanie" Icon="@Icons.Material.Filled.Analytics">
+        <LoanSummaryHeader Loan="@Loan"
+                           Culture="@Culture"
+                           GetInterestLabel="@GetInterestLabel"
+                           NextInstallmentLabel="@NextInstallmentLabel"
+                           PaidInstallmentsCount="@PaidInstallmentsCount"
+                           OnShowSchedule="@OnShowSchedule"
+                           OnEditLoan="@OnEditLoan" />
+    </MudTabPanel>
+    <MudTabPanel Text="Harmonogram" Icon="@Icons.Material.Filled.CalendarMonth">
+        <LoanScheduleTable Loan="@Loan"
+                           Culture="@Culture"
+                           TogglePaid="@TogglePaid"
+                           Prepay="@Prepay"
+                           ChangeFromBank="@ChangeFromBank"
+                           SyncToMonth="@SyncToMonth"
+                           EditInstallment="@EditInstallment" />
+    </MudTabPanel>
+    <MudTabPanel Text="WIBOR" Icon="@Icons.Material.Filled.TrendingUp">
+        <LoanWiborPanel Loan="@Loan"
+                        Culture="@Culture"
+                        OnSubmit="@OnAddWibor"
+                        RateEffectiveFrom="@RateEffectiveFrom"
+                        RateEffectiveFromChanged="@RateEffectiveFromChanged"
+                        NewReferenceRateInput="@NewReferenceRateInput"
+                        NewReferenceRateInputChanged="@NewReferenceRateInputChanged" />
+    </MudTabPanel>
+    <MudTabPanel Text="Koszty" Icon="@Icons.Material.Filled.ReceiptLong">
+        <LoanCostsPanel Loan="@Loan"
+                        Culture="@Culture"
+                        NewLoanCharge="@NewLoanCharge"
+                        LoanChargeTypes="@LoanChargeTypes"
+                        LoanChargeFrequencies="@LoanChargeFrequencies"
+                        OnSubmit="@OnAddCost"
+                        NewLoanChargeAmountInput="@NewLoanChargeAmountInput"
+                        NewLoanChargeAmountInputChanged="@NewLoanChargeAmountInputChanged"
+                        NewLoanChargeStartDate="@NewLoanChargeStartDate"
+                        NewLoanChargeStartDateChanged="@NewLoanChargeStartDateChanged"
+                        NewLoanChargeEndDate="@NewLoanChargeEndDate"
+                        NewLoanChargeEndDateChanged="@NewLoanChargeEndDateChanged"
+                        ToggleLoanChargeActive="@ToggleLoanChargeActive"
+                        DeleteLoanCharge="@DeleteLoanCharge" />
+    </MudTabPanel>
+    <MudTabPanel Text="Ustawienia" Icon="@Icons.Material.Filled.Settings">
+        <LoanSettingsPanel Loan="@Loan"
+                           EditModel="@EditModel"
+                           GetLoanRootTags="@GetLoanRootTags"
+                           OnSubmit="@OnUpdateLoan"
+                           EditOriginalPrincipalInput="@EditOriginalPrincipalInput"
+                           EditOriginalPrincipalInputChanged="@EditOriginalPrincipalInputChanged"
+                           EditStartDate="@EditStartDate"
+                           EditStartDateChanged="@EditStartDateChanged"
+                           EditEndDate="@EditEndDate"
+                           EditEndDateChanged="@EditEndDateChanged" />
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    [Parameter, EditorRequired] public LoanDto Loan { get; set; } = default!;
+    [Parameter, EditorRequired] public CultureInfo Culture { get; set; } = CultureInfo.InvariantCulture;
+    [Parameter, EditorRequired] public LoanWorkspaceTab ActiveTab { get; set; }
+    [Parameter, EditorRequired] public EventCallback<LoanWorkspaceTab> ActiveTabChanged { get; set; }
+    [Parameter, EditorRequired] public Func<LoanDto, string> GetInterestLabel { get; set; } = default!;
+    [Parameter, EditorRequired] public string NextInstallmentLabel { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public int PaidInstallmentsCount { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnShowSchedule { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnEditLoan { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnAddWibor { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnAddCost { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnUpdateLoan { get; set; }
+    [Parameter, EditorRequired] public EventCallback<LoanInstallmentDto> TogglePaid { get; set; }
+    [Parameter, EditorRequired] public EventCallback<LoanInstallmentDto> Prepay { get; set; }
+    [Parameter, EditorRequired] public EventCallback<LoanInstallmentDto> ChangeFromBank { get; set; }
+    [Parameter, EditorRequired] public EventCallback<LoanInstallmentDto> SyncToMonth { get; set; }
+    [Parameter, EditorRequired] public EventCallback<LoanInstallmentDto> EditInstallment { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<LoanChargeType> LoanChargeTypes { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<LoanChargeFrequencyType> LoanChargeFrequencies { get; set; } = [];
+    [Parameter, EditorRequired] public CreateLoanChargeRequest NewLoanCharge { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback<LoanChargeDto> ToggleLoanChargeActive { get; set; }
+    [Parameter, EditorRequired] public EventCallback<int> DeleteLoanCharge { get; set; }
+    [Parameter, EditorRequired] public UpdateLoanRequest EditModel { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<int?, IReadOnlyList<TagDto>> GetLoanRootTags { get; set; } = default!;
+    [Parameter] public string EditOriginalPrincipalInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> EditOriginalPrincipalInputChanged { get; set; }
+    [Parameter] public DateTime? EditStartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> EditStartDateChanged { get; set; }
+    [Parameter] public DateTime? EditEndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> EditEndDateChanged { get; set; }
+    [Parameter] public DateTime? RateEffectiveFrom { get; set; }
+    [Parameter] public EventCallback<DateTime?> RateEffectiveFromChanged { get; set; }
+    [Parameter] public string NewReferenceRateInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> NewReferenceRateInputChanged { get; set; }
+    [Parameter] public string NewLoanChargeAmountInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> NewLoanChargeAmountInputChanged { get; set; }
+    [Parameter] public DateTime? NewLoanChargeStartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> NewLoanChargeStartDateChanged { get; set; }
+    [Parameter] public DateTime? NewLoanChargeEndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> NewLoanChargeEndDateChanged { get; set; }
+
+    private async Task OnActivePanelIndexChanged(int value)
+    {
+        ActiveTab = Enum.IsDefined(typeof(LoanWorkspaceTab), value)
+            ? (LoanWorkspaceTab)value
+            : LoanWorkspaceTab.Summary;
+        await ActiveTabChanged.InvokeAsync(ActiveTab);
+    }
+}

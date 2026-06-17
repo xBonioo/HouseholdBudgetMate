@@ -1,0 +1,17 @@
+<MudPaper Class="pa-4 mt-4 hb-panel loan-selection-prompt">
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.h6">Wybierz kredyt, żeby zobaczyć szczegóły</MudText>
+        <MudText Typo="Typo.body2" Class="hb-muted">
+            Zaznacz kredyt z listy po lewej albo dodaj nowy, jeśli jeszcze go tu nie ma.
+        </MudText>
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">
+                Harmonogram, WIBOR, koszty i ustawienia pojawią się po wyborze kredytu
+            </MudChip>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public EventCallback OnCreateLoan { get; set; }
+}

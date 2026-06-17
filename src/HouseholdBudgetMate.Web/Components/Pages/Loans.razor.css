@@ -1,0 +1,81 @@
+.loan-selection-prompt {
+    max-width: 56rem;
+}
+
+.loan-workspace-tabs {
+    margin-top: 1rem;
+}
+
+.loan-summary-header {
+    gap: 1rem;
+}
+
+.loan-summary-actions {
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.loan-schedule-toolbar {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0.5rem;
+}
+
+.loan-schedule-toolbar-filters {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.loan-schedule-toolbar-select {
+    min-width: 12rem;
+}
+
+.loan-schedule-table {
+    overflow-x: auto;
+}
+
+.loan-schedule-actions-column {
+    white-space: nowrap;
+}
+
+.loan-schedule-row-next {
+    font-weight: 600;
+}
+
+.loan-schedule-row-paid {
+    opacity: 0.75;
+}
+
+@media (max-width: 960px) {
+    .loan-summary-header {
+        align-items: flex-start;
+    }
+
+    .loan-summary-actions {
+        justify-content: flex-start;
+    }
+
+    .loan-schedule-toolbar {
+        padding: 0.75rem;
+    }
+
+    .loan-schedule-toolbar-select {
+        min-width: 10rem;
+        flex: 1 1 10rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .loan-schedule-toolbar-filters {
+        width: 100%;
+    }
+
+    .loan-schedule-toolbar-select {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .loan-schedule-actions-column {
+        white-space: normal;
+    }
+}

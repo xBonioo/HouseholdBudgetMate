@@ -1,0 +1,70 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+@using HouseholdBudgetMate.Abstractions.Enums
+
+<MudPaper Class="pa-4 hb-panel">
+    @if (Loan.LoanType != LoanType.Mortgage)
+    {
+        <MudText Typo="Typo.body2" Class="hb-muted">Ten kredyt nie korzysta z WIBOR, więc ta zakładka nie ma dodatkowych danych.</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.h6">Aktualizacja WIBOR</MudText>
+        <ActionForm OnSubmit="@OnSubmit">
+            <MudGrid Class="mt-2">
+                <MudItem xs="12" md="3">
+                    <MudDatePicker Label="Obowiązuje od" Date="@RateEffectiveFrom"
+                                   DateChanged="OnRateEffectiveFromChanged" Variant="Variant.Outlined"/>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField T="string" Value="@NewReferenceRateInput" ValueChanged="OnNewReferenceRateInputChanged" Label="Nowy WIBOR %"
+                                  Variant="Variant.Outlined"/>
+                </MudItem>
+                <MudItem xs="12" md="3" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">
+                        Aktualizuj WIBOR
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </ActionForm>
+
+        <MudTable Items="@Loan.RateEntries.OrderByDescending(x => x.EffectiveFrom)" Dense="true"
+                  Hover="true" Class="mt-3">
+            <HeaderContent>
+                <MudTh>Data od</MudTh>
+                <MudTh>WIBOR %</MudTh>
+            </HeaderContent>
+            <NoRecordsContent>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="ma-3">
+                    Brak historii WIBOR dla tego kredytu.
+                </MudAlert>
+            </NoRecordsContent>
+            <RowTemplate Context="entry">
+                <MudTd>@entry.EffectiveFrom.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd>@entry.ReferenceRate.ToString("0.##", Culture)</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public LoanDto Loan { get; set; } = default!;
+    [Parameter, EditorRequired] public CultureInfo Culture { get; set; } = CultureInfo.InvariantCulture;
+    [Parameter, EditorRequired] public EventCallback OnSubmit { get; set; }
+    [Parameter] public DateTime? RateEffectiveFrom { get; set; }
+    [Parameter] public EventCallback<DateTime?> RateEffectiveFromChanged { get; set; }
+    [Parameter] public string NewReferenceRateInput { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> NewReferenceRateInputChanged { get; set; }
+
+    private async Task OnRateEffectiveFromChanged(DateTime? value)
+    {
+        RateEffectiveFrom = value;
+        await RateEffectiveFromChanged.InvokeAsync(value);
+    }
+
+    private async Task OnNewReferenceRateInputChanged(string value)
+    {
+        NewReferenceRateInput = value;
+        await NewReferenceRateInputChanged.InvokeAsync(value);
+    }
+}

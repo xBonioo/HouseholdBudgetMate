@@ -186,6 +186,20 @@ public sealed class ApplyLoanPrepaymentRequestValidator : AbstractValidator<Appl
     }
 }
 
+public sealed class ApplyLoanInstallmentAmountChangeRequestValidator : AbstractValidator<ApplyLoanInstallmentAmountChangeRequest>
+{
+    public ApplyLoanInstallmentAmountChangeRequestValidator()
+    {
+        RuleFor(x => x.LoanInstallmentId).GreaterThan(0);
+        RuleFor(x => x.InstallmentAmount)
+            .GreaterThan(0)
+            .WithMessage("Installment amount must be greater than zero.");
+        RuleFor(x => x.LastInstallmentDate)
+            .NotEmpty()
+            .WithMessage("Last installment date is required.");
+    }
+}
+
 public sealed class CreateLoanChargeRequestValidator : AbstractValidator<CreateLoanChargeRequest>
 {
     public CreateLoanChargeRequestValidator()

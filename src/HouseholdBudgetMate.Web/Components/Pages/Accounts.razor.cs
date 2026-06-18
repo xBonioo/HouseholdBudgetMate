@@ -770,16 +770,16 @@ public partial class Accounts
 
     private bool IsApplicableForSelectedMonthBalance(AccountDto account)
     {
+        if (!account.IsArchived)
+        {
+            return true;
+        }
+
         var nextMonthStartUtc = new DateTime(_selectedYear, _selectedMonth, 1, 0, 0, 0, DateTimeKind.Utc)
             .AddMonths(1);
         if (account.ActiveFromUtc is not null && account.ActiveFromUtc >= nextMonthStartUtc)
         {
             return false;
-        }
-
-        if (!account.IsArchived)
-        {
-            return true;
         }
 
         return (account.ArchivedAtUtc ?? account.UpdatedAtUtc) >= nextMonthStartUtc;

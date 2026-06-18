@@ -197,6 +197,12 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsCode.Should().Contain(PreviousClosingBalanceGuidance);
         accountsCode.Should().Contain(StoredZeroBalanceGuidance);
 
+        var balanceApplicability = ExtractMethodBlock(
+            accountsCode,
+            "private bool IsApplicableForSelectedMonthBalance(AccountDto account)");
+        balanceApplicability.Should().Contain("if (!account.IsArchived)");
+        AssertOccursBefore(balanceApplicability, "if (!account.IsArchived)", "account.ActiveFromUtc");
+
         AssertNoSafeToSpend(surface);
     }
 

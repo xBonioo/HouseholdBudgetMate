@@ -1,7 +1,7 @@
 ---
 change_id: ai-code-review
 title: AI Code Review
-status: implementing
+status: impl_reviewed
 created: 2026-06-19
 updated: 2026-06-22
 ---

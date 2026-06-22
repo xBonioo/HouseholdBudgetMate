@@ -1,0 +1,16 @@
+diff --git a/src/HouseholdBudgetMate.Application/Services/LoanService.cs b/src/HouseholdBudgetMate.Application/Services/LoanService.cs
+index 1111111..2222222 100644
+--- a/src/HouseholdBudgetMate.Application/Services/LoanService.cs
++++ b/src/HouseholdBudgetMate.Application/Services/LoanService.cs
+@@ -40,6 +40,10 @@ public sealed class LoanService
+     public async Task<IReadOnlyList<LoanDto>> SearchAsync(string phrase, CancellationToken cancellationToken)
+     {
+         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+-        return await dbContext.Loans.Where(x => x.Name.Contains(phrase)).SelectLoan().ToListAsync(cancellationToken);
++        var sql = $"SELECT * FROM Loans WHERE Name LIKE '%{phrase}%'";
++        return await dbContext.Loans
++            .FromSqlRaw(sql)
++            .IgnoreQueryFilters()
++            .SelectLoan().ToListAsync(cancellationToken);
+     }
+ }

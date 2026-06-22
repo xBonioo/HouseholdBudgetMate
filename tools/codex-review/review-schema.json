@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "properties": {
+    "scores": {
+      "type": "object",
+      "properties": {
+        "implementationCorrectness": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "idiomaticity": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "complexity": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "testRiskCoverage": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "securitySafety": { "type": "integer", "minimum": 1, "maximum": 10 }
+      },
+      "required": [
+        "implementationCorrectness",
+        "idiomaticity",
+        "complexity",
+        "testRiskCoverage",
+        "securitySafety"
+      ],
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "enum": [
+              "implementationCorrectness",
+              "idiomaticity",
+              "complexity",
+              "testRiskCoverage",
+              "securitySafety"
+            ]
+          },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "ruleId": { "type": "string" },
+          "location": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["criterion", "severity", "ruleId", "location", "detail"],
+        "additionalProperties": false
+      }
+    },
+    "verdict": { "type": "string", "enum": ["pass", "fail"] },
+    "summary": { "type": "string" }
+  },
+  "required": ["scores", "findings", "verdict", "summary"],
+  "additionalProperties": false
+}

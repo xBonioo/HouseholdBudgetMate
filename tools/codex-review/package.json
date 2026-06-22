@@ -1,0 +1,20 @@
+{
+  "name": "household-budget-mate-codex-review",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "review": "node review.mjs",
+    "review:demo": "node review.mjs --demo",
+    "test": "node --test test/review-contract.test.mjs",
+    "eval": "npx --yes promptfoo@0.121.17 eval -c promptfooconfig.yaml",
+    "eval:contract": "npx --yes promptfoo@0.121.17 eval -c promptfooconfig.yaml -r file://contract-provider.mjs --no-progress-bar --no-table --no-cache --no-write",
+    "eval:ci": "npx --yes promptfoo@0.121.17 eval -c promptfooconfig.yaml --no-progress-bar --no-table --no-cache -o artifacts/promptfoo-results.json"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "0.141.0"
+  }
+}

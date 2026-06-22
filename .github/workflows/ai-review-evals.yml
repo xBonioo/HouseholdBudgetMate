@@ -1,0 +1,53 @@
+name: AI Review Evals
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - tools/codex-review/**
+      - .github/workflows/ai-review-evals.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: tools/codex-review
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CODEX_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PROMPTFOO_PASS_RATE_THRESHOLD: 100
+      PROMPTFOO_EVAL_TIMEOUT_MS: 180000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/codex-review/package-lock.json
+
+      - name: Install reviewer and eval harness
+        run: npm ci
+
+      - name: Run deterministic contract tests
+        run: npm test
+
+      - name: Validate Promptfoo configuration and assertions
+        run: npm run eval:contract
+
+      - name: Compare three review models
+        run: npm run eval:ci
+
+      - name: Upload model comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-review-evals-${{ github.run_id }}
+          path: tools/codex-review/artifacts/promptfoo-results.json

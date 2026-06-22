@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Household Budget Mate AI code-review model comparison
+
+prompts:
+  - file://eval-prompt.txt
+
+providers:
+  - id: openai:responses:gpt-5.4-mini
+    label: gpt-5.4-mini
+  - id: openai:responses:gpt-5.4
+    label: gpt-5.4
+  - id: openai:responses:gpt-5.5
+    label: gpt-5.5
+
+defaultTest:
+  options:
+    response_format: file://review-schema.json
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const scores = output.scores;
+        return scores && Object.values(scores).length === 5 &&
+          Object.values(scores).every((score) => Number.isInteger(score) && score >= 1 && score <= 10);
+
+tests:
+  - description: Rejects injection, household-isolation bypass, and missing tests
+    vars:
+      diff: file://evals/insecure-loan-query.diff
+    assert:
+      - type: javascript
+        value: output.verdict === 'fail'
+      - type: javascript
+        value: output.findings.some((finding) => finding.ruleId === 'sql-injection')
+      - type: javascript
+        value: output.findings.some((finding) => finding.ruleId === 'authorization-boundary')
+      - type: javascript
+        value: output.findings.some((finding) => finding.ruleId === 'missing-tests')
+  - description: Accepts a narrow ordering change protected by a focused test
+    vars:
+      diff: file://evals/safe-account-ordering.diff
+    assert:
+      - type: javascript
+        value: output.verdict === 'pass'
+      - type: javascript
+        value: output.findings.every((finding) => !['critical', 'high'].includes(finding.severity))

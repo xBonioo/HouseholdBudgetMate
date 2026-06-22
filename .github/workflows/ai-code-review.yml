@@ -1,0 +1,93 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/codex-review
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CODEX_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      REVIEW_MODEL: gpt-5.4
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/codex-review/package-lock.json
+
+      - name: Install reviewer
+        run: npm ci
+
+      - name: Verify review contract
+        run: npm test
+
+      - name: Capture pull-request diff
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --no-ext-diff --unified=80 "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" > pr.diff
+          else
+            git diff --no-ext-diff --unified=80 HEAD^...HEAD > pr.diff
+          fi
+
+      - name: Run structured AI review
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title || 'Manual workflow run' }}
+          PR_DESCRIPTION: ${{ github.event.pull_request.body || 'No pull request description was provided.' }}
+        run: node review.mjs < pr.diff > review-result.json
+
+      - name: Publish job summary
+        shell: bash
+        run: |
+          {
+            echo "## AI Code Review"
+            echo
+            echo '```json'
+            cat review-result.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          {
+            echo "## AI Code Review"
+            echo
+            echo '```json'
+            cat review-result.json
+            echo '```'
+          } > review-comment.md
+          gh pr comment "$PR_NUMBER" --body-file review-comment.md
+
+      - name: Upload review evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-code-review-${{ github.run_id }}
+          path: |
+            tools/codex-review/review-result.json
+            tools/codex-review/pr.diff
+
+      - name: Enforce Definition of Done
+        run: node gate.mjs review-result.json

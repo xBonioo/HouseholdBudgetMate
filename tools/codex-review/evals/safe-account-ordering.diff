@@ -1,0 +1,25 @@
+diff --git a/src/HouseholdBudgetMate.Application/Services/AccountService.cs b/src/HouseholdBudgetMate.Application/Services/AccountService.cs
+index 1111111..2222222 100644
+--- a/src/HouseholdBudgetMate.Application/Services/AccountService.cs
++++ b/src/HouseholdBudgetMate.Application/Services/AccountService.cs
+@@ -25,7 +25,9 @@ public sealed class AccountService
+     public async Task<IReadOnlyList<AccountDto>> GetAllAsync(CancellationToken cancellationToken)
+     {
+         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+-        return await dbContext.Accounts.SelectAccount().ToListAsync(cancellationToken);
++        return await dbContext.Accounts
++            .OrderBy(x => x.Order)
++            .SelectAccount().ToListAsync(cancellationToken);
+     }
+ }
+diff --git a/src/HouseholdBudgetMate.Tests/Tests/Services/AccountServiceTests.cs b/src/HouseholdBudgetMate.Tests/Tests/Services/AccountServiceTests.cs
+index 3333333..4444444 100644
+--- a/src/HouseholdBudgetMate.Tests/Tests/Services/AccountServiceTests.cs
++++ b/src/HouseholdBudgetMate.Tests/Tests/Services/AccountServiceTests.cs
+@@ -50,6 +50,8 @@ public sealed class AccountServiceTests
+         var result = await service.GetAllAsync(CancellationToken.None);
+
++        Assert.Equal(new[] { 1, 2, 3 }, result.Select(x => x.Order));
+         Assert.Equal(3, result.Count);
+     }
+ }

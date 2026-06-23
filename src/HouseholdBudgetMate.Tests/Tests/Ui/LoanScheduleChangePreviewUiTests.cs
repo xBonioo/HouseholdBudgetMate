@@ -43,6 +43,38 @@ public sealed class LoanScheduleChangePreviewUiTests : BunitContext
     }
 
     [Fact]
+    public void YearPanel_Should_Expand_First_Visible_Year_When_Affected_Year_Has_Only_Paid_Rows()
+    {
+        var rows = new[]
+        {
+            new LoanScheduleComparisonRowDto
+            {
+                DueDate = new DateOnly(2026, 12, 15),
+                State = LoanScheduleComparisonRowState.Unchanged,
+                BeforeIsPaid = true,
+                AfterIsPaid = true,
+                Before = new ScheduleRowDto(2026, 12, new DateOnly(2026, 12, 15), 3_000m, 2_100m, 900m),
+                After = new ScheduleRowDto(2026, 12, new DateOnly(2026, 12, 15), 3_000m, 2_100m, 900m)
+            },
+            new LoanScheduleComparisonRowDto
+            {
+                DueDate = new DateOnly(2027, 1, 15),
+                State = LoanScheduleComparisonRowState.Changed,
+                Before = new ScheduleRowDto(2027, 1, new DateOnly(2027, 1, 15), 3_000m, 2_120m, 880m),
+                After = new ScheduleRowDto(2027, 1, new DateOnly(2027, 1, 15), 2_950m, 2_110m, 840m)
+            }
+        };
+
+        var cut = Render<LoanSchedulePreviewYearPanel>(parameters => parameters
+            .Add(component => component.Rows, rows)
+            .Add(component => component.AffectedFrom, new DateOnly(2026, 12, 15)));
+
+        cut.Markup.Should().Contain("2027");
+        cut.Markup.Should().Contain("01.2027");
+        cut.Markup.Should().NotContain("12.2026");
+    }
+
+    [Fact]
     public void ComparisonTable_Should_Render_Before_And_After_Columns()
     {
         var cut = Render<LoanSchedulePreviewTable>(parameters => parameters

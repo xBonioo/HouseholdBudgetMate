@@ -1018,7 +1018,7 @@ public sealed class LoanService(
             SourceVersion = sourceVersion,
             BeforeSummary = BuildLoanScheduleSummary(beforeDto),
             AfterSummary = BuildLoanScheduleSummary(afterDto),
-            Rows = BuildLoanScheduleComparisonRows(beforeDto.Installments, afterDto.Installments)
+            Rows = BuildLoanScheduleComparisonRows(beforeDto, afterDto)
         };
     }
 
@@ -1030,10 +1030,14 @@ public sealed class LoanService(
             .ThenBy(x => x.Year)
             .ToList();
 
+        var nextInstallment = openInstallments.FirstOrDefault(x => !x.IsPaid);
+
         return new LoanScheduleSummaryDto
         {
             RemainingPrincipal = loan.RemainingPrincipal,
-            NextInstallment = openInstallments.FirstOrDefault(x => !x.IsPaid)?.Amount ?? 0m,
+            NextInstallment = nextInstallment is null
+                ? 0m
+                : ToScheduleRow(nextInstallment, openInstallments, loan.Charges).Amount,
             TotalFutureInterest = decimal.Round(
                 openInstallments.Where(x => !x.IsPaid).Sum(x => x.InterestAmount),
                 2,
@@ -1044,18 +1048,21 @@ public sealed class LoanService(
     }
 
     private static IReadOnlyList<LoanScheduleComparisonRowDto> BuildLoanScheduleComparisonRows(
-        IReadOnlyList<LoanInstallmentDto> beforeRows,
-        IReadOnlyList<LoanInstallmentDto> afterRows)
+        LoanDto beforeLoan,
+        LoanDto afterLoan)
     {
+        var beforeRows = beforeLoan.Installments;
+        var afterRows = afterLoan.Installments;
+
         var beforeByDueDate = beforeRows
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Id)
-            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x));
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x, beforeRows, beforeLoan.Charges));
 
         var afterByDueDate = afterRows
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Id)
-            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x));
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x, afterRows, afterLoan.Charges));
 
         var dueDates = beforeByDueDate.Keys
             .Union(afterByDueDate.Keys)
@@ -1091,16 +1098,45 @@ public sealed class LoanService(
         return rows;
     }
 
-    private static ScheduleRowDto ToScheduleRow(LoanInstallmentDto installment)
+    private static ScheduleRowDto ToScheduleRow(
+        LoanInstallmentDto installment,
+        IReadOnlyList<LoanInstallmentDto> installments,
+        IReadOnlyList<LoanChargeDto> charges)
     {
+        var chargeAmount = CalculateChargeAmount(installment, installments, charges);
+        var totalAmount = decimal.Round(
+            installment.PrincipalAmount + installment.InterestAmount + chargeAmount,
+            2,
+            MidpointRounding.AwayFromZero);
+
         return new ScheduleRowDto(
             installment.Year,
             installment.Month,
             installment.DueDate,
-            installment.Amount,
+            totalAmount,
             installment.PrincipalAmount,
             installment.InterestAmount,
-            decimal.Round(installment.Amount - installment.PrincipalAmount - installment.InterestAmount, 2, MidpointRounding.AwayFromZero));
+            chargeAmount);
+    }
+
+    private static decimal CalculateChargeAmount(
+        LoanInstallmentDto installment,
+        IReadOnlyList<LoanInstallmentDto> installments,
+        IReadOnlyList<LoanChargeDto> charges)
+    {
+        var outstandingBalance = installments
+            .Where(x => x.DueDate >= installment.DueDate)
+            .Sum(x => x.PrincipalAmount);
+
+        return decimal.Round(
+            charges
+                .Where(x => x.IsActive)
+                .Where(x => IsChargeDueInMonth(x, installment.Year, installment.Month))
+                .Sum(x => x.IsPercentageBased
+                    ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
+                    : x.Amount),
+            2,
+            MidpointRounding.AwayFromZero);
     }
 
     private static void AddPreviewInstallments(Loan loan, IEnumerable<ScheduleRowDto> schedule)
@@ -1756,6 +1792,24 @@ public sealed class LoanService(
             (int)LoanChargeFrequencyType.OneTime => charge.StartDate.Year == year && charge.StartDate.Month == month,
             (int)LoanChargeFrequencyType.Monthly => true,
             (int)LoanChargeFrequencyType.Yearly => charge.StartDate.Month == month && year >= charge.StartDate.Year,
+            _ => false
+        };
+    }
+
+    private static bool IsChargeDueInMonth(LoanChargeDto charge, int year, int month)
+    {
+        var monthStart = new DateOnly(year, month, 1);
+        var monthEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        if (charge.StartDate > monthEnd || (charge.EndDate.HasValue && charge.EndDate.Value < monthStart))
+        {
+            return false;
+        }
+
+        return charge.FrequencyType switch
+        {
+            LoanChargeFrequencyType.OneTime => charge.StartDate.Year == year && charge.StartDate.Month == month,
+            LoanChargeFrequencyType.Monthly => true,
+            LoanChargeFrequencyType.Yearly => charge.StartDate.Month == month && year >= charge.StartDate.Year,
             _ => false
         };
     }

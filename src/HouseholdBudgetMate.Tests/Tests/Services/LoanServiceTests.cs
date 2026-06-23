@@ -1338,13 +1338,18 @@ public sealed class LoanServiceTests
         var january2027Before = withCharge.Installments.Single(x => x.DueDate == new DateOnly(2027, 1, 15));
         var chargeBefore = january2027Before.Amount - january2027Before.PrincipalAmount - january2027Before.InterestAmount;
 
+        var request = new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = january2027Before.Id,
+            Amount = 20_000m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        };
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None);
+        var previewRow = preview.Rows.Single(x => x.DueDate == january2027Before.DueDate);
+
+        request.ExpectedScheduleVersion = preview.SourceVersion;
         var updated = await service.ApplyLoanPrepaymentAsync(
-            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
-            {
-                LoanInstallmentId = january2027Before.Id,
-                Amount = 20_000m,
-                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-            }),
+            request,
             CancellationToken.None);
 
         var january2027After = updated.Installments.Single(x => x.DueDate == new DateOnly(2027, 1, 15));
@@ -1352,7 +1357,71 @@ public sealed class LoanServiceTests
 
         Assert.Equal(396.39m, chargeBefore);
         Assert.Equal(386.39m, chargeAfter);
+        Assert.Equal(chargeBefore, previewRow.Before!.ChargesAmount);
+        Assert.Equal(chargeAfter, previewRow.After!.ChargesAmount);
+        Assert.Equal(january2027Before.PrincipalAmount + january2027Before.InterestAmount + chargeBefore, previewRow.Before.Amount);
+        Assert.Equal(january2027After.PrincipalAmount + january2027After.InterestAmount + chargeAfter, previewRow.After.Amount);
         Assert.True(chargeAfter < chargeBefore);
+    }
+
+    [Fact]
+    public async Task PreviewApplyLoanPrepaymentAsync_Should_Include_Fixed_And_Percentage_Charges_In_Summary()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka preview koszty",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Prowizja miesięczna",
+            ChargeType = LoanChargeType.Other,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 25m,
+            IsActive = true,
+            StartDate = new DateOnly(2026, 6, 1)
+        }, CancellationToken.None);
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie od salda",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 0.05m,
+            IsPercentageBased = true,
+            StartDate = new DateOnly(2026, 6, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        var withCharges = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
+        var targetInstallment = withCharges.Installments.Single(x => x.DueDate == new DateOnly(2027, 1, 15));
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(
+            new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = targetInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            },
+            CancellationToken.None);
+        var previewRow = preview.Rows.Single(x => x.DueDate == targetInstallment.DueDate);
+
+        Assert.Equal(421.39m, previewRow.Before!.ChargesAmount);
+        Assert.Equal(targetInstallment.PrincipalAmount + targetInstallment.InterestAmount + previewRow.Before.ChargesAmount, previewRow.Before.Amount);
+        Assert.Equal(preview.Rows.First(x => !x.BeforeIsPaid).Before!.Amount, preview.BeforeSummary.NextInstallment);
+        Assert.True(previewRow.After!.ChargesAmount < previewRow.Before.ChargesAmount);
     }
 
     /// <summary>
@@ -2657,11 +2726,14 @@ public sealed class LoanServiceTests
             .ThenBy(x => x.Month)
             .ThenBy(x => x.Year)
             .ToList();
+        var nextInstallment = installments.FirstOrDefault(x => !x.IsPaid);
 
         return new LoanScheduleSummaryDto
         {
             RemainingPrincipal = loan.RemainingPrincipal,
-            NextInstallment = installments.FirstOrDefault(x => !x.IsPaid)?.Amount ?? 0m,
+            NextInstallment = nextInstallment is null
+                ? 0m
+                : ToScheduleRow(nextInstallment, installments, loan.Charges).Amount,
             TotalFutureInterest = decimal.Round(
                 installments.Where(x => !x.IsPaid).Sum(x => x.InterestAmount),
                 2,
@@ -2676,7 +2748,7 @@ public sealed class LoanServiceTests
         var beforeRows = before.Installments
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Id)
-            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x));
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x, before.Installments, before.Charges));
         var beforePaidByDueDate = before.Installments
             .GroupBy(x => x.DueDate)
             .ToDictionary(x => x.Key, x => x.Any(y => y.IsPaid));
@@ -2684,7 +2756,7 @@ public sealed class LoanServiceTests
         var afterRows = after.Installments
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Id)
-            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x));
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x, after.Installments, after.Charges));
         var afterPaidByDueDate = after.Installments
             .GroupBy(x => x.DueDate)
             .ToDictionary(x => x.Key, x => x.Any(y => y.IsPaid));
@@ -2715,15 +2787,59 @@ public sealed class LoanServiceTests
         return rows;
     }
 
-    private static ScheduleRowDto ToScheduleRow(LoanInstallmentDto installment)
+    private static ScheduleRowDto ToScheduleRow(
+        LoanInstallmentDto installment,
+        IReadOnlyList<LoanInstallmentDto> installments,
+        IReadOnlyList<LoanChargeDto> charges)
     {
+        var chargeAmount = CalculateChargeAmount(installment, installments, charges);
+
         return new ScheduleRowDto(
             installment.Year,
             installment.Month,
             installment.DueDate,
-            installment.Amount,
+            decimal.Round(installment.PrincipalAmount + installment.InterestAmount + chargeAmount, 2, MidpointRounding.AwayFromZero),
             installment.PrincipalAmount,
-            installment.InterestAmount);
+            installment.InterestAmount,
+            chargeAmount);
+    }
+
+    private static decimal CalculateChargeAmount(
+        LoanInstallmentDto installment,
+        IReadOnlyList<LoanInstallmentDto> installments,
+        IReadOnlyList<LoanChargeDto> charges)
+    {
+        var outstandingBalance = installments
+            .Where(x => x.DueDate >= installment.DueDate)
+            .Sum(x => x.PrincipalAmount);
+
+        return decimal.Round(
+            charges
+                .Where(x => x.IsActive)
+                .Where(x => IsChargeDueInMonth(x, installment.Year, installment.Month))
+                .Sum(x => x.IsPercentageBased
+                    ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
+                    : x.Amount),
+            2,
+            MidpointRounding.AwayFromZero);
+    }
+
+    private static bool IsChargeDueInMonth(LoanChargeDto charge, int year, int month)
+    {
+        var monthStart = new DateOnly(year, month, 1);
+        var monthEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        if (charge.StartDate > monthEnd || (charge.EndDate.HasValue && charge.EndDate.Value < monthStart))
+        {
+            return false;
+        }
+
+        return charge.FrequencyType switch
+        {
+            LoanChargeFrequencyType.OneTime => charge.StartDate.Year == year && charge.StartDate.Month == month,
+            LoanChargeFrequencyType.Monthly => true,
+            LoanChargeFrequencyType.Yearly => charge.StartDate.Month == month && year >= charge.StartDate.Year,
+            _ => false
+        };
     }
 
     private sealed record ExpectedComparisonRow(

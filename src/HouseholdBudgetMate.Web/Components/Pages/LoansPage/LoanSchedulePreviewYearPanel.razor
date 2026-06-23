@@ -63,7 +63,7 @@
         _rowsSnapshot = Rows;
         _affectedFromSnapshot = AffectedFrom;
         var visibleRows = VisibleRows;
-        var expandedYear = AffectedFrom?.Year ?? visibleRows.FirstOrDefault()?.DueDate.Year;
+        var expandedYear = ResolveDefaultExpandedYear(visibleRows);
         _yearGroups.Clear();
 
         foreach (var yearGroup in visibleRows
@@ -89,6 +89,25 @@
 
         group.IsExpanded = expanded;
         return Task.CompletedTask;
+    }
+
+    private int? ResolveDefaultExpandedYear(IReadOnlyList<LoanScheduleComparisonRowDto> visibleRows)
+    {
+        if (visibleRows.Count == 0)
+        {
+            return null;
+        }
+
+        if (AffectedFrom.HasValue)
+        {
+            var firstVisibleAffectedRow = visibleRows.FirstOrDefault(x => x.DueDate >= AffectedFrom.Value);
+            if (firstVisibleAffectedRow is not null)
+            {
+                return firstVisibleAffectedRow.DueDate.Year;
+            }
+        }
+
+        return visibleRows[0].DueDate.Year;
     }
 
     private sealed class YearGroup(int year, IReadOnlyList<LoanScheduleComparisonRowDto> rows, decimal beforeTotal, decimal afterTotal, bool isExpanded)

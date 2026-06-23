@@ -31,6 +31,9 @@ public sealed class LoanPrepaymentMigrationTests
         sql.Should().Contain("make_date(matched.\"Year\", matched.\"Month\", 1)");
         sql.Should().Contain("NOW()");
         sql.Should().Contain("left(e.\"Name\", length(e.\"Name\") - length(' - nadpłata'))");
+        sql.Should().Contain("c.\"Name\" = 'Kredyt'");
+        sql.Should().Contain("e.\"PlannedAmount\" = 0");
+        sql.Should().Contain("e.\"ShowRemainingInUI\" = TRUE");
         sql.Should().Contain("WHERE matched.\"MatchCount\" = 1");
     }
 
@@ -42,6 +45,7 @@ public sealed class LoanPrepaymentMigrationTests
 
         migration.Should().Contain("INSERT INTO \"LoanPrepayments\"");
         migration.Should().Contain("mp.\"UserId\" = e.\"UserId\"");
+        migration.Should().Contain("c.\"Name\" = 'Kredyt'");
         migration.Should().Contain("l.\"UserId\" = e.\"UserId\"");
         migration.Should().Contain("l.\"Name\" = left(e.\"Name\", length(e.\"Name\") - length(' - nadpłata'))");
         migration.Should().Contain("(l.\"TagId\" IS NULL AND e.\"TagId\" IS NULL)");
@@ -49,6 +53,8 @@ public sealed class LoanPrepaymentMigrationTests
         migration.Should().Contain("e.\"LoanInstallmentId\" IS NULL");
         migration.Should().Contain("e.\"RegularExpenseDefinitionId\" IS NULL");
         migration.Should().Contain("e.\"ActualAmount\" > 0");
+        migration.Should().Contain("e.\"PlannedAmount\" = 0");
+        migration.Should().Contain("e.\"ShowRemainingInUI\" = TRUE");
         migration.Should().Contain("e.\"Name\" LIKE '% - nadpłata'");
         migration.Should().Contain("e.\"IsDeleted\" = FALSE");
         migration.Should().Contain("COUNT(*) AS \"MatchCount\"");
@@ -74,15 +80,23 @@ public sealed class LoanPrepaymentMigrationTests
                 "Year" INTEGER NOT NULL,
                 "Month" INTEGER NOT NULL
             );
+            CREATE TABLE "Categories" (
+                "Id" INTEGER NOT NULL,
+                "UserId" TEXT NOT NULL,
+                "Name" TEXT NOT NULL
+            );
             CREATE TABLE "Expenses" (
                 "Id" INTEGER NOT NULL,
                 "UserId" TEXT NOT NULL,
                 "MonthPlanId" INTEGER NOT NULL,
                 "Name" TEXT NOT NULL,
+                "CategoryId" INTEGER NOT NULL,
                 "TagId" INTEGER NULL,
                 "LoanInstallmentId" INTEGER NULL,
                 "RegularExpenseDefinitionId" INTEGER NULL,
+                "PlannedAmount" NUMERIC NOT NULL,
                 "ActualAmount" NUMERIC NOT NULL,
+                "ShowRemainingInUI" INTEGER NOT NULL,
                 "IsDeleted" INTEGER NOT NULL
             );
             CREATE TABLE "LoanPrepayments" (
@@ -104,15 +118,22 @@ public sealed class LoanPrepaymentMigrationTests
             INSERT INTO "MonthPlans" ("Id", "UserId", "Year", "Month") VALUES
                 (1, 'owner', 2026, 7),
                 (2, 'other', 2026, 7);
-            INSERT INTO "Expenses" ("Id", "UserId", "MonthPlanId", "Name", "TagId", "LoanInstallmentId", "RegularExpenseDefinitionId", "ActualAmount", "IsDeleted") VALUES
-                (1, 'owner', 1, 'A - nadpĹ‚ata', NULL, NULL, NULL, 100, 0),
-                (2, 'owner', 1, 'A - nadpĹ‚ata', NULL, NULL, NULL, 50, 0),
-                (3, 'owner', 1, 'B - nadpĹ‚ata', 10, NULL, NULL, 200, 0),
-                (4, 'owner', 1, 'Duplicate - nadpĹ‚ata', NULL, NULL, NULL, 300, 0),
-                (5, 'owner', 1, 'A - nadpĹ‚ata', 99, NULL, NULL, 400, 0),
-                (6, 'owner', 1, 'A - nadpĹ‚ata', NULL, NULL, NULL, 0, 0),
-                (7, 'owner', 1, 'A - nadpĹ‚ata', NULL, NULL, NULL, 700, 1),
-                (8, 'other', 2, 'A - nadpĹ‚ata', NULL, NULL, NULL, 800, 0);
+            INSERT INTO "Categories" ("Id", "UserId", "Name") VALUES
+                (1, 'owner', 'Kredyt'),
+                (2, 'owner', 'Inne'),
+                (3, 'other', 'Kredyt');
+            INSERT INTO "Expenses" ("Id", "UserId", "MonthPlanId", "Name", "CategoryId", "TagId", "LoanInstallmentId", "RegularExpenseDefinitionId", "PlannedAmount", "ActualAmount", "ShowRemainingInUI", "IsDeleted") VALUES
+                (1, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 100, 1, 0),
+                (2, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 50, 1, 0),
+                (3, 'owner', 1, 'B - nadpłata', 1, 10, NULL, NULL, 0, 200, 1, 0),
+                (4, 'owner', 1, 'Duplicate - nadpłata', 1, NULL, NULL, NULL, 0, 300, 1, 0),
+                (5, 'owner', 1, 'A - nadpłata', 1, 99, NULL, NULL, 0, 400, 1, 0),
+                (6, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 0, 1, 0),
+                (7, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 700, 1, 1),
+                (8, 'other', 2, 'A - nadpłata', 3, NULL, NULL, NULL, 0, 800, 1, 0),
+                (9, 'owner', 1, 'A - nadpłata', 2, NULL, NULL, NULL, 0, 900, 1, 0),
+                (10, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 25, 1000, 1, 0),
+                (11, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 1100, 0, 0);
             """);
 
         Execute(connection, """
@@ -135,9 +156,13 @@ public sealed class LoanPrepaymentMigrationTests
                 INNER JOIN "MonthPlans" mp
                     ON mp."Id" = e."MonthPlanId"
                     AND mp."UserId" = e."UserId"
+                INNER JOIN "Categories" c
+                    ON c."Id" = e."CategoryId"
+                    AND c."UserId" = e."UserId"
+                    AND c."Name" = 'Kredyt'
                 INNER JOIN "Loans" l
                     ON l."UserId" = e."UserId"
-                    AND l."Name" = substr(e."Name", 1, length(e."Name") - length(' - nadpĹ‚ata'))
+                    AND l."Name" = substr(e."Name", 1, length(e."Name") - length(' - nadpłata'))
                     AND (
                         (l."TagId" IS NULL AND e."TagId" IS NULL)
                         OR l."TagId" = e."TagId"
@@ -145,7 +170,9 @@ public sealed class LoanPrepaymentMigrationTests
                 WHERE e."LoanInstallmentId" IS NULL
                     AND e."RegularExpenseDefinitionId" IS NULL
                     AND e."ActualAmount" > 0
-                    AND e."Name" LIKE '% - nadpĹ‚ata'
+                    AND e."PlannedAmount" = 0
+                    AND e."ShowRemainingInUI" = 1
+                    AND e."Name" LIKE '% - nadpłata'
                     AND e."IsDeleted" = 0
                 GROUP BY e."Id", mp."Year", mp."Month", e."ActualAmount"
             ) matched

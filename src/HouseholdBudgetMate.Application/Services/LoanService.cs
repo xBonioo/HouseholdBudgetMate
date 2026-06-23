@@ -1234,7 +1234,9 @@ public sealed class LoanService(
 
     private static void AppendLoanSnapshot(StringBuilder builder, Loan loan)
     {
-        builder.Append(loan.LoanType).Append('|')
+        builder.Append(loan.Name).Append('|')
+            .Append(loan.TagId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.LoanType).Append('|')
             .Append(loan.InterestMode).Append('|')
             .Append(loan.WiborPeriodType?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
             .Append(loan.Principal.ToString(CultureInfo.InvariantCulture)).Append('|')
@@ -1327,7 +1329,6 @@ public sealed class LoanService(
                 categoryId,
                 loan,
                 expenseName,
-                prepaymentDate,
                 cancellationToken);
 
         if (existingExpense is not null)
@@ -1362,7 +1363,6 @@ public sealed class LoanService(
         int categoryId,
         Loan loan,
         string expenseName,
-        DateOnly prepaymentDate,
         CancellationToken cancellationToken)
     {
         var candidates = await dbContext.Expenses
@@ -1382,17 +1382,7 @@ public sealed class LoanService(
             return currentMetadataMatch;
         }
 
-        var previousPrepaymentTotal = await dbContext.LoanPrepayments
-            .AsNoTracking()
-            .Where(x => x.LoanId == loan.Id)
-            .Where(x => x.PrepaymentDate.Year == prepaymentDate.Year && x.PrepaymentDate.Month == prepaymentDate.Month)
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
-
-        var amountMatches = candidates
-            .Where(x => x.ActualAmount == previousPrepaymentTotal)
-            .ToList();
-
-        return amountMatches.Count == 1 ? amountMatches[0] : null;
+        return null;
     }
 
     private static async Task RegenerateInstallmentsAsync(

@@ -3,7 +3,7 @@
 
 <MudDialog Visible="@Visible"
            VisibleChanged="OnVisibleChanged"
-           Options="@_dialogOptions"
+           Options="@DialogOptions"
            Class="loan-schedule-change-preview-dialog">
     <TitleContent>
         <MudStack Spacing="0">
@@ -65,10 +65,10 @@
 </MudDialog>
 
 @code {
-    private static readonly DialogOptions _dialogOptions = new()
+    private DialogOptions DialogOptions => new()
     {
-        CloseOnEscapeKey = true,
-        CloseButton = true,
+        CloseOnEscapeKey = !IsSubmitting,
+        CloseButton = !IsSubmitting,
         FullWidth = true,
         MaxWidth = MaxWidth.ExtraLarge
     };
@@ -90,6 +90,13 @@
 
     private async Task OnVisibleChanged(bool value)
     {
+        if (!value && IsSubmitting)
+        {
+            Visible = true;
+            await VisibleChanged.InvokeAsync(true);
+            return;
+        }
+
         Visible = value;
         await VisibleChanged.InvokeAsync(value);
     }

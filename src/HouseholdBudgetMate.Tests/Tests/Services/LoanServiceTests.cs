@@ -1365,7 +1365,7 @@ public sealed class LoanServiceTests
     }
 
     [Fact]
-    public async Task ApplyLoanPrepaymentAsync_Should_Accept_Metadata_Changes_After_Preview()
+    public async Task ApplyLoanPrepaymentAsync_Should_Reject_Loan_Metadata_Changes_After_Preview()
     {
         var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
@@ -1383,39 +1383,16 @@ public sealed class LoanServiceTests
             RepaymentDayOfMonth = 15,
             IsActive = true
         }, CancellationToken.None);
-        var charge = await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
-        {
-            LoanId = loan.Id,
-            Name = "Ubezpieczenie",
-            ChargeType = LoanChargeType.Insurance,
-            FrequencyType = LoanChargeFrequencyType.Monthly,
-            Amount = 0.05m,
-            IsPercentageBased = true,
-            StartDate = new DateOnly(2026, 6, 1),
-            IsActive = true
-        }, CancellationToken.None);
-        var firstTargetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
-        loan = await service.ApplyLoanPrepaymentAsync(
-            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
-            {
-                LoanId = loan.Id,
-                LoanInstallmentId = firstTargetInstallment.Id,
-                Amount = 20_000m,
-                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-            }),
-            CancellationToken.None);
-
-        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 9, 15));
+        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
         var request = new ApplyLoanPrepaymentRequest
         {
             LoanId = loan.Id,
             LoanInstallmentId = targetInstallment.Id,
-            Amount = 10_000m,
+            Amount = 20_000m,
             Strategy = LoanPrepaymentStrategyType.ReduceInstallment
         };
         var preview = await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None);
 
-        int metadataTagId;
         await using (var dbContext = TestDbContextFactory.CreateDbContext(_dbName))
         {
             var category = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
@@ -1426,43 +1403,17 @@ public sealed class LoanServiceTests
             };
             dbContext.Tags.Add(tag);
             await dbContext.SaveChangesAsync();
-            metadataTagId = tag.Id;
 
             var loanEntity = await dbContext.Loans.SingleAsync(x => x.Id == loan.Id);
             loanEntity.Name = "Hipoteka metadata po preview";
-            loanEntity.TagId = metadataTagId;
+            loanEntity.TagId = tag.Id;
             await dbContext.SaveChangesAsync();
         }
 
-        await service.UpdateLoanChargeAsync(new UpdateLoanChargeRequest
-        {
-            Id = charge.Id,
-            Name = "Ubezpieczenie po zmianie nazwy",
-            ChargeType = charge.ChargeType,
-            FrequencyType = charge.FrequencyType,
-            Amount = charge.Amount,
-            IsPercentageBased = charge.IsPercentageBased,
-            StartDate = charge.StartDate,
-            EndDate = charge.EndDate,
-            IsActive = charge.IsActive
-        }, CancellationToken.None);
-
         request.ExpectedScheduleVersion = preview.SourceVersion;
-        var updated = await service.ApplyLoanPrepaymentAsync(request, CancellationToken.None);
 
-        Assert.Equal(metadataTagId, updated.TagId);
-
-        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
-        var julyPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 7);
-        var prepaymentExpenses = await verifyContext.Expenses
-            .Where(x => x.MonthPlanId == julyPlan.Id)
-            .Where(x => x.LoanInstallmentId == null)
-            .Where(x => x.RegularExpenseDefinitionId == null)
-            .Where(x => x.Name.EndsWith(" - nadpłata"))
-            .ToListAsync();
-
-        Assert.Single(prepaymentExpenses);
-        Assert.Equal(30_000m, prepaymentExpenses.Single().ActualAmount);
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.ApplyLoanPrepaymentAsync(request, CancellationToken.None));
     }
 
     [Fact]

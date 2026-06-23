@@ -996,6 +996,11 @@ else
 
     private async Task BackToEditLoanScheduleChangeAsync()
     {
+        if (_loanScheduleChangePreviewBusy)
+        {
+            return;
+        }
+
         _loanScheduleChangePreviewOpen = false;
         _loanScheduleChangePreview = null;
 
@@ -1014,6 +1019,13 @@ else
 
     private async Task OnLoanScheduleChangePreviewVisibleChanged(bool value)
     {
+        if (!value && _loanScheduleChangePreviewBusy)
+        {
+            _loanScheduleChangePreviewOpen = true;
+            await Task.CompletedTask;
+            return;
+        }
+
         if (value)
         {
             _loanScheduleChangePreviewOpen = true;

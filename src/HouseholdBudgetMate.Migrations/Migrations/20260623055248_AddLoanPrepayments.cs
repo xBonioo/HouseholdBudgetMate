@@ -61,6 +61,10 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     INNER JOIN "MonthPlans" mp
                         ON mp."Id" = e."MonthPlanId"
                         AND mp."UserId" = e."UserId"
+                    INNER JOIN "Categories" c
+                        ON c."Id" = e."CategoryId"
+                        AND c."UserId" = e."UserId"
+                        AND c."Name" = 'Kredyt'
                     INNER JOIN "Loans" l
                         ON l."UserId" = e."UserId"
                         AND l."Name" = left(e."Name", length(e."Name") - length(' - nadpłata'))
@@ -71,6 +75,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     WHERE e."LoanInstallmentId" IS NULL
                         AND e."RegularExpenseDefinitionId" IS NULL
                         AND e."ActualAmount" > 0
+                        AND e."PlannedAmount" = 0
+                        AND e."ShowRemainingInUI" = TRUE
                         AND e."Name" LIKE '% - nadpłata'
                         AND e."IsDeleted" = FALSE
                     GROUP BY e."Id", mp."Year", mp."Month", e."ActualAmount"

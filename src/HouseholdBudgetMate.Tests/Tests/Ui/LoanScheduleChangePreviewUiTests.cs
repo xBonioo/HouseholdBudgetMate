@@ -120,6 +120,19 @@ public sealed class LoanScheduleChangePreviewUiTests : BunitContext
         markup.Should().NotContain("Preview.ChangeType}: {Preview.LoanName");
     }
 
+    [Fact]
+    public void Dialog_Should_Block_Close_While_Submitting()
+    {
+        var dialog = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleChangePreviewDialog.razor");
+        var page = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Loans.razor");
+
+        dialog.Should().Contain("CloseOnEscapeKey = !IsSubmitting");
+        dialog.Should().Contain("CloseButton = !IsSubmitting");
+        dialog.Should().Contain("if (!value && IsSubmitting)");
+        page.Should().Contain("if (!value && _loanScheduleChangePreviewBusy)");
+        page.Should().Contain("if (_loanScheduleChangePreviewBusy)");
+    }
+
     private static LoanScheduleChangePreviewDto BuildPreview()
     {
         return new LoanScheduleChangePreviewDto

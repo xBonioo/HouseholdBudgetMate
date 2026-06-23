@@ -2746,6 +2746,88 @@ public sealed class LoanServiceTests
     }
 
     [Fact]
+    public async Task GetDebtSummaryAsync_Should_Require_Migration_Predicates_For_Legacy_Prepayment_Fallback()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var service = new LoanService(
+            factory,
+            new StaticDateTimeProvider(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc)));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka rygor fallbacku",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            var loanCategory = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var otherCategory = new Category
+            {
+                Name = "Inne",
+                Color = "#CCCCCC",
+                SupportsLineItems = false,
+                IsDeleted = false
+            };
+            dbContext.Categories.Add(otherCategory);
+            await dbContext.SaveChangesAsync();
+
+            dbContext.MonthPlans.Add(new MonthPlan
+            {
+                Year = 2026,
+                Month = 7,
+                Expenses =
+                {
+                    new Expense
+                    {
+                        Order = 1,
+                        Name = "Hipoteka rygor fallbacku - nadpłata",
+                        CategoryId = otherCategory.Id,
+                        ActualAmount = 1_000m,
+                        PlannedAmount = 0m,
+                        ShowRemainingInUI = true
+                    },
+                    new Expense
+                    {
+                        Order = 2,
+                        Name = "Hipoteka rygor fallbacku - nadpłata",
+                        CategoryId = loanCategory.Id,
+                        ActualAmount = 1_100m,
+                        PlannedAmount = 10m,
+                        ShowRemainingInUI = true
+                    },
+                    new Expense
+                    {
+                        Order = 3,
+                        Name = "Hipoteka rygor fallbacku - nadpłata",
+                        CategoryId = loanCategory.Id,
+                        ActualAmount = 1_200m,
+                        PlannedAmount = 0m,
+                        ShowRemainingInUI = false
+                    }
+                }
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneSummary = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(
+            loan.Installments.Where(x => x.DueDate > new DateOnly(2026, 6, 30)).Sum(x => x.PrincipalAmount),
+            juneSummary.ActiveDebt);
+        Assert.Equal(1, juneSummary.ActiveLoanCount);
+    }
+
+    [Fact]
     public async Task GetDebtSummaryAsync_Should_Throw_BadRequest_For_Invalid_Month()
     {
         var service = CreateService();

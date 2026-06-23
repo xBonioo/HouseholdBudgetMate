@@ -882,7 +882,7 @@ public sealed class LoanService(
         }
 
         return new ScheduleChangeProjection(
-            ComputeLoanScheduleVersion(loan),
+            ComputeLoanScheduleVersion(loan, includePrepaymentExpenseIdentity: true),
             scheduleStart,
             scheduleEnd,
             affectedInstallments,
@@ -946,14 +946,16 @@ public sealed class LoanService(
             loan.EndDate = originalEndDate;
         }
 
+        var prepaymentAmount = decimal.Round(remainingPrincipal - targetPrincipal, 2, MidpointRounding.AwayFromZero);
+
         return new ScheduleChangeProjection(
-            ComputeLoanScheduleVersion(loan),
+            ComputeLoanScheduleVersion(loan, includePrepaymentExpenseIdentity: prepaymentAmount > 0),
             scheduleStart,
             request.LastInstallmentDate,
             affectedInstallments,
             schedule,
             null,
-            decimal.Round(remainingPrincipal - targetPrincipal, 2, MidpointRounding.AwayFromZero));
+            prepaymentAmount);
     }
 
     private static void ApplyProjectionToPreview(Loan loan, ScheduleChangeProjection projection)
@@ -1226,10 +1228,17 @@ public sealed class LoanService(
         LoanRateEntry? RateEntry,
         decimal PrepaymentAmount);
 
-    private static string ComputeLoanScheduleVersion(Loan loan)
+    private static string ComputeLoanScheduleVersion(Loan loan, bool includePrepaymentExpenseIdentity = false)
     {
         var builder = new StringBuilder();
         AppendLoanSnapshot(builder, loan);
+        if (includePrepaymentExpenseIdentity)
+        {
+            builder.Append("P|")
+                .Append(loan.Name).Append('|')
+                .Append(loan.TagId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)
+                .AppendLine();
+        }
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(hash);
@@ -1924,9 +1933,12 @@ public sealed class LoanService(
         var legacyExpenses = await dbContext.Expenses
             .AsNoTracking()
             .Where(x => x.MonthPlan.Year > year || (x.MonthPlan.Year == year && x.MonthPlan.Month > month))
+            .Where(x => x.Category.Name == "Kredyt")
             .Where(x => x.LoanInstallmentId == null)
             .Where(x => x.RegularExpenseDefinitionId == null)
             .Where(x => x.ActualAmount > 0)
+            .Where(x => x.PlannedAmount == 0)
+            .Where(x => x.ShowRemainingInUI)
             .Select(x => new
             {
                 x.Id,

@@ -21,6 +21,11 @@ Updated: 2026-06-22
 - Existing financial golden assertions in `LoanServiceTests` were left unchanged.
 - Preview operations remain side-effect free and compare equal with confirmed persistence for WIBOR, prepayment, and bank-driven installment changes.
 - Release test coverage still passes across the full solution, including the loan service regression suite.
+- Scope note: prepayment confirmation is part of this PR's main flow. The persisted `LoanPrepayments`
+  history is included so confirmed prepayments can be replayed for month-specific debt summaries instead
+  of being inferred from display-name expense rows.
+- Migration coverage verifies that legacy prepayment backfill imports only unambiguous expense rows
+  matched by owner, loan name, tag and positive actual amount.
 - Opłacone raty są ukrywane w podglądzie harmonogramu, żeby nie pokazywać bezsensownych wierszy bez zmian.
 - Preview i zapis korzystają z tych samych projekcji harmonogramu dla WIBOR, nadpłaty i zmiany raty z banku.
 - Testy komponentowe potwierdzają kolejność preview przed zapisem, zachowanie danych przy powrocie do edycji i obsługę nieaktualnej wersji.
@@ -37,4 +42,6 @@ Pending human walkthrough:
 ## Notes
 
 - No financial calculation algorithm changes were introduced in this change.
+- The change includes one schema migration for loan prepayment history. Rollback drops only the
+  `LoanPrepayments` table; existing expense rows remain intact.
 - The remaining manual items should be completed before the change is marked fully implemented and archived.

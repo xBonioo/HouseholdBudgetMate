@@ -1234,10 +1234,10 @@ public sealed class LoanServiceTests
     }
 
     /// <summary>
-    /// Verifies that ApplyLoanInstallmentAmountChangeAsync treats a missing previewed installment as stale.
+    /// Verifies that ApplyLoanInstallmentAmountChangeAsync preserves the not-found contract for a missing installment.
     /// </summary>
     [Fact]
-    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_Conflict_When_Previewed_Installment_Was_Rebuilt()
+    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_NotFound_When_Previewed_Installment_Was_Rebuilt()
     {
         var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
@@ -1272,7 +1272,7 @@ public sealed class LoanServiceTests
             }),
             CancellationToken.None);
 
-        await Assert.ThrowsAsync<ConflictException>(async () =>
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
             await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
             {
                 LoanInstallmentId = julyInstallment.Id,
@@ -1648,10 +1648,10 @@ public sealed class LoanServiceTests
     }
 
     /// <summary>
-    /// Verifies that ApplyLoanPrepaymentAsync treats a missing previewed installment as a stale preview.
+    /// Verifies that ApplyLoanPrepaymentAsync preserves the not-found contract for a missing installment.
     /// </summary>
     [Fact]
-    public async Task ApplyLoanPrepaymentAsync_Should_Throw_Conflict_When_Previewed_Installment_Was_Rebuilt()
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFound_When_Previewed_Installment_Was_Rebuilt()
     {
         var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
@@ -1686,7 +1686,7 @@ public sealed class LoanServiceTests
             }),
             CancellationToken.None);
 
-        await Assert.ThrowsAsync<ConflictException>(async () =>
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
             await service.ApplyLoanPrepaymentAsync(
                 new ApplyLoanPrepaymentRequest
                 {

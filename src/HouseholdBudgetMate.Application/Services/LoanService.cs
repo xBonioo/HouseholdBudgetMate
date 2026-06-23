@@ -335,7 +335,7 @@ public sealed class LoanService(
                        .Include(x => x.Installments)
                        .ThenInclude(x => x.Expense)
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
-                   ?? throw new ConflictException("The loan schedule preview is stale. Please recalculate before confirming.");
+                   ?? throw new NotFoundException("Loan installment not found.");
 
         var projection = ProjectPrepayment(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
@@ -368,7 +368,7 @@ public sealed class LoanService(
                        .Include(x => x.Installments)
                        .ThenInclude(x => x.Expense)
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
-                   ?? throw new ConflictException("The loan schedule preview is stale. Please recalculate before confirming.");
+                   ?? throw new NotFoundException("Loan installment not found.");
 
         var projection = ProjectInstallmentAmountChange(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);

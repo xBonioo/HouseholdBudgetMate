@@ -1,10 +1,10 @@
 ---
 change_id: loan-schedule-change-preview
 title: Preview and confirm loan schedule recalculations
-status: impl_reviewed
+status: archived
 created: 2026-06-22
-updated: 2026-06-22
-archived_at: null
+updated: 2026-06-23
+archived_at: 2026-06-23T04:55:52Z
 ---
 
 ## Notes

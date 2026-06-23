@@ -81,7 +81,7 @@ public sealed class LoanService(
         var activeDebt = activeLoans.Sum(loan =>
         {
             var remainingPrincipal = GetRemainingPrincipalForSelectedMonth(loan, monthEnd);
-            var adjustment = prepaymentAdjustments.GetValueOrDefault(BuildPrepaymentAdjustmentKey(loan));
+            var adjustment = prepaymentAdjustments.GetValueOrDefault(loan.Id);
             return decimal.Round(remainingPrincipal + adjustment, 2, MidpointRounding.AwayFromZero);
         });
 
@@ -340,6 +340,7 @@ public sealed class LoanService(
         var projection = ProjectPrepayment(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
         PersistProjectedInstallments(dbContext, loan, projection);
+        RecordLoanPrepayment(dbContext, loan.Id, request.Amount, today);
 
         await UpsertPrepaymentExpenseAsync(dbContext, loan, request.Amount, today, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -375,6 +376,7 @@ public sealed class LoanService(
 
         if (projection.PrepaymentAmount > 0)
         {
+            RecordLoanPrepayment(dbContext, loan.Id, projection.PrepaymentAmount, today);
             await UpsertPrepaymentExpenseAsync(dbContext, loan, projection.PrepaymentAmount, today, cancellationToken);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -1253,7 +1255,7 @@ public sealed class LoanService(
 
         if (existingExpense is not null)
         {
-            existingExpense.ActualAmount = amount;
+            existingExpense.ActualAmount += amount;
             return;
         }
 
@@ -1761,32 +1763,39 @@ public sealed class LoanService(
         return category.Id;
     }
 
-    private static async Task<Dictionary<string, decimal>> LoadFuturePrepaymentAdjustmentsAsync(
+    private static async Task<Dictionary<int, decimal>> LoadFuturePrepaymentAdjustmentsAsync(
         ApplicationDbContext dbContext,
         int year,
         int month,
         CancellationToken cancellationToken)
     {
-        var adjustments = await dbContext.Expenses
+        var adjustments = await dbContext.LoanPrepayments
             .AsNoTracking()
-            .Include(x => x.MonthPlan)
-            .Where(x =>
-                x.LoanInstallmentId == null
-                && x.RegularExpenseDefinitionId == null
-                && x.PlannedAmount == 0
-                && x.ActualAmount > 0
-                && x.Name.EndsWith(" - nadpłata"))
-            .Where(x => x.MonthPlan.Year > year || (x.MonthPlan.Year == year && x.MonthPlan.Month > month))
+            .Where(x => x.PrepaymentDate.Year > year || (x.PrepaymentDate.Year == year && x.PrepaymentDate.Month > month))
             .Select(x => new
             {
-                LoanName = x.Name.Substring(0, x.Name.Length - " - nadpłata".Length),
-                x.ActualAmount
+                x.LoanId,
+                x.Amount
             })
             .ToListAsync(cancellationToken);
 
         return adjustments
-            .GroupBy(x => x.LoanName, StringComparer.Ordinal)
-            .ToDictionary(x => x.Key, x => x.Sum(item => item.ActualAmount), StringComparer.Ordinal);
+            .GroupBy(x => x.LoanId)
+            .ToDictionary(x => x.Key, x => x.Sum(item => item.Amount));
+    }
+
+    private static void RecordLoanPrepayment(
+        ApplicationDbContext dbContext,
+        int loanId,
+        decimal amount,
+        DateOnly prepaymentDate)
+    {
+        dbContext.LoanPrepayments.Add(new LoanPrepayment
+        {
+            LoanId = loanId,
+            PrepaymentDate = prepaymentDate,
+            Amount = amount
+        });
     }
 
     private static bool IsLoanVisibleInSelectedMonth(
@@ -1820,11 +1829,6 @@ public sealed class LoanService(
                 .Sum(installment => installment.PrincipalAmount),
             2,
             MidpointRounding.AwayFromZero);
-    }
-
-    private static string BuildPrepaymentAdjustmentKey(Loan loan)
-    {
-        return loan.Name;
     }
 
     private static async Task ValidateLoanTagAsync(

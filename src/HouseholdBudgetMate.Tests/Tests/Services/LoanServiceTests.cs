@@ -1234,10 +1234,10 @@ public sealed class LoanServiceTests
     }
 
     /// <summary>
-    /// Verifies that ApplyLoanInstallmentAmountChangeAsync preserves the not-found contract for a missing installment.
+    /// Verifies that ApplyLoanInstallmentAmountChangeAsync treats a missing previewed installment as stale when loan context is available.
     /// </summary>
     [Fact]
-    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_NotFound_When_Previewed_Installment_Was_Rebuilt()
+    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_Conflict_When_Previewed_Installment_Was_Rebuilt()
     {
         var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
@@ -1272,13 +1272,29 @@ public sealed class LoanServiceTests
             }),
             CancellationToken.None);
 
-        await Assert.ThrowsAsync<NotFoundException>(async () =>
+        await Assert.ThrowsAsync<ConflictException>(async () =>
             await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
             {
+                LoanId = loan.Id,
                 LoanInstallmentId = julyInstallment.Id,
                 InstallmentAmount = julyInstallment.Amount + 100m,
                 LastInstallmentDate = new DateOnly(2045, 5, 15),
                 ExpectedScheduleVersion = preview.SourceVersion
+            }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_NotFound_When_Installment_Id_Is_Invalid()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanInstallmentId = 99999,
+                InstallmentAmount = 1000m,
+                LastInstallmentDate = new DateOnly(2026, 12, 15),
+                ExpectedScheduleVersion = "ignored"
             }, CancellationToken.None));
     }
 
@@ -1648,10 +1664,10 @@ public sealed class LoanServiceTests
     }
 
     /// <summary>
-    /// Verifies that ApplyLoanPrepaymentAsync preserves the not-found contract for a missing installment.
+    /// Verifies that ApplyLoanPrepaymentAsync treats a missing previewed installment as stale when loan context is available.
     /// </summary>
     [Fact]
-    public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFound_When_Previewed_Installment_Was_Rebuilt()
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_Conflict_When_Previewed_Installment_Was_Rebuilt()
     {
         var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
@@ -1686,14 +1702,32 @@ public sealed class LoanServiceTests
             }),
             CancellationToken.None);
 
-        await Assert.ThrowsAsync<NotFoundException>(async () =>
+        await Assert.ThrowsAsync<ConflictException>(async () =>
             await service.ApplyLoanPrepaymentAsync(
                 new ApplyLoanPrepaymentRequest
                 {
+                    LoanId = loan.Id,
                     LoanInstallmentId = julyInstallment.Id,
                     Amount = 100m,
                     Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
                     ExpectedScheduleVersion = preview.SourceVersion
+                },
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFound_When_Installment_Id_Is_Invalid()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanInstallmentId = 99999,
+                    Amount = 100m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = "ignored"
                 },
                 CancellationToken.None));
     }
@@ -2378,6 +2412,15 @@ public sealed class LoanServiceTests
         Assert.Equal(mayBefore.ActiveDebt, mayAfter.ActiveDebt);
         Assert.Equal(mayBefore.ActiveLoanCount, mayAfter.ActiveLoanCount);
         Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Throw_BadRequest_For_Invalid_Month()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            service.GetDebtSummaryAsync(2026, 13, CancellationToken.None));
     }
 
     /// <summary>

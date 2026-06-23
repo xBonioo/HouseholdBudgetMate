@@ -967,6 +967,7 @@ else
         }
 
         request.ExpectedScheduleVersion = sourceVersion;
+        request.LoanId = _loanScheduleChangePreview?.LoanId;
         await LoanService.ApplyLoanPrepaymentAsync(request, CancellationToken.None);
         _prepaymentAmountInput = string.Empty;
         _prepaymentInstallment = null;
@@ -983,6 +984,7 @@ else
         }
 
         request.ExpectedScheduleVersion = sourceVersion;
+        request.LoanId = _loanScheduleChangePreview?.LoanId;
         await LoanService.ApplyLoanInstallmentAmountChangeAsync(request, CancellationToken.None);
         _bankInstallmentAmountInput = string.Empty;
         _bankLastInstallmentDate = null;

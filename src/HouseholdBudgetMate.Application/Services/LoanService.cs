@@ -54,6 +54,8 @@ public sealed class LoanService(
 
     public async Task<DebtSummaryDto> GetDebtSummaryAsync(int year, int month, CancellationToken cancellationToken)
     {
+        YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
+
         var monthStart = new DateOnly(year, month, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
@@ -335,7 +337,11 @@ public sealed class LoanService(
                        .Include(x => x.Installments)
                        .ThenInclude(x => x.Expense)
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
-                   ?? throw new NotFoundException("Loan installment not found.");
+                   ?? await LoadLoanForMissingInstallmentConfirmationAsync(
+                       dbContext,
+                       request.LoanId,
+                       request.ExpectedScheduleVersion,
+                       cancellationToken);
 
         var projection = ProjectPrepayment(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
@@ -368,7 +374,11 @@ public sealed class LoanService(
                        .Include(x => x.Installments)
                        .ThenInclude(x => x.Expense)
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
-                   ?? throw new NotFoundException("Loan installment not found.");
+                   ?? await LoadLoanForMissingInstallmentConfirmationAsync(
+                       dbContext,
+                       request.LoanId,
+                       request.ExpectedScheduleVersion,
+                       cancellationToken);
 
         var projection = ProjectInstallmentAmountChange(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
@@ -1127,6 +1137,30 @@ public sealed class LoanService(
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Id)
             .ToList();
+    }
+
+    private static async Task<Loan> LoadLoanForMissingInstallmentConfirmationAsync(
+        ApplicationDbContext dbContext,
+        int? loanId,
+        string? expectedScheduleVersion,
+        CancellationToken cancellationToken)
+    {
+        if (!loanId.HasValue)
+        {
+            throw new NotFoundException("Loan installment not found.");
+        }
+
+        var loan = await dbContext.Loans
+                       .Include(x => x.Tag)
+                       .Include(x => x.RateEntries)
+                       .Include(x => x.Charges)
+                       .Include(x => x.Installments)
+                       .ThenInclude(x => x.Expense)
+                       .FirstOrDefaultAsync(x => x.Id == loanId.Value, cancellationToken)
+                   ?? throw new NotFoundException("Loan installment not found.");
+
+        ValidateExpectedScheduleVersion(ComputeLoanScheduleVersion(loan), expectedScheduleVersion);
+        throw new NotFoundException("Loan installment not found.");
     }
 
     private static void ValidateExpectedScheduleVersion(string currentVersion, string? expectedScheduleVersion)

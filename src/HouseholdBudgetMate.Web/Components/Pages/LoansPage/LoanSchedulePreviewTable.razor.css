@@ -1,0 +1,39 @@
+.loan-schedule-preview-table__scroll {
+    overflow-x: auto;
+}
+
+.loan-schedule-preview-table__row-added {
+    background-color: rgba(46, 125, 50, 0.06);
+}
+
+.loan-schedule-preview-table__row-removed {
+    background-color: rgba(211, 47, 47, 0.06);
+}
+
+.loan-schedule-preview-table__row-changed {
+    background-color: rgba(2, 136, 209, 0.05);
+}
+
+.loan-schedule-preview-table__state {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.loan-schedule-preview-table__state--added {
+    background-color: rgba(46, 125, 50, 0.12);
+    color: #2e7d32;
+}
+
+.loan-schedule-preview-table__state--removed {
+    background-color: rgba(211, 47, 47, 0.12);
+    color: #d32f2f;
+}
+
+.loan-schedule-preview-table__state--changed {
+    background-color: rgba(2, 136, 209, 0.12);
+    color: #0277bd;
+}

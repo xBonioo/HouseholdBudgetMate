@@ -4,10 +4,13 @@ using HouseholdBudgetMate.Abstractions.Interfaces;
 
 namespace HouseholdBudgetMate.Tests.Shared;
 
-public sealed class NoOpLoanService : ILoanService
+public class NoOpLoanService : ILoanService
 {
-    public Task<IReadOnlyList<LoanDto>> GetAllAsync(CancellationToken cancellationToken)
+    public virtual Task<IReadOnlyList<LoanDto>> GetAllAsync(CancellationToken cancellationToken)
         => Task.FromResult<IReadOnlyList<LoanDto>>([]);
+
+    public Task<DebtSummaryDto> GetDebtSummaryAsync(int year, int month, CancellationToken cancellationToken)
+        => Task.FromResult(new DebtSummaryDto());
 
     public Task<LoanDto> CreateLoanAsync(CreateLoanRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
@@ -15,13 +18,26 @@ public sealed class NoOpLoanService : ILoanService
     public Task<LoanDto> UpdateLoanAsync(UpdateLoanRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
 
-    public Task<LoanDto> AddLoanRateEntryAsync(AddLoanRateEntryRequest request, CancellationToken cancellationToken)
+    public virtual Task<LoanScheduleChangePreviewDto> PreviewAddLoanRateEntryAsync(AddLoanRateEntryRequest request,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new LoanScheduleChangePreviewDto());
+
+    public virtual Task<LoanScheduleChangePreviewDto> PreviewApplyLoanPrepaymentAsync(ApplyLoanPrepaymentRequest request,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new LoanScheduleChangePreviewDto());
+
+    public virtual Task<LoanScheduleChangePreviewDto> PreviewApplyLoanInstallmentAmountChangeAsync(
+        ApplyLoanInstallmentAmountChangeRequest request,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new LoanScheduleChangePreviewDto());
+
+    public virtual Task<LoanDto> AddLoanRateEntryAsync(AddLoanRateEntryRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
 
-    public Task<LoanDto> ApplyLoanPrepaymentAsync(ApplyLoanPrepaymentRequest request, CancellationToken cancellationToken)
+    public virtual Task<LoanDto> ApplyLoanPrepaymentAsync(ApplyLoanPrepaymentRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
 
-    public Task<LoanDto> ApplyLoanInstallmentAmountChangeAsync(ApplyLoanInstallmentAmountChangeRequest request,
+    public virtual Task<LoanDto> ApplyLoanInstallmentAmountChangeAsync(ApplyLoanInstallmentAmountChangeRequest request,
         CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
 

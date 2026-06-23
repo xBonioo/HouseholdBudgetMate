@@ -1,0 +1,122 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+
+<MudExpansionPanels Class="loan-schedule-preview-years" MultiExpansion="true">
+    @if (VisibleRows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Brak nieopłaconych rat do porównania.
+        </MudAlert>
+    }
+    else
+    {
+        @foreach (var group in _yearGroups)
+        {
+            <MudExpansionPanel Expanded="@group.IsExpanded"
+                               ExpandedChanged="value => OnExpandedChanged(group.Year, value)"
+                               KeepContentAlive="false">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="w-100">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.subtitle1">@group.Year</MudText>
+                            <MudText Typo="Typo.caption" Class="hb-muted">@group.RowCount rat</MudText>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                            <div class="loan-schedule-preview-years__total loan-schedule-preview-years__total--before">
+                                Przed: @group.BeforeTotal.ToString("N2", Culture) PLN
+                            </div>
+                            <div class="loan-schedule-preview-years__total loan-schedule-preview-years__total--after">
+                                Po: @group.AfterTotal.ToString("N2", Culture) PLN
+                            </div>
+                        </MudStack>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <LoanSchedulePreviewTable Rows="@group.Rows" Culture="@Culture" />
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    }
+</MudExpansionPanels>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<LoanScheduleComparisonRowDto> Rows { get; set; } = [];
+    [Parameter] public DateOnly? AffectedFrom { get; set; }
+    [Parameter] public CultureInfo Culture { get; set; } = new("pl-PL");
+
+    private IReadOnlyList<LoanScheduleComparisonRowDto> VisibleRows => Rows
+        .Where(row => !row.BeforeIsPaid && !row.AfterIsPaid)
+        .OrderBy(x => x.DueDate)
+        .ToList();
+
+    private readonly List<YearGroup> _yearGroups = [];
+    private IReadOnlyList<LoanScheduleComparisonRowDto>? _rowsSnapshot;
+    private DateOnly? _affectedFromSnapshot;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_rowsSnapshot, Rows) && _affectedFromSnapshot == AffectedFrom)
+        {
+            return;
+        }
+
+        _rowsSnapshot = Rows;
+        _affectedFromSnapshot = AffectedFrom;
+        var visibleRows = VisibleRows;
+        var expandedYear = ResolveDefaultExpandedYear(visibleRows);
+        _yearGroups.Clear();
+
+        foreach (var yearGroup in visibleRows
+                     .GroupBy(x => x.DueDate.Year))
+        {
+            var groupRows = yearGroup.ToList();
+            _yearGroups.Add(new YearGroup(
+                yearGroup.Key,
+                groupRows,
+                groupRows.Sum(x => x.Before?.Amount ?? 0),
+                groupRows.Sum(x => x.After?.Amount ?? 0),
+                expandedYear.HasValue && yearGroup.Key == expandedYear.Value));
+        }
+    }
+
+    private Task OnExpandedChanged(int year, bool expanded)
+    {
+        var group = _yearGroups.FirstOrDefault(x => x.Year == year);
+        if (group is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        group.IsExpanded = expanded;
+        return Task.CompletedTask;
+    }
+
+    private int? ResolveDefaultExpandedYear(IReadOnlyList<LoanScheduleComparisonRowDto> visibleRows)
+    {
+        if (visibleRows.Count == 0)
+        {
+            return null;
+        }
+
+        if (AffectedFrom.HasValue)
+        {
+            var firstVisibleAffectedRow = visibleRows.FirstOrDefault(x => x.DueDate >= AffectedFrom.Value);
+            if (firstVisibleAffectedRow is not null)
+            {
+                return firstVisibleAffectedRow.DueDate.Year;
+            }
+        }
+
+        return visibleRows[0].DueDate.Year;
+    }
+
+    private sealed class YearGroup(int year, IReadOnlyList<LoanScheduleComparisonRowDto> rows, decimal beforeTotal, decimal afterTotal, bool isExpanded)
+    {
+        public int Year { get; } = year;
+        public IReadOnlyList<LoanScheduleComparisonRowDto> Rows { get; } = rows;
+        public decimal BeforeTotal { get; } = beforeTotal;
+        public decimal AfterTotal { get; } = afterTotal;
+        public int RowCount => Rows.Count;
+        public bool IsExpanded { get; set; } = isExpanded;
+    }
+}

@@ -116,7 +116,7 @@
             <MudPaper Class="hb-kpi-card accounts-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Aktywny dług</MudText>
                 <MudText Class="hb-kpi-value">@FormatMoney(_debtSummary.ActiveDebt)</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">@_debtSummary.ActiveLoanCount aktywnych kredytów</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">@FormatActiveLoanCount(_debtSummary.ActiveLoanCount)</MudText>
             </MudPaper>
             <MudPaper Class="@AttentionKpiClass">
                 <MudText Typo="Typo.caption" Class="hb-muted">Kategorie przekroczone</MudText>
@@ -209,13 +209,13 @@
                     <MudIcon Icon="@Icons.Material.Filled.Savings" Color="Color.Success"/>
                     <MudText Typo="Typo.caption" Class="hb-muted">Transfery oszczędnościowe</MudText>
                     <MudText Typo="Typo.h6">@FormatMoney(_savingsSummary.MonthlyTransfers)</MudText>
-                    <MudText Typo="Typo.caption" Class="hb-muted">@_savingsSummary.TransferCount wpisów w miesiącu</MudText>
+                    <MudText Typo="Typo.caption" Class="hb-muted">@FormatMonthlyTransferCount(_savingsSummary.TransferCount)</MudText>
                 </div>
                 <div class="accounts-summary-box">
                     <MudIcon Icon="@Icons.Material.Filled.CreditScore" Color="Color.Warning"/>
                     <MudText Typo="Typo.caption" Class="hb-muted">Pozostały kapitał</MudText>
                     <MudText Typo="Typo.h6">@FormatMoney(_debtSummary.ActiveDebt)</MudText>
-                    <MudText Typo="Typo.caption" Class="hb-muted">@_debtSummary.ActiveLoanCount aktywnych kredytów</MudText>
+                    <MudText Typo="Typo.caption" Class="hb-muted">@FormatActiveLoanCount(_debtSummary.ActiveLoanCount)</MudText>
                 </div>
             </div>
 
@@ -234,7 +234,7 @@
             <div>
                 <MudText Typo="Typo.h6">Salda kont</MudText>
                 <MudText Typo="Typo.body2" Class="hb-muted">
-                    @(_overview.IsMonthClosed ? "Miesiąc jest zamknięty, więc salda są tylko do odczytu." : "Edytuj salda dla wybranego miesiąca i zapisz je jednym kliknięciem. Zero jest saldem dopiero po zapisaniu wpisu.")
+                    @(_overview.IsMonthClosed ? "Miesiąc jest zamknięty, więc salda są tylko do odczytu." : "Edytuj salda dla wybranego miesiąca i zapisz je jednym kliknięciem.")
                 </MudText>
             </div>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"

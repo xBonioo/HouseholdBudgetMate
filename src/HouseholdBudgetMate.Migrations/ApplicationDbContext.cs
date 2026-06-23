@@ -41,6 +41,7 @@ public class ApplicationDbContext(
     public DbSet<LoanInstallment> LoanInstallments { get; set; }
     public DbSet<LoanRateEntry> LoanRateEntries { get; set; }
     public DbSet<LoanCharge> LoanCharges { get; set; }
+    public DbSet<LoanPrepayment> LoanPrepayments { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -170,6 +171,7 @@ public class ApplicationDbContext(
             or Loan
             or LoanCharge
             or LoanInstallment
+            or LoanPrepayment
             or LoanRateEntry
             or MonthPlan
             or MonthSavingsTransferItem
@@ -222,6 +224,7 @@ public class ApplicationDbContext(
         modelBuilder.Entity<Loan>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<LoanCharge>().HasQueryFilter(x => x.Loan.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<LoanInstallment>().HasQueryFilter(x => x.Loan.UserId == CurrentBudgetOwnerUserId);
+        modelBuilder.Entity<LoanPrepayment>().HasQueryFilter(x => x.Loan.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<LoanRateEntry>().HasQueryFilter(x => x.Loan.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<MonthPlan>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);
         modelBuilder.Entity<MonthSavingsTransferItem>().HasQueryFilter(x => x.UserId == CurrentBudgetOwnerUserId);

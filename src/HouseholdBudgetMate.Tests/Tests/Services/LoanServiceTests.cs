@@ -4,6 +4,7 @@ using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
 using HouseholdBudgetMate.Domain.Entities;
+using HouseholdBudgetMate.Migrations;
 using HouseholdBudgetMate.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
@@ -451,12 +452,14 @@ public sealed class LoanServiceTests
 
         var before = loan.Installments.Single(x => x.Month == 6 && x.Year == 2026).Amount;
 
-        var updated = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 1),
-            ReferenceRate = 7m
-        }, CancellationToken.None);
+        var updated = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 1),
+                ReferenceRate = 7m
+            }),
+            CancellationToken.None);
 
         var after = updated.Installments.Single(x => x.Month == 6 && x.Year == 2026).Amount;
         Assert.NotEqual(before, after);
@@ -492,12 +495,14 @@ public sealed class LoanServiceTests
         AssertInstallmentAmounts(loan, new DateOnly(2026, 7, 15), 1089.63m, 3493.85m);
         AssertInstallmentAmounts(loan, new DateOnly(2054, 5, 15), 6396.52m, 27.97m);
 
-        var updated = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 16),
-            ReferenceRate = 3.73m
-        }, CancellationToken.None);
+        var updated = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
 
         AssertInstallmentAmounts(updated, new DateOnly(2026, 7, 15), 1101.97m, 3447.87m);
         AssertInstallmentAmounts(updated, new DateOnly(2026, 8, 15), 991.95m, 3557.89m);
@@ -552,12 +557,14 @@ public sealed class LoanServiceTests
                 .SingleAsync();
         }
 
-        var updated = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 16),
-            ReferenceRate = 3.73m
-        }, CancellationToken.None);
+        var updated = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
 
         var julyInstallment = updated.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
         await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
@@ -595,7 +602,8 @@ public sealed class LoanServiceTests
             {
                 LoanId = loan.Id,
                 EffectiveFrom = new DateOnly(2026, 6, 1),
-                ReferenceRate = 6m
+                ReferenceRate = 6m,
+                ExpectedScheduleVersion = "ignored"
             }, CancellationToken.None));
     }
 
@@ -624,12 +632,14 @@ public sealed class LoanServiceTests
         }, CancellationToken.None);
 
         // Add a new entry for June 1
-        await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 1),
-            ReferenceRate = 6m
-        }, CancellationToken.None);
+        await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 1),
+                ReferenceRate = 6m
+            }),
+            CancellationToken.None);
 
         // Duplicate: same EffectiveFrom
         await Assert.ThrowsAsync<BadRequestException>(async () =>
@@ -637,7 +647,8 @@ public sealed class LoanServiceTests
             {
                 LoanId = loan.Id,
                 EffectiveFrom = new DateOnly(2026, 6, 1),
-                ReferenceRate = 7m
+                ReferenceRate = 7m,
+                ExpectedScheduleVersion = "ignored"
             }, CancellationToken.None));
     }
 
@@ -679,8 +690,59 @@ public sealed class LoanServiceTests
             {
                 LoanId = loan.Id,
                 EffectiveFrom = new DateOnly(2026, 3, 1),
-                ReferenceRate = 7m
+                ReferenceRate = 7m,
+                ExpectedScheduleVersion = "ignored"
             }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that a WIBOR change entered after the paid June installment starts affecting
+    /// the July installment rather than rewriting the already paid June row.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Start_From_Next_Unpaid_Installment_When_Previous_One_Is_Already_Paid()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka start od lipca",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var juneInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 6, 15));
+        var julyBefore = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15)).Amount;
+
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = juneInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        var updated = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
+
+        var juneAfter = updated.Installments.Single(x => x.DueDate == new DateOnly(2026, 6, 15));
+        var julyAfter = updated.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+
+        Assert.True(juneAfter.IsPaid);
+        Assert.Equal(juneInstallment.Amount, juneAfter.Amount);
+        Assert.NotEqual(julyBefore, julyAfter.Amount);
     }
 
     /// <summary>
@@ -696,7 +758,106 @@ public sealed class LoanServiceTests
             {
                 LoanId = 99999,
                 EffectiveFrom = new DateOnly(2026, 6, 1),
-                ReferenceRate = 6m
+                ReferenceRate = 6m,
+                ExpectedScheduleVersion = "ignored"
+            }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that the WIBOR preview does not mutate persisted state and matches the confirmed result.
+    /// </summary>
+    [Fact]
+    public async Task PreviewAddLoanRateEntryAsync_Should_Be_SideEffect_Free_And_Match_Confirmed_Result()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka preview WIBOR",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using var beforeContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var countsBefore = await GetLoanCollectionCountsAsync(beforeContext);
+
+        var previewRequest = new AddLoanRateEntryRequest
+        {
+            LoanId = loan.Id,
+            EffectiveFrom = new DateOnly(2026, 6, 16),
+            ReferenceRate = 3.73m
+        };
+        var preview = await service.PreviewAddLoanRateEntryAsync(previewRequest, CancellationToken.None);
+
+        await using var afterPreviewContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var countsAfterPreview = await GetLoanCollectionCountsAsync(afterPreviewContext);
+        Assert.Equal(countsBefore, countsAfterPreview);
+
+        var updated = await service.AddLoanRateEntryAsync(
+            new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m,
+                ExpectedScheduleVersion = preview.SourceVersion
+            },
+            CancellationToken.None);
+
+        AssertPreviewMatchesLoanDtos(preview, loan, updated);
+    }
+
+    /// <summary>
+    /// Verifies that confirming a preview with an obsolete source version is rejected.
+    /// </summary>
+    [Fact]
+    public async Task AddLoanRateEntryAsync_Should_Reject_Stale_Source_Version_Before_Mutation()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka stale wersja",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var preview = await service.PreviewAddLoanRateEntryAsync(new AddLoanRateEntryRequest
+        {
+            LoanId = loan.Id,
+            EffectiveFrom = new DateOnly(2026, 6, 16),
+            ReferenceRate = 3.73m
+        }, CancellationToken.None);
+
+        var firstInstallment = loan.Installments.OrderBy(x => x.DueDate).First();
+        await service.SetLoanInstallmentPaidAsync(new SetLoanInstallmentPaidRequest
+        {
+            LoanInstallmentId = firstInstallment.Id,
+            IsPaid = true
+        }, CancellationToken.None);
+
+        await Assert.ThrowsAsync<ConflictException>(async () =>
+            await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m,
+                ExpectedScheduleVersion = preview.SourceVersion
             }, CancellationToken.None));
     }
 
@@ -726,12 +887,14 @@ public sealed class LoanServiceTests
         var targetInstallment = loan.Installments.Single(x => x.Year == 2027 && x.Month == 1);
         var before = loan.Installments.Single(x => x.Year == 2027 && x.Month == 2).Amount;
 
-        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = targetInstallment.Id,
-            Amount = 10000m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        var updated = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = targetInstallment.Id,
+                Amount = 10000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
 
         var after = updated.Installments.Single(x => x.Year == 2027 && x.Month == 2).Amount;
         Assert.True(after < before);
@@ -766,12 +929,14 @@ public sealed class LoanServiceTests
         AssertInstallmentAmounts(loan, new DateOnly(2026, 7, 15), 1089.63m, 3493.85m);
         AssertInstallmentAmounts(loan, new DateOnly(2054, 5, 15), 6396.52m, 27.97m);
 
-        var updated = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 16),
-            ReferenceRate = 3.73m
-        }, CancellationToken.None);
+        var updated = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
 
         AssertInstallmentAmounts(updated, new DateOnly(2026, 7, 15), 1101.97m, 3447.87m);
         AssertInstallmentAmounts(updated, new DateOnly(2026, 8, 15), 991.95m, 3557.89m);
@@ -790,12 +955,14 @@ public sealed class LoanServiceTests
             .Where(x => x.DueDate >= july2026.DueDate)
             .Sum(x => x.PrincipalAmount);
 
-        var updated2 = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = july2026.Id,
-            Amount = 100m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        var updated2 = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = july2026.Id,
+                Amount = 100m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
 
         var juneAfter = updated2.Installments.Single(x => x.DueDate == june2026.DueDate);
         var august2026After = updated2.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
@@ -864,12 +1031,14 @@ public sealed class LoanServiceTests
                 .SingleAsync();
         }
 
-        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = augustInstallment.Id,
-            Amount = 20_000m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        var updated = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = augustInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
 
         var updatedAugustInstallment = updated.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
         await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
@@ -910,12 +1079,14 @@ public sealed class LoanServiceTests
         AssertInstallmentAmounts(loan, new DateOnly(2026, 7, 15), 1089.63m, 3493.85m);
         AssertInstallmentAmounts(loan, new DateOnly(2054, 5, 15), 6396.52m, 27.97m);
 
-        var updatedRate = await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = new DateOnly(2026, 6, 16),
-            ReferenceRate = 3.73m
-        }, CancellationToken.None);
+        var updatedRate = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
 
         AssertInstallmentAmounts(updatedRate, new DateOnly(2026, 7, 15), 1101.97m, 3447.87m);
         AssertInstallmentAmounts(updatedRate, new DateOnly(2026, 8, 15), 991.95m, 3557.89m);
@@ -925,12 +1096,14 @@ public sealed class LoanServiceTests
         using var dbContext = TestDbContextFactory.CreateDbContext(_dbName);
         var july2026Id = dbContext.LoanInstallments.Single(x => x.LoanId == loan.Id && x.DueDate == new DateOnly(2026, 7, 15)).Id;
 
-        var updated = await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
-        {
-            LoanInstallmentId = july2026Id,
-            InstallmentAmount = 4549.84m,
-            LastInstallmentDate = new DateOnly(2045, 5, 15)
-        }, CancellationToken.None);
+        var updated = await service.ApplyLoanInstallmentAmountChangeAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanInstallmentId = july2026Id,
+                InstallmentAmount = 4549.84m,
+                LastInstallmentDate = new DateOnly(2045, 5, 15)
+            }),
+            CancellationToken.None);
 
         Assert.Equal(new DateOnly(2045, 5, 15), updated.EndDate);
         Assert.Equal(228, updated.Installments.Count);
@@ -964,25 +1137,165 @@ public sealed class LoanServiceTests
             IsActive = true
         }, CancellationToken.None);
 
-        await service.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
+        await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
+        using var dbContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var july2026Id = dbContext.LoanInstallments.Single(x => x.LoanId == loan.Id && x.DueDate == new DateOnly(2026, 7, 15)).Id;
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(async () => await service.ApplyLoanInstallmentAmountChangeAsync(
+            new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanInstallmentId = july2026Id,
+                InstallmentAmount = 4600m,
+                LastInstallmentDate = new DateOnly(2054, 4, 15),
+                ExpectedScheduleVersion = "ignored"
+            },
+            CancellationToken.None));
+
+        ex.Message.Should().Contain("Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty.");
+        ex.Message.Should().Contain("Spróbuj podać wcześniejszą datę ostatniej raty, na przykład");
+        ex.Message.Should().Contain("2053-08-15");
+    }
+
+    /// <summary>
+    /// Verifies that the bank installment preview does not mutate persisted state and matches the confirmed result.
+    /// </summary>
+    [Fact]
+    public async Task PreviewApplyLoanInstallmentAmountChangeAsync_Should_Be_SideEffect_Free_And_Match_Confirmed_Result()
+    {
+        var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka preview rata bankowa",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var ratePreview = await service.PreviewAddLoanRateEntryAsync(new AddLoanRateEntryRequest
         {
             LoanId = loan.Id,
             EffectiveFrom = new DateOnly(2026, 6, 16),
             ReferenceRate = 3.73m
         }, CancellationToken.None);
-        using var dbContext = TestDbContextFactory.CreateDbContext(_dbName);
-        var july2026Id = dbContext.LoanInstallments.Single(x => x.LoanId == loan.Id && x.DueDate == new DateOnly(2026, 7, 15)).Id;
 
-        var ex = await Assert.ThrowsAsync<BadRequestException>(async () => await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
+        var updatedRate = await service.AddLoanRateEntryAsync(
+            new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m,
+                ExpectedScheduleVersion = ratePreview.SourceVersion
+            },
+            CancellationToken.None);
+
+        var julyInstallment = updatedRate.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+
+        await using var beforeContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var countsBefore = await GetLoanCollectionCountsAsync(beforeContext);
+
+        var previewRequest = new ApplyLoanInstallmentAmountChangeRequest
         {
-            LoanInstallmentId = july2026Id,
-            InstallmentAmount = 4600m,
-            LastInstallmentDate = new DateOnly(2054, 4, 15)
-        }, CancellationToken.None));
+            LoanInstallmentId = julyInstallment.Id,
+            InstallmentAmount = 4549.84m,
+            LastInstallmentDate = new DateOnly(2045, 5, 15)
+        };
+        var preview = await service.PreviewApplyLoanInstallmentAmountChangeAsync(previewRequest, CancellationToken.None);
 
-        ex.Message.Should().Contain("Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty.");
-        ex.Message.Should().Contain("Spróbuj podać wcześniejszą datę ostatniej raty, na przykład");
-        ex.Message.Should().Contain("2053-08-15");
+        await using var afterPreviewContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var countsAfterPreview = await GetLoanCollectionCountsAsync(afterPreviewContext);
+        Assert.Equal(countsBefore, countsAfterPreview);
+
+        var updated = await service.ApplyLoanInstallmentAmountChangeAsync(
+            new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanInstallmentId = julyInstallment.Id,
+                InstallmentAmount = 4549.84m,
+                LastInstallmentDate = new DateOnly(2045, 5, 15),
+                ExpectedScheduleVersion = preview.SourceVersion
+            },
+            CancellationToken.None);
+
+        AssertPreviewMatchesLoanDtos(preview, updatedRate, updated);
+    }
+
+    /// <summary>
+    /// Verifies that ApplyLoanInstallmentAmountChangeAsync treats a missing previewed installment as stale when loan context is available.
+    /// </summary>
+    [Fact]
+    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_Conflict_When_Previewed_Installment_Was_Rebuilt()
+    {
+        var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka stale rata",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+        var preview = await service.PreviewApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
+        {
+            LoanInstallmentId = julyInstallment.Id,
+            InstallmentAmount = julyInstallment.Amount + 100m,
+            LastInstallmentDate = new DateOnly(2045, 5, 15)
+        }, CancellationToken.None);
+
+        await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
+
+        await Assert.ThrowsAsync<ConflictException>(async () =>
+            await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanId = loan.Id,
+                LoanInstallmentId = julyInstallment.Id,
+                InstallmentAmount = julyInstallment.Amount + 100m,
+                LastInstallmentDate = new DateOnly(2045, 5, 15),
+                ExpectedScheduleVersion = preview.SourceVersion
+            }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Throw_NotFound_When_Installment_Id_Is_Invalid()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<NotFoundException>(async () =>
+            await service.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
+            {
+                LoanInstallmentId = 99999,
+                InstallmentAmount = 1000m,
+                LastInstallmentDate = new DateOnly(2026, 12, 15),
+                ExpectedScheduleVersion = "ignored"
+            }, CancellationToken.None));
     }
 
     /// <summary>
@@ -1025,19 +1338,153 @@ public sealed class LoanServiceTests
         var january2027Before = withCharge.Installments.Single(x => x.DueDate == new DateOnly(2027, 1, 15));
         var chargeBefore = january2027Before.Amount - january2027Before.PrincipalAmount - january2027Before.InterestAmount;
 
-        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        var request = new ApplyLoanPrepaymentRequest
         {
             LoanInstallmentId = january2027Before.Id,
             Amount = 20_000m,
             Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        };
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None);
+        var previewRow = preview.Rows.Single(x => x.DueDate == january2027Before.DueDate);
+
+        request.ExpectedScheduleVersion = preview.SourceVersion;
+        var updated = await service.ApplyLoanPrepaymentAsync(
+            request,
+            CancellationToken.None);
 
         var january2027After = updated.Installments.Single(x => x.DueDate == new DateOnly(2027, 1, 15));
         var chargeAfter = january2027After.Amount - january2027After.PrincipalAmount - january2027After.InterestAmount;
 
         Assert.Equal(396.39m, chargeBefore);
         Assert.Equal(386.39m, chargeAfter);
+        Assert.Equal(chargeBefore, previewRow.Before!.ChargesAmount);
+        Assert.Equal(chargeAfter, previewRow.After!.ChargesAmount);
+        Assert.Equal(january2027Before.PrincipalAmount + january2027Before.InterestAmount + chargeBefore, previewRow.Before.Amount);
+        Assert.Equal(january2027After.PrincipalAmount + january2027After.InterestAmount + chargeAfter, previewRow.After.Amount);
         Assert.True(chargeAfter < chargeBefore);
+    }
+
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Reject_Loan_Metadata_Changes_After_Preview()
+    {
+        var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka metadata preview",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        var firstTargetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
+        loan = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanId = loan.Id,
+                LoanInstallmentId = firstTargetInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 9, 15));
+        var request = new ApplyLoanPrepaymentRequest
+        {
+            LoanId = loan.Id,
+            LoanInstallmentId = targetInstallment.Id,
+            Amount = 10_000m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        };
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None);
+
+        await using (var dbContext = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var tag = new Tag
+            {
+                CategoryId = category.Id,
+                Name = "Po preview"
+            };
+            dbContext.Tags.Add(tag);
+            await dbContext.SaveChangesAsync();
+
+            var loanEntity = await dbContext.Loans.SingleAsync(x => x.Id == loan.Id);
+            loanEntity.Name = "Hipoteka metadata po preview";
+            loanEntity.TagId = tag.Id;
+            await dbContext.SaveChangesAsync();
+        }
+
+        request.ExpectedScheduleVersion = preview.SourceVersion;
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.ApplyLoanPrepaymentAsync(request, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PreviewApplyLoanPrepaymentAsync_Should_Include_Fixed_And_Percentage_Charges_In_Summary()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka preview koszty",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Prowizja miesięczna",
+            ChargeType = LoanChargeType.Other,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 25m,
+            IsActive = true,
+            StartDate = new DateOnly(2026, 6, 1)
+        }, CancellationToken.None);
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie od salda",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 0.05m,
+            IsPercentageBased = true,
+            StartDate = new DateOnly(2026, 6, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        var withCharges = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
+        var targetInstallment = withCharges.Installments.Single(x => x.DueDate == new DateOnly(2027, 1, 15));
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(
+            new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = targetInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            },
+            CancellationToken.None);
+        var previewRow = preview.Rows.Single(x => x.DueDate == targetInstallment.DueDate);
+
+        Assert.Equal(421.39m, previewRow.Before!.ChargesAmount);
+        Assert.Equal(targetInstallment.PrincipalAmount + targetInstallment.InterestAmount + previewRow.Before.ChargesAmount, previewRow.Before.Amount);
+        Assert.Equal(preview.Rows.First(x => !x.BeforeIsPaid).Before!.Amount, preview.BeforeSummary.NextInstallment);
+        Assert.True(previewRow.After!.ChargesAmount < previewRow.Before.ChargesAmount);
     }
 
     /// <summary>
@@ -1100,12 +1547,14 @@ public sealed class LoanServiceTests
         var january2027 = (await service.GetAllAsync(CancellationToken.None)).Single().Installments
             .Single(x => x.DueDate == new DateOnly(2027, 1, 15));
 
-        await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = january2027.Id,
-            Amount = 20_000m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = january2027.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
 
         var juneAfter = (await service.GetAllAsync(CancellationToken.None)).Single().Installments
             .Single(x => x.DueDate == new DateOnly(2026, 6, 15));
@@ -1142,12 +1591,14 @@ public sealed class LoanServiceTests
 
         var augustInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
 
-        await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = augustInstallment.Id,
-            Amount = 20_000m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = augustInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
 
         await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var julyPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 7);
@@ -1209,12 +1660,14 @@ public sealed class LoanServiceTests
 
         var augustInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
 
-        await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = augustInstallment.Id,
-            Amount = 20_000m,
-            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-        }, CancellationToken.None);
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = augustInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
 
         await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
         var julyPlanId = await verifyContext.MonthPlans
@@ -1254,12 +1707,14 @@ public sealed class LoanServiceTests
 
         var targetInstallment = loan.Installments.Single(x => x.Year == 2027 && x.Month == 1);
 
-        var updated = await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-        {
-            LoanInstallmentId = targetInstallment.Id,
-            Amount = 10000m,
-            Strategy = LoanPrepaymentStrategyType.ShortenPeriod
-        }, CancellationToken.None);
+        var updated = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = targetInstallment.Id,
+                Amount = 10000m,
+                Strategy = LoanPrepaymentStrategyType.ShortenPeriod
+            }),
+            CancellationToken.None);
 
         Assert.True(updated.Installments.Count < loan.Installments.Count);
         Assert.True(updated.EndDate < loan.EndDate);
@@ -1294,12 +1749,15 @@ public sealed class LoanServiceTests
         }, CancellationToken.None);
 
         await Assert.ThrowsAsync<BadRequestException>(async () =>
-            await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-            {
-                LoanInstallmentId = firstInstallment.Id,
-                Amount = 500m,
-                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-            }, CancellationToken.None));
+            await service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanInstallmentId = firstInstallment.Id,
+                    Amount = 500m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = "ignored"
+                },
+                CancellationToken.None));
     }
 
     /// <summary>
@@ -1326,29 +1784,196 @@ public sealed class LoanServiceTests
         var firstInstallment = loan.Installments.OrderBy(x => x.DueDate).First();
 
         await Assert.ThrowsAsync<BadRequestException>(async () =>
-            await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-            {
-                LoanInstallmentId = firstInstallment.Id,
-                Amount = 999999m,
-                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-            }, CancellationToken.None));
+            await service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanInstallmentId = firstInstallment.Id,
+                    Amount = 999999m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = "ignored"
+                },
+                CancellationToken.None));
     }
 
     /// <summary>
-    /// Verifies that ApplyLoanPrepaymentAsync throws NotFoundException when the installment does not exist.
+    /// Verifies that ApplyLoanPrepaymentAsync treats a missing previewed installment as stale when loan context is available.
     /// </summary>
     [Fact]
-    public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFoundException_When_Installment_Not_Found()
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_Conflict_When_Previewed_Installment_Was_Rebuilt()
+    {
+        var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka stale nadplata",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = julyInstallment.Id,
+            Amount = 100m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        }, CancellationToken.None);
+
+        await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
+
+        await Assert.ThrowsAsync<ConflictException>(async () =>
+            await service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanId = loan.Id,
+                    LoanInstallmentId = julyInstallment.Id,
+                    Amount = 100m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = preview.SourceVersion
+                },
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_Conflict_When_Previewed_Installment_Id_Is_Replaced_With_Same_Schedule()
+    {
+        var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka stale id",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = julyInstallment.Id,
+            Amount = 100m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        }, CancellationToken.None);
+
+        await using (var dbContext = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var persisted = await dbContext.LoanInstallments.SingleAsync(x => x.Id == julyInstallment.Id);
+            dbContext.LoanInstallments.Remove(persisted);
+            dbContext.LoanInstallments.Add(new LoanInstallment
+            {
+                LoanId = persisted.LoanId,
+                Year = persisted.Year,
+                Month = persisted.Month,
+                DueDate = persisted.DueDate,
+                Amount = persisted.Amount,
+                PrincipalAmount = persisted.PrincipalAmount,
+                InterestAmount = persisted.InterestAmount,
+                IsPaid = persisted.IsPaid,
+                PaidAtUtc = persisted.PaidAtUtc
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanId = loan.Id,
+                    LoanInstallmentId = julyInstallment.Id,
+                    Amount = 100m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = preview.SourceVersion
+                },
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFound_When_Installment_Id_Is_Invalid()
     {
         var service = CreateService();
 
         await Assert.ThrowsAsync<NotFoundException>(async () =>
-            await service.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+            await service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanInstallmentId = 99999,
+                    Amount = 100m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = "ignored"
+                },
+                CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that the prepayment preview does not mutate persisted state and matches the confirmed result.
+    /// </summary>
+    [Fact]
+    public async Task PreviewApplyLoanPrepaymentAsync_Should_Be_SideEffect_Free_And_Match_Confirmed_Result()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka preview nadplata",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+
+        await using var beforeContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var countsBefore = await GetLoanCollectionCountsAsync(beforeContext);
+
+        var previewRequest = new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = targetInstallment.Id,
+            Amount = 100m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        };
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(previewRequest, CancellationToken.None);
+
+        await using var afterPreviewContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var countsAfterPreview = await GetLoanCollectionCountsAsync(afterPreviewContext);
+        Assert.Equal(countsBefore, countsAfterPreview);
+
+        var updated = await service.ApplyLoanPrepaymentAsync(
+            new ApplyLoanPrepaymentRequest
             {
-                LoanInstallmentId = 99999,
-                Amount = 1000m,
-                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
-            }, CancellationToken.None));
+                LoanInstallmentId = targetInstallment.Id,
+                Amount = 100m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                ExpectedScheduleVersion = preview.SourceVersion
+            },
+            CancellationToken.None);
+
+        AssertPreviewMatchesLoanDtos(preview, loan, updated);
     }
 
     // ── CreateLoanChargeAsync ────────────────────────────────────────────────
@@ -1407,6 +2032,64 @@ public sealed class LoanServiceTests
         Assert.Single(expenses, x => x.LoanInstallmentId.HasValue);
         Assert.Single(expenses);
         Assert.Equal(marchInstallmentAmount, expenses[0].PlannedAmount);
+    }
+
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Not_Double_Count_Charges_After_Manual_Override()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka override koszty",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor3M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 150000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
+            await context.SaveChangesAsync();
+        }
+
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie nieruchomosci",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 120m,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        var withCharge = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
+        var marchInstallment = withCharge.Installments.Single(x => x.Year == 2026 && x.Month == 3);
+        await service.OverrideLoanInstallmentAsync(new OverrideLoanInstallmentRequest
+        {
+            InstallmentId = marchInstallment.Id,
+            PrincipalAmount = marchInstallment.PrincipalAmount,
+            InterestAmount = marchInstallment.InterestAmount,
+            ChargesAmount = 75m
+        }, CancellationToken.None);
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
+        var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
+
+        Assert.Equal(
+            decimal.Round(marchInstallment.PrincipalAmount + marchInstallment.InterestAmount + 75m, 2, MidpointRounding.AwayFromZero),
+            expense.PlannedAmount);
     }
 
     /// <summary>
@@ -1913,6 +2596,452 @@ public sealed class LoanServiceTests
         Assert.True(refreshed.RemainingPrincipal < before);
     }
 
+    /// <summary>
+    /// Verifies that debt summary for a selected month does not get rewritten by a later prepayment.
+    /// The selected month should reflect only prepayments that already happened by that month.
+    /// </summary>
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Not_Apply_Future_Prepayment_To_Past_Months()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var service = new LoanService(
+            factory,
+            new StaticDateTimeProvider(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc)));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Budowa domu",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            var initialRate = await dbContext.LoanRateEntries.SingleAsync(x => x.LoanId == loan.Id);
+            initialRate.EffectiveFrom = new DateOnly(2026, 5, 31);
+            await dbContext.SaveChangesAsync();
+        }
+
+        loan = await service.AddLoanRateEntryAsync(
+            await AttachExpectedScheduleVersionAsync(service, new AddLoanRateEntryRequest
+            {
+                LoanId = loan.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 16),
+                ReferenceRate = 3.73m
+            }),
+            CancellationToken.None);
+
+        var mayBefore = await service.GetDebtSummaryAsync(2026, 5, CancellationToken.None);
+        var juneBefore = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+        Assert.Equal(0m, mayBefore.ActiveDebt);
+        Assert.Equal(0, mayBefore.ActiveLoanCount);
+        Assert.True(juneBefore.ActiveDebt > 0);
+
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = julyInstallment.Id,
+                Amount = 100m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        var mayAfter = await service.GetDebtSummaryAsync(2026, 5, CancellationToken.None);
+        var juneAfter = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(mayBefore.ActiveDebt, mayAfter.ActiveDebt);
+        Assert.Equal(mayBefore.ActiveLoanCount, mayAfter.ActiveLoanCount);
+        Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Use_Skipped_Legacy_Prepayment_Expenses_As_Fallback()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var service = new LoanService(
+            factory,
+            new StaticDateTimeProvider(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc)));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka legacy fallback",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        int loanTagId;
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            var category = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var tag = new Tag
+            {
+                CategoryId = category.Id,
+                Name = "Legacy nadplata"
+            };
+            dbContext.Tags.Add(tag);
+            await dbContext.SaveChangesAsync();
+            loanTagId = tag.Id;
+
+            var loanEntity = await dbContext.Loans.SingleAsync(x => x.Id == loan.Id);
+            loanEntity.TagId = loanTagId;
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneBefore = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanId = loan.Id,
+                LoanInstallmentId = julyInstallment.Id,
+                Amount = 1_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            dbContext.LoanPrepayments.RemoveRange(await dbContext.LoanPrepayments.ToListAsync());
+
+            var julyPlan = await dbContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 7);
+            var legacyExpense = await dbContext.Expenses.SingleAsync(x =>
+                x.MonthPlanId == julyPlan.Id
+                && x.LoanInstallmentId == null
+                && x.ActualAmount == 1_000m);
+            legacyExpense.Name = "Hipoteka legacy fallback - nadpłata";
+            legacyExpense.TagId = loanTagId;
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneAfter = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+        Assert.Equal(juneBefore.ActiveLoanCount, juneAfter.ActiveLoanCount);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Not_Classify_Tagged_Unrelated_Expenses_As_Legacy_Prepayments()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var service = new LoanService(
+            factory,
+            new StaticDateTimeProvider(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc)));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka bez fallbacku",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        int loanTagId;
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            var category = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var tag = new Tag
+            {
+                CategoryId = category.Id,
+                Name = "Tagged unrelated"
+            };
+            dbContext.Tags.Add(tag);
+            await dbContext.SaveChangesAsync();
+            loanTagId = tag.Id;
+
+            var loanEntity = await dbContext.Loans.SingleAsync(x => x.Id == loan.Id);
+            loanEntity.TagId = loanTagId;
+            dbContext.MonthPlans.Add(new MonthPlan
+            {
+                Year = 2026,
+                Month = 7,
+                Expenses =
+                {
+                    new Expense
+                    {
+                        Order = 1,
+                        Name = "Ręczna nadpłata oszczędności",
+                        CategoryId = category.Id,
+                        TagId = loanTagId,
+                        ActualAmount = 1_000m,
+                        PlannedAmount = 0m
+                    }
+                }
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneSummary = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(
+            loan.Installments.Where(x => x.DueDate > new DateOnly(2026, 6, 30)).Sum(x => x.PrincipalAmount),
+            juneSummary.ActiveDebt);
+        Assert.Equal(1, juneSummary.ActiveLoanCount);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Require_Migration_Predicates_For_Legacy_Prepayment_Fallback()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var service = new LoanService(
+            factory,
+            new StaticDateTimeProvider(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc)));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka rygor fallbacku",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            var loanCategory = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var otherCategory = new Category
+            {
+                Name = "Inne",
+                Color = "#CCCCCC",
+                SupportsLineItems = false,
+                IsDeleted = false
+            };
+            dbContext.Categories.Add(otherCategory);
+            await dbContext.SaveChangesAsync();
+
+            dbContext.MonthPlans.Add(new MonthPlan
+            {
+                Year = 2026,
+                Month = 7,
+                Expenses =
+                {
+                    new Expense
+                    {
+                        Order = 1,
+                        Name = "Hipoteka rygor fallbacku - nadpłata",
+                        CategoryId = otherCategory.Id,
+                        ActualAmount = 1_000m,
+                        PlannedAmount = 0m,
+                        ShowRemainingInUI = true
+                    },
+                    new Expense
+                    {
+                        Order = 2,
+                        Name = "Hipoteka rygor fallbacku - nadpłata",
+                        CategoryId = loanCategory.Id,
+                        ActualAmount = 1_100m,
+                        PlannedAmount = 10m,
+                        ShowRemainingInUI = true
+                    },
+                    new Expense
+                    {
+                        Order = 3,
+                        Name = "Hipoteka rygor fallbacku - nadpłata",
+                        CategoryId = loanCategory.Id,
+                        ActualAmount = 1_200m,
+                        PlannedAmount = 0m,
+                        ShowRemainingInUI = false
+                    }
+                }
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneSummary = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(
+            loan.Installments.Where(x => x.DueDate > new DateOnly(2026, 6, 30)).Sum(x => x.PrincipalAmount),
+            juneSummary.ActiveDebt);
+        Assert.Equal(1, juneSummary.ActiveLoanCount);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Throw_BadRequest_For_Invalid_Month()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            service.GetDebtSummaryAsync(2026, 13, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Verifies that debt summary includes fixed loans that do not have rate entries.
+    /// </summary>
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Include_Fixed_Loans_Without_RateEntries()
+    {
+        var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
+        await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Kredyt gotowkowy",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 12_000m,
+            InterestRate = 8m,
+            StartDate = new DateOnly(2026, 6, 10),
+            EndDate = new DateOnly(2027, 5, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var summary = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(1, summary.ActiveLoanCount);
+        Assert.True(summary.ActiveDebt > 0);
+    }
+
+    /// <summary>
+    /// Verifies that future prepayment adjustments are tied to the loan identity, not to the display name.
+    /// </summary>
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Not_Share_Future_Prepayments_Between_SameNamed_Loans()
+    {
+        var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
+        var firstLoan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Wspolna nazwa",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 120_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2027, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Wspolna nazwa",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 80_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2027, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var juneBefore = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+        var augustInstallment = firstLoan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
+
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = augustInstallment.Id,
+                Amount = 1_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        var juneAfter = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+        Assert.Equal(2, juneAfter.ActiveLoanCount);
+    }
+
+    /// <summary>
+    /// Verifies that multiple prepayments in the same month are preserved as additive history.
+    /// </summary>
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Add_All_Future_Prepayments_From_Same_Month()
+    {
+        var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Nadplaty miesieczne",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 120_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2027, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var juneBefore = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+        var augustInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
+
+        loan = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = augustInstallment.Id,
+                Amount = 1_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        var septemberInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 9, 15));
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanInstallmentId = septemberInstallment.Id,
+                Amount = 1_500m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        var juneAfter = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var prepayments = await verifyContext.LoanPrepayments
+            .Where(x => x.LoanId == loan.Id)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+        var julyPlanId = await verifyContext.MonthPlans
+            .Where(x => x.Year == 2026 && x.Month == 7)
+            .Select(x => x.Id)
+            .SingleAsync();
+        var prepaymentExpense = await verifyContext.Expenses.SingleAsync(x =>
+            x.MonthPlanId == julyPlanId
+            && x.Name == "Nadplaty miesieczne - nadpłata");
+
+        Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+        Assert.Equal(new[] { 1_000m, 1_500m }, prepayments.Select(x => x.Amount).ToArray());
+        Assert.Equal(2_500m, prepaymentExpense.ActualAmount);
+    }
+
     private static void AssertInstallmentAmounts(
         LoanDto loan,
         DateOnly dueDate,
@@ -1924,4 +3053,203 @@ public sealed class LoanServiceTests
         Assert.InRange(installment.PrincipalAmount, expectedPrincipal - tolerance, expectedPrincipal + tolerance);
         Assert.InRange(installment.InterestAmount, expectedInterest - tolerance, expectedInterest + tolerance);
     }
+
+    private static async Task<AddLoanRateEntryRequest> AttachExpectedScheduleVersionAsync(
+        LoanService service,
+        AddLoanRateEntryRequest request)
+    {
+        request.ExpectedScheduleVersion = (await service.PreviewAddLoanRateEntryAsync(request, CancellationToken.None)).SourceVersion;
+        return request;
+    }
+
+    private static async Task<ApplyLoanPrepaymentRequest> AttachExpectedScheduleVersionAsync(
+        LoanService service,
+        ApplyLoanPrepaymentRequest request)
+    {
+        request.ExpectedScheduleVersion = (await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None)).SourceVersion;
+        return request;
+    }
+
+    private static async Task<ApplyLoanInstallmentAmountChangeRequest> AttachExpectedScheduleVersionAsync(
+        LoanService service,
+        ApplyLoanInstallmentAmountChangeRequest request)
+    {
+        request.ExpectedScheduleVersion = (await service.PreviewApplyLoanInstallmentAmountChangeAsync(request, CancellationToken.None)).SourceVersion;
+        return request;
+    }
+
+    private static async Task<(int Loans, int LoanRateEntries, int LoanInstallments, int Expenses, int MonthPlans)>
+        GetLoanCollectionCountsAsync(ApplicationDbContext context)
+    {
+        return (
+            await context.Loans.CountAsync(),
+            await context.LoanRateEntries.CountAsync(),
+            await context.LoanInstallments.CountAsync(),
+            await context.Expenses.CountAsync(),
+            await context.MonthPlans.CountAsync());
+    }
+
+    private static void AssertPreviewMatchesLoanDtos(
+        LoanScheduleChangePreviewDto preview,
+        LoanDto before,
+        LoanDto after)
+    {
+        AssertSummaryEqual(BuildExpectedSummary(before), preview.BeforeSummary);
+        AssertSummaryEqual(BuildExpectedSummary(after), preview.AfterSummary);
+
+        var expectedRows = BuildExpectedComparisonRows(before, after);
+        Assert.Equal(expectedRows.Count, preview.Rows.Count);
+
+        for (var i = 0; i < expectedRows.Count; i++)
+        {
+            var expected = expectedRows[i];
+            var actual = preview.Rows[i];
+            Assert.Equal(expected.DueDate, actual.DueDate);
+            Assert.Equal(expected.State, actual.State);
+            Assert.Equal(expected.BeforeIsPaid, actual.BeforeIsPaid);
+            Assert.Equal(expected.AfterIsPaid, actual.AfterIsPaid);
+            Assert.Equal(expected.Before, actual.Before);
+            Assert.Equal(expected.After, actual.After);
+        }
+    }
+
+    private static void AssertSummaryEqual(LoanScheduleSummaryDto expected, LoanScheduleSummaryDto actual)
+    {
+        Assert.Equal(expected.RemainingPrincipal, actual.RemainingPrincipal);
+        Assert.Equal(expected.NextInstallment, actual.NextInstallment);
+        Assert.Equal(expected.TotalFutureInterest, actual.TotalFutureInterest);
+        Assert.Equal(expected.EndDate, actual.EndDate);
+        Assert.Equal(expected.InstallmentCount, actual.InstallmentCount);
+    }
+
+    private static LoanScheduleSummaryDto BuildExpectedSummary(LoanDto loan)
+    {
+        var installments = loan.Installments
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Month)
+            .ThenBy(x => x.Year)
+            .ToList();
+        var nextInstallment = installments.FirstOrDefault(x => !x.IsPaid);
+
+        return new LoanScheduleSummaryDto
+        {
+            RemainingPrincipal = loan.RemainingPrincipal,
+            NextInstallment = nextInstallment is null
+                ? 0m
+                : ToScheduleRow(nextInstallment, installments, loan.Charges).Amount,
+            TotalFutureInterest = decimal.Round(
+                installments.Where(x => !x.IsPaid).Sum(x => x.InterestAmount),
+                2,
+                MidpointRounding.AwayFromZero),
+            EndDate = loan.EndDate,
+            InstallmentCount = loan.Installments.Count
+        };
+    }
+
+    private static IReadOnlyList<ExpectedComparisonRow> BuildExpectedComparisonRows(LoanDto before, LoanDto after)
+    {
+        var beforeRows = before.Installments
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x, before.Installments, before.Charges));
+        var beforePaidByDueDate = before.Installments
+            .GroupBy(x => x.DueDate)
+            .ToDictionary(x => x.Key, x => x.Any(y => y.IsPaid));
+
+        var afterRows = after.Installments
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x, after.Installments, after.Charges));
+        var afterPaidByDueDate = after.Installments
+            .GroupBy(x => x.DueDate)
+            .ToDictionary(x => x.Key, x => x.Any(y => y.IsPaid));
+
+        var rows = new List<ExpectedComparisonRow>(beforeRows.Count + afterRows.Count);
+        foreach (var dueDate in beforeRows.Keys.Union(afterRows.Keys).OrderBy(x => x))
+        {
+            beforeRows.TryGetValue(dueDate, out var beforeRow);
+            afterRows.TryGetValue(dueDate, out var afterRow);
+
+            var state = (beforeRow, afterRow) switch
+            {
+                (null, not null) => LoanScheduleComparisonRowState.Added,
+                (not null, null) => LoanScheduleComparisonRowState.Removed,
+                (not null, not null) when beforeRow == afterRow => LoanScheduleComparisonRowState.Unchanged,
+                _ => LoanScheduleComparisonRowState.Changed
+            };
+
+            rows.Add(new ExpectedComparisonRow(
+                dueDate,
+                state,
+                beforePaidByDueDate.GetValueOrDefault(dueDate),
+                afterPaidByDueDate.GetValueOrDefault(dueDate),
+                beforeRow,
+                afterRow));
+        }
+
+        return rows;
+    }
+
+    private static ScheduleRowDto ToScheduleRow(
+        LoanInstallmentDto installment,
+        IReadOnlyList<LoanInstallmentDto> installments,
+        IReadOnlyList<LoanChargeDto> charges)
+    {
+        var chargeAmount = CalculateChargeAmount(installment, installments, charges);
+
+        return new ScheduleRowDto(
+            installment.Year,
+            installment.Month,
+            installment.DueDate,
+            decimal.Round(installment.PrincipalAmount + installment.InterestAmount + chargeAmount, 2, MidpointRounding.AwayFromZero),
+            installment.PrincipalAmount,
+            installment.InterestAmount,
+            chargeAmount);
+    }
+
+    private static decimal CalculateChargeAmount(
+        LoanInstallmentDto installment,
+        IReadOnlyList<LoanInstallmentDto> installments,
+        IReadOnlyList<LoanChargeDto> charges)
+    {
+        var outstandingBalance = installments
+            .Where(x => x.DueDate >= installment.DueDate)
+            .Sum(x => x.PrincipalAmount);
+
+        return decimal.Round(
+            charges
+                .Where(x => x.IsActive)
+                .Where(x => IsChargeDueInMonth(x, installment.Year, installment.Month))
+                .Sum(x => x.IsPercentageBased
+                    ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
+                    : x.Amount),
+            2,
+            MidpointRounding.AwayFromZero);
+    }
+
+    private static bool IsChargeDueInMonth(LoanChargeDto charge, int year, int month)
+    {
+        var monthStart = new DateOnly(year, month, 1);
+        var monthEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        if (charge.StartDate > monthEnd || (charge.EndDate.HasValue && charge.EndDate.Value < monthStart))
+        {
+            return false;
+        }
+
+        return charge.FrequencyType switch
+        {
+            LoanChargeFrequencyType.OneTime => charge.StartDate.Year == year && charge.StartDate.Month == month,
+            LoanChargeFrequencyType.Monthly => true,
+            LoanChargeFrequencyType.Yearly => charge.StartDate.Month == month && year >= charge.StartDate.Year,
+            _ => false
+        };
+    }
+
+    private sealed record ExpectedComparisonRow(
+        DateOnly DueDate,
+        LoanScheduleComparisonRowState State,
+        bool BeforeIsPaid,
+        bool AfterIsPaid,
+        ScheduleRowDto? Before,
+        ScheduleRowDto? After);
 }

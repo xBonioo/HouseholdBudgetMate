@@ -188,6 +188,8 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsMarkup.Should().Contain("Pozosta\u0142o z limitu koperty");
         accountsMarkup.Should().Contain("Oszcz\u0119dno\u015bci i d\u0142ug");
         accountsMarkup.Should().Contain("Transfery oszcz\u0119dno\u015bciowe");
+        accountsMarkup.Should().Contain("FormatMonthlyTransferCount(_savingsSummary.TransferCount)");
+        accountsMarkup.Should().Contain("FormatActiveLoanCount(_debtSummary.ActiveLoanCount)");
         accountsMarkup.Should().Contain("Salda kont");
         accountsMarkup.Should().NotContain(RemainingInPlanLabel);
 
@@ -196,6 +198,10 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsCode.Should().Contain("MissingBalanceAccountNames");
         accountsCode.Should().Contain(PreviousClosingBalanceGuidance);
         accountsCode.Should().Contain(StoredZeroBalanceGuidance);
+        accountsCode.Should().Contain("1 aktywny kredyt");
+        accountsCode.Should().Contain("aktywnych kredyt\u00f3w");
+        accountsCode.Should().Contain("1 wpis w miesi\u0105cu");
+        accountsCode.Should().Contain("wpis\u00f3w w miesi\u0105cu");
 
         var balanceApplicability = ExtractMethodBlock(
             accountsCode,

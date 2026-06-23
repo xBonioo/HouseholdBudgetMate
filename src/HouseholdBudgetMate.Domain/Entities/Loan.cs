@@ -25,4 +25,5 @@ public sealed class Loan : ATimestampable, IEntityId
     public ICollection<LoanRateEntry> RateEntries { get; set; } = new List<LoanRateEntry>();
     public ICollection<LoanCharge> Charges { get; set; } = new List<LoanCharge>();
     public ICollection<LoanInstallment> Installments { get; set; } = new List<LoanInstallment>();
+    public ICollection<LoanPrepayment> Prepayments { get; set; } = new List<LoanPrepayment>();
 }

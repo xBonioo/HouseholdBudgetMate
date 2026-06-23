@@ -57,6 +57,15 @@ public sealed class LoanScheduleChangePreviewUiTests : BunitContext
         cut.Markup.Should().Contain("Rata zniknęła po przeliczeniu.");
     }
 
+    [Fact]
+    public void Dialog_Should_Render_User_Facing_ChangeLabel_In_Title()
+    {
+        var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleChangePreviewDialog.razor");
+
+        markup.Should().Contain("Preview.ChangeLabel}: {Preview.LoanName");
+        markup.Should().NotContain("Preview.ChangeType}: {Preview.LoanName");
+    }
+
     private static LoanScheduleChangePreviewDto BuildPreview()
     {
         return new LoanScheduleChangePreviewDto

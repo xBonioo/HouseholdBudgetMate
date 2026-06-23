@@ -86,7 +86,7 @@
     private string GetTitle()
         => Preview is null
             ? "Podgląd zmiany harmonogramu"
-            : $"{Preview.ChangeType}: {Preview.LoanName}";
+            : $"{Preview.ChangeLabel}: {Preview.LoanName}";
 
     private async Task OnVisibleChanged(bool value)
     {

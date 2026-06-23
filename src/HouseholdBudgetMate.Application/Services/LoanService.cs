@@ -1803,17 +1803,12 @@ public sealed class LoanService(
         DateOnly monthStart,
         DateOnly monthEnd)
     {
-        var firstRateEntryDate = loan.RateEntries
+        var firstActivityDate = loan.RateEntries
             .OrderBy(rate => rate.EffectiveFrom)
             .Select(rate => (DateOnly?)rate.EffectiveFrom)
-            .FirstOrDefault();
+            .FirstOrDefault() ?? loan.StartDate;
 
-        if (!firstRateEntryDate.HasValue)
-        {
-            return false;
-        }
-
-        var hasStartedBySelectedMonth = firstRateEntryDate.Value <= monthEnd;
+        var hasStartedBySelectedMonth = firstActivityDate <= monthEnd;
 
         var hasNotEndedBeforeSelectedMonth = !loan.Installments.Any()
             || loan.Installments.Any(installment => installment.DueDate >= monthStart);

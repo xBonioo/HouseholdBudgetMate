@@ -39,6 +39,44 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                 name: "IX_LoanPrepayments_LoanId_PrepaymentDate",
                 table: "LoanPrepayments",
                 columns: new[] { "LoanId", "PrepaymentDate" });
+
+            // Backfill legacy prepayment expense rows only when they identify one loan unambiguously.
+            migrationBuilder.Sql("""
+                INSERT INTO "LoanPrepayments" ("LoanId", "PrepaymentDate", "Amount", "CreatedAtUtc", "UpdatedAtUtc")
+                SELECT
+                    matched."LoanId",
+                    make_date(matched."Year", matched."Month", 1),
+                    matched."ActualAmount",
+                    NOW(),
+                    NOW()
+                FROM (
+                    SELECT
+                        e."Id" AS "ExpenseId",
+                        MAX(l."Id") AS "LoanId",
+                        mp."Year",
+                        mp."Month",
+                        e."ActualAmount",
+                        COUNT(*) AS "MatchCount"
+                    FROM "Expenses" e
+                    INNER JOIN "MonthPlans" mp
+                        ON mp."Id" = e."MonthPlanId"
+                        AND mp."UserId" = e."UserId"
+                    INNER JOIN "Loans" l
+                        ON l."UserId" = e."UserId"
+                        AND l."Name" = left(e."Name", length(e."Name") - length(' - nadpłata'))
+                        AND (
+                            (l."TagId" IS NULL AND e."TagId" IS NULL)
+                            OR l."TagId" = e."TagId"
+                        )
+                    WHERE e."LoanInstallmentId" IS NULL
+                        AND e."RegularExpenseDefinitionId" IS NULL
+                        AND e."ActualAmount" > 0
+                        AND e."Name" LIKE '% - nadpłata'
+                        AND e."IsDeleted" = FALSE
+                    GROUP BY e."Id", mp."Year", mp."Month", e."ActualAmount"
+                ) matched
+                WHERE matched."MatchCount" = 1;
+                """);
         }
 
         /// <inheritdoc />

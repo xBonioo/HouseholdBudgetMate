@@ -2298,6 +2298,32 @@ public sealed class LoanServiceTests
     }
 
     /// <summary>
+    /// Verifies that debt summary includes fixed loans that do not have rate entries.
+    /// </summary>
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Include_Fixed_Loans_Without_RateEntries()
+    {
+        var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
+        await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Kredyt gotowkowy",
+            LoanType = LoanType.Cash,
+            InterestMode = LoanInterestMode.Fixed,
+            Principal = 12_000m,
+            InterestRate = 8m,
+            StartDate = new DateOnly(2026, 6, 10),
+            EndDate = new DateOnly(2027, 5, 10),
+            RepaymentDayOfMonth = 10,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var summary = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(1, summary.ActiveLoanCount);
+        Assert.True(summary.ActiveDebt > 0);
+    }
+
+    /// <summary>
     /// Verifies that future prepayment adjustments are tied to the loan identity, not to the display name.
     /// </summary>
     [Fact]

@@ -1848,6 +1848,65 @@ public sealed class LoanServiceTests
     }
 
     [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Throw_Conflict_When_Previewed_Installment_Id_Is_Replaced_With_Same_Schedule()
+    {
+        var service = CreateService(new DateTime(2026, 6, 19, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka stale id",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
+        {
+            LoanInstallmentId = julyInstallment.Id,
+            Amount = 100m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        }, CancellationToken.None);
+
+        await using (var dbContext = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var persisted = await dbContext.LoanInstallments.SingleAsync(x => x.Id == julyInstallment.Id);
+            dbContext.LoanInstallments.Remove(persisted);
+            dbContext.LoanInstallments.Add(new LoanInstallment
+            {
+                LoanId = persisted.LoanId,
+                Year = persisted.Year,
+                Month = persisted.Month,
+                DueDate = persisted.DueDate,
+                Amount = persisted.Amount,
+                PrincipalAmount = persisted.PrincipalAmount,
+                InterestAmount = persisted.InterestAmount,
+                IsPaid = persisted.IsPaid,
+                PaidAtUtc = persisted.PaidAtUtc
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.ApplyLoanPrepaymentAsync(
+                new ApplyLoanPrepaymentRequest
+                {
+                    LoanId = loan.Id,
+                    LoanInstallmentId = julyInstallment.Id,
+                    Amount = 100m,
+                    Strategy = LoanPrepaymentStrategyType.ReduceInstallment,
+                    ExpectedScheduleVersion = preview.SourceVersion
+                },
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ApplyLoanPrepaymentAsync_Should_Throw_NotFound_When_Installment_Id_Is_Invalid()
     {
         var service = CreateService();
@@ -2019,7 +2078,7 @@ public sealed class LoanServiceTests
             InstallmentId = marchInstallment.Id,
             PrincipalAmount = marchInstallment.PrincipalAmount,
             InterestAmount = marchInstallment.InterestAmount,
-            ChargesAmount = 120m
+            ChargesAmount = 75m
         }, CancellationToken.None);
 
         await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
@@ -2029,7 +2088,7 @@ public sealed class LoanServiceTests
         var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
 
         Assert.Equal(
-            decimal.Round(marchInstallment.PrincipalAmount + marchInstallment.InterestAmount + 120m, 2, MidpointRounding.AwayFromZero),
+            decimal.Round(marchInstallment.PrincipalAmount + marchInstallment.InterestAmount + 75m, 2, MidpointRounding.AwayFromZero),
             expense.PlannedAmount);
     }
 

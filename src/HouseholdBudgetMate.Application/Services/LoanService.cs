@@ -638,10 +638,13 @@ public sealed class LoanService(
                     ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
                     : x.Amount);
 
-            var totalAmount = decimal.Round(
-                installment.PrincipalAmount + installment.InterestAmount + chargeAmount,
+            var baseInstallmentAmount = decimal.Round(
+                installment.PrincipalAmount + installment.InterestAmount,
                 2,
                 MidpointRounding.AwayFromZero);
+            var totalAmount = installment.Amount != baseInstallmentAmount
+                ? installment.Amount
+                : decimal.Round(baseInstallmentAmount + chargeAmount, 2, MidpointRounding.AwayFromZero);
 
             if (existingByInstallmentId.TryGetValue(installment.Id, out var existingExpense))
             {
@@ -1202,7 +1205,12 @@ public sealed class LoanService(
                        .FirstOrDefaultAsync(x => x.Id == loanId.Value, cancellationToken)
                    ?? throw new NotFoundException("Loan installment not found.");
 
-        ValidateExpectedScheduleVersion(ComputeLoanScheduleVersion(loan), expectedScheduleVersion);
+        if (!string.IsNullOrWhiteSpace(expectedScheduleVersion))
+        {
+            ValidateExpectedScheduleVersion(ComputeLoanScheduleVersion(loan), expectedScheduleVersion);
+            throw new ConflictException("The loan schedule preview is stale. Please recalculate before confirming.");
+        }
+
         throw new NotFoundException("Loan installment not found.");
     }
 

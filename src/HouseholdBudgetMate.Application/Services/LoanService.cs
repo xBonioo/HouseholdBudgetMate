@@ -638,7 +638,10 @@ public sealed class LoanService(
                     ? decimal.Round(outstandingBalance * x.Amount / 100m, 2, MidpointRounding.AwayFromZero)
                     : x.Amount);
 
-            var totalAmount = installment.Amount + chargeAmount;
+            var totalAmount = decimal.Round(
+                installment.PrincipalAmount + installment.InterestAmount + chargeAmount,
+                2,
+                MidpointRounding.AwayFromZero);
 
             if (existingByInstallmentId.TryGetValue(installment.Id, out var existingExpense))
             {
@@ -1234,9 +1237,7 @@ public sealed class LoanService(
 
     private static void AppendLoanSnapshot(StringBuilder builder, Loan loan)
     {
-        builder.Append(loan.Name).Append('|')
-            .Append(loan.TagId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
-            .Append(loan.LoanType).Append('|')
+        builder.Append(loan.LoanType).Append('|')
             .Append(loan.InterestMode).Append('|')
             .Append(loan.WiborPeriodType?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
             .Append(loan.Principal.ToString(CultureInfo.InvariantCulture)).Append('|')
@@ -1329,6 +1330,7 @@ public sealed class LoanService(
                 categoryId,
                 loan,
                 expenseName,
+                prepaymentDate,
                 cancellationToken);
 
         if (existingExpense is not null)
@@ -1363,6 +1365,7 @@ public sealed class LoanService(
         int categoryId,
         Loan loan,
         string expenseName,
+        DateOnly prepaymentDate,
         CancellationToken cancellationToken)
     {
         var candidates = await dbContext.Expenses
@@ -1380,6 +1383,19 @@ public sealed class LoanService(
         if (currentMetadataMatch is not null)
         {
             return currentMetadataMatch;
+        }
+
+        var hasPreviousPrepaymentForLoanMonth = await dbContext.LoanPrepayments
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.LoanId == loan.Id
+                     && x.PrepaymentDate.Year == prepaymentDate.Year
+                     && x.PrepaymentDate.Month == prepaymentDate.Month,
+                cancellationToken);
+        if (hasPreviousPrepaymentForLoanMonth)
+        {
+            throw new ConflictException(
+                "The loan prepayment expense identity changed. Please recalculate before confirming.");
         }
 
         return null;

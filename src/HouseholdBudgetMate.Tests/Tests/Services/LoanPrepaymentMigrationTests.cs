@@ -32,6 +32,7 @@ public sealed class LoanPrepaymentMigrationTests
         sql.Should().Contain("NOW()");
         sql.Should().Contain("left(e.\"Name\", length(e.\"Name\") - length(' - nadpłata'))");
         sql.Should().Contain("c.\"Name\" = 'Kredyt'");
+        sql.Should().NotContain("c.\"UserId\"");
         sql.Should().Contain("e.\"PlannedAmount\" = 0");
         sql.Should().Contain("e.\"ShowRemainingInUI\" = TRUE");
         sql.Should().Contain("WHERE matched.\"MatchCount\" = 1");
@@ -46,6 +47,7 @@ public sealed class LoanPrepaymentMigrationTests
         migration.Should().Contain("INSERT INTO \"LoanPrepayments\"");
         migration.Should().Contain("mp.\"UserId\" = e.\"UserId\"");
         migration.Should().Contain("c.\"Name\" = 'Kredyt'");
+        migration.Should().NotContain("c.\"UserId\"");
         migration.Should().Contain("l.\"UserId\" = e.\"UserId\"");
         migration.Should().Contain("l.\"Name\" = left(e.\"Name\", length(e.\"Name\") - length(' - nadpłata'))");
         migration.Should().Contain("(l.\"TagId\" IS NULL AND e.\"TagId\" IS NULL)");
@@ -82,7 +84,6 @@ public sealed class LoanPrepaymentMigrationTests
             );
             CREATE TABLE "Categories" (
                 "Id" INTEGER NOT NULL,
-                "UserId" TEXT NOT NULL,
                 "Name" TEXT NOT NULL
             );
             CREATE TABLE "Expenses" (
@@ -118,10 +119,10 @@ public sealed class LoanPrepaymentMigrationTests
             INSERT INTO "MonthPlans" ("Id", "UserId", "Year", "Month") VALUES
                 (1, 'owner', 2026, 7),
                 (2, 'other', 2026, 7);
-            INSERT INTO "Categories" ("Id", "UserId", "Name") VALUES
-                (1, 'owner', 'Kredyt'),
-                (2, 'owner', 'Inne'),
-                (3, 'other', 'Kredyt');
+            INSERT INTO "Categories" ("Id", "Name") VALUES
+                (1, 'Kredyt'),
+                (2, 'Inne'),
+                (3, 'Kredyt');
             INSERT INTO "Expenses" ("Id", "UserId", "MonthPlanId", "Name", "CategoryId", "TagId", "LoanInstallmentId", "RegularExpenseDefinitionId", "PlannedAmount", "ActualAmount", "ShowRemainingInUI", "IsDeleted") VALUES
                 (1, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 100, 1, 0),
                 (2, 'owner', 1, 'A - nadpłata', 1, NULL, NULL, NULL, 0, 50, 1, 0),
@@ -158,7 +159,6 @@ public sealed class LoanPrepaymentMigrationTests
                     AND mp."UserId" = e."UserId"
                 INNER JOIN "Categories" c
                     ON c."Id" = e."CategoryId"
-                    AND c."UserId" = e."UserId"
                     AND c."Name" = 'Kredyt'
                 INNER JOIN "Loans" l
                     ON l."UserId" = e."UserId"

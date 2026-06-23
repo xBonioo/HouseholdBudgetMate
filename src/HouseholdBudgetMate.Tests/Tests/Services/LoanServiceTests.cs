@@ -1383,12 +1383,23 @@ public sealed class LoanServiceTests
             RepaymentDayOfMonth = 15,
             IsActive = true
         }, CancellationToken.None);
-        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
+        var firstTargetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
+        loan = await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanId = loan.Id,
+                LoanInstallmentId = firstTargetInstallment.Id,
+                Amount = 20_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 9, 15));
         var request = new ApplyLoanPrepaymentRequest
         {
             LoanId = loan.Id,
             LoanInstallmentId = targetInstallment.Id,
-            Amount = 20_000m,
+            Amount = 10_000m,
             Strategy = LoanPrepaymentStrategyType.ReduceInstallment
         };
         var preview = await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None);
@@ -1962,6 +1973,64 @@ public sealed class LoanServiceTests
         Assert.Single(expenses, x => x.LoanInstallmentId.HasValue);
         Assert.Single(expenses);
         Assert.Equal(marchInstallmentAmount, expenses[0].PlannedAmount);
+    }
+
+    [Fact]
+    public async Task SyncLoanInstallmentsForMonthAsync_Should_Not_Double_Count_Charges_After_Manual_Override()
+    {
+        var service = CreateService();
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka override koszty",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor3M,
+            MarginRate = 2m,
+            InitialReferenceRate = 5m,
+            Principal = 150000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 1, 15),
+            EndDate = new DateOnly(2026, 12, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 3, IsClosed = false });
+            await context.SaveChangesAsync();
+        }
+
+        await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie nieruchomosci",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 120m,
+            StartDate = new DateOnly(2026, 1, 1),
+            IsActive = true
+        }, CancellationToken.None);
+
+        var withCharge = (await service.GetAllAsync(CancellationToken.None)).Single(x => x.Id == loan.Id);
+        var marchInstallment = withCharge.Installments.Single(x => x.Year == 2026 && x.Month == 3);
+        await service.OverrideLoanInstallmentAsync(new OverrideLoanInstallmentRequest
+        {
+            InstallmentId = marchInstallment.Id,
+            PrincipalAmount = marchInstallment.PrincipalAmount,
+            InterestAmount = marchInstallment.InterestAmount,
+            ChargesAmount = 120m
+        }, CancellationToken.None);
+
+        await service.SyncLoanInstallmentsForMonthAsync(2026, 3, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var monthPlan = await verifyContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 3);
+        var expense = await verifyContext.Expenses.SingleAsync(x => x.MonthPlanId == monthPlan.Id);
+
+        Assert.Equal(
+            decimal.Round(marchInstallment.PrincipalAmount + marchInstallment.InterestAmount + 120m, 2, MidpointRounding.AwayFromZero),
+            expense.PlannedAmount);
     }
 
     /// <summary>

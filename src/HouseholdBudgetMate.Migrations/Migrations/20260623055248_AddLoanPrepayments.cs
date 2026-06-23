@@ -63,7 +63,6 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         AND mp."UserId" = e."UserId"
                     INNER JOIN "Categories" c
                         ON c."Id" = e."CategoryId"
-                        AND c."UserId" = e."UserId"
                         AND c."Name" = 'Kredyt'
                     INNER JOIN "Loans" l
                         ON l."UserId" = e."UserId"

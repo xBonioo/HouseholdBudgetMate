@@ -1,0 +1,15 @@
+.loan-schedule-change-preview-dialog__content {
+    max-height: min(82vh, 76rem);
+    overflow-y: auto;
+}
+
+.loan-schedule-change-preview-dialog__actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    backdrop-filter: blur(8px);
+}
+
+.loan-schedule-change-preview-dialog__actions :deep(.mud-button) {
+    min-width: 10rem;
+}

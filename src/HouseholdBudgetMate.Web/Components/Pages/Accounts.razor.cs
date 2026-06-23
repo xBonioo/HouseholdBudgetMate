@@ -53,10 +53,9 @@ public partial class Accounts
     private IReadOnlyList<AvailableMonthDto> _availablePlanMonths = [];
     private MonthPlanDto? _selectedMonthPlan;
     private LiveBalanceDto _liveBalance = new();
-    private IReadOnlyList<LoanDto> _loans = [];
     private AccountsOverviewModel _overview = new();
     private SavingsTransferSummary _savingsSummary = new();
-    private DebtSummary _debtSummary = new();
+    private DebtSummaryDto _debtSummary = new();
 
     private UpdateAccountRequest? _editModel;
     private string? _editNameError;
@@ -123,7 +122,7 @@ public partial class Accounts
             var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
             _selectedMonthPlan = monthlyPicture.MonthPlan;
             _liveBalance = monthlyPicture.LiveBalance;
-            _loans = await LoanService.GetAllAsync(CancellationToken.None);
+            _debtSummary = await LoanService.GetDebtSummaryAsync(_selectedYear, _selectedMonth, CancellationToken.None);
 
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
@@ -241,6 +240,7 @@ public partial class Accounts
             var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
             _selectedMonthPlan = monthlyPicture.MonthPlan;
             _liveBalance = monthlyPicture.LiveBalance;
+            _debtSummary = await LoanService.GetDebtSummaryAsync(_selectedYear, _selectedMonth, CancellationToken.None);
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
             MarkDirtyStatePristine();
@@ -299,11 +299,6 @@ public partial class Accounts
             _selectedMonthPlan?.SavingsTransfers.Sum(x => x.Amount) ?? 0,
             _selectedMonthPlan?.SavingsTransfers.Count ?? 0);
 
-        var activeLoans = GetActiveLoansForSelectedMonth();
-        _debtSummary = new DebtSummary(
-            activeLoans.Sum(GetRemainingPrincipalForSelectedMonth),
-            activeLoans.Count);
-
         var budgetHealthItems = BuildBudgetHealthItems().ToList();
 
         _overspentCategories = budgetHealthItems
@@ -353,53 +348,6 @@ public partial class Accounts
 
                 return new BudgetHealthItem(category.Name, limit, spent, limit - spent);
             });
-    }
-
-    private IReadOnlyList<LoanDto> GetActiveLoansForSelectedMonth()
-    {
-        var monthStart = new DateOnly(_selectedYear, _selectedMonth, 1);
-        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-
-        return _loans
-            .Where(loan => loan.IsActive)
-            .Where(loan => IsLoanVisibleInSelectedMonth(loan, monthStart, monthEnd))
-            .ToList();
-    }
-
-    private static bool IsLoanVisibleInSelectedMonth(
-        LoanDto loan,
-        DateOnly monthStart,
-        DateOnly monthEnd)
-    {
-        var firstRateEntryDate = loan.RateEntries
-            .OrderBy(rate => rate.EffectiveFrom)
-            .Select(rate => (DateOnly?)rate.EffectiveFrom)
-            .FirstOrDefault();
-
-        if (!firstRateEntryDate.HasValue)
-        {
-            return false;
-        }
-
-        var hasStartedBySelectedMonth = firstRateEntryDate.Value <= monthEnd;
-
-        var hasNotEndedBeforeSelectedMonth = !loan.Installments.Any()
-            || loan.Installments.Any(installment => installment.DueDate >= monthStart);
-
-        return hasStartedBySelectedMonth && hasNotEndedBeforeSelectedMonth;
-    }
-
-    private decimal GetRemainingPrincipalForSelectedMonth(LoanDto loan)
-    {
-        var monthStart = new DateOnly(_selectedYear, _selectedMonth, 1);
-        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-
-        return decimal.Round(
-            loan.Installments
-                .Where(installment => installment.DueDate > monthEnd)
-                .Sum(installment => installment.PrincipalAmount),
-            2,
-            MidpointRounding.AwayFromZero);
     }
 
     private AccountBalanceRow ToAccountBalanceRow(AccountDto account)
@@ -806,6 +754,20 @@ public partial class Accounts
         return $"{value.ToString("0.00", _culture)} PLN";
     }
 
+    private static string FormatActiveLoanCount(int count) => count switch
+    {
+        1 => "1 aktywny kredyt",
+        >= 2 and <= 4 => $"{count} aktywne kredyty",
+        _ => $"{count} aktywnych kredytów"
+    };
+
+    private static string FormatMonthlyTransferCount(int count) => count switch
+    {
+        1 => "1 wpis w miesiącu",
+        >= 2 and <= 4 => $"{count} wpisy w miesiącu",
+        _ => $"{count} wpisów w miesiącu"
+    };
+
     private string GetAccountIcon(AccountType type)
     {
         return type switch
@@ -897,8 +859,4 @@ public partial class Accounts
     private sealed record SavingsTransferSummary(
         decimal MonthlyTransfers = 0,
         int TransferCount = 0);
-
-    private sealed record DebtSummary(
-        decimal ActiveDebt = 0,
-        int ActiveLoanCount = 0);
 }

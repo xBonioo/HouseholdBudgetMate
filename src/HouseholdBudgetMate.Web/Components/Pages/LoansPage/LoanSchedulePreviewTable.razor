@@ -1,0 +1,107 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+@using HouseholdBudgetMate.Abstractions.Enums
+
+<div class="loan-schedule-preview-table__scroll" role="region" aria-label="Porównanie harmonogramu kredytu">
+    <MudTable Items="@VisibleRows"
+              Dense="true"
+              Hover="true"
+              Class="loan-schedule-preview-table"
+              Style="min-width: 62rem;"
+              RowClassFunc="GetRowClass">
+        <HeaderContent>
+            <MudTh>Miesiąc</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Przed rata</MudTh>
+            <MudTh>Przed kapitał</MudTh>
+            <MudTh>Przed odsetki</MudTh>
+            <MudTh>Przed koszty</MudTh>
+            <MudTh>Po rata</MudTh>
+            <MudTh>Po kapitał</MudTh>
+            <MudTh>Po odsetki</MudTh>
+            <MudTh>Po koszty</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="row">
+            <MudTd DataLabel="Miesiąc">@row.DueDate.ToString("MM.yyyy", Culture)</MudTd>
+            <MudTd DataLabel="Status">
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                    <span class="@GetStateClass(row.State)">
+                        @GetStateLabel(row.State)
+                    </span>
+                    @if (row.State == LoanScheduleComparisonRowState.Removed)
+                    {
+                        <MudText Typo="Typo.caption" Class="hb-muted">Rata zniknęła po przeliczeniu.</MudText>
+                    }
+                    else if (row.State == LoanScheduleComparisonRowState.Added)
+                    {
+                        <MudText Typo="Typo.caption" Class="hb-muted">Rata pojawiła się po przeliczeniu.</MudText>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Przed rata">@FormatAmount(row.Before?.Amount)</MudTd>
+            <MudTd DataLabel="Przed kapitał">@FormatAmount(row.Before?.PrincipalAmount)</MudTd>
+            <MudTd DataLabel="Przed odsetki">@FormatAmount(row.Before?.InterestAmount)</MudTd>
+            <MudTd DataLabel="Przed koszty">@FormatCharges(row.Before)</MudTd>
+            <MudTd DataLabel="Po rata">@FormatAmount(row.After?.Amount)</MudTd>
+            <MudTd DataLabel="Po kapitał">@FormatAmount(row.After?.PrincipalAmount)</MudTd>
+            <MudTd DataLabel="Po odsetki">@FormatAmount(row.After?.InterestAmount)</MudTd>
+            <MudTd DataLabel="Po koszty">@FormatCharges(row.After)</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="ma-3">
+                Brak nieopłaconych rat do porównania.
+            </MudAlert>
+        </NoRecordsContent>
+    </MudTable>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<LoanScheduleComparisonRowDto> Rows { get; set; } = [];
+    [Parameter] public CultureInfo Culture { get; set; } = new("pl-PL");
+
+    private IReadOnlyList<LoanScheduleComparisonRowDto> VisibleRows => Rows
+        .Where(row => !row.BeforeIsPaid && !row.AfterIsPaid)
+        .OrderBy(x => x.DueDate)
+        .ToList();
+
+    private string GetRowClass(LoanScheduleComparisonRowDto row, int index)
+        => row.State switch
+        {
+            LoanScheduleComparisonRowState.Added => "loan-schedule-preview-table__row-added",
+            LoanScheduleComparisonRowState.Removed => "loan-schedule-preview-table__row-removed",
+            LoanScheduleComparisonRowState.Changed => "loan-schedule-preview-table__row-changed",
+            _ => string.Empty
+        };
+
+    private string FormatAmount(decimal? amount)
+        => amount.HasValue ? $"{amount.Value.ToString("N2", Culture)} PLN" : "—";
+
+    private string FormatCharges(ScheduleRowDto? row)
+    {
+        if (row is null)
+        {
+            return "—";
+        }
+
+        var charges = row.Amount - row.PrincipalAmount - row.InterestAmount;
+        return $"{charges.ToString("N2", Culture)} PLN";
+    }
+
+    private static string GetStateClass(LoanScheduleComparisonRowState state)
+        => state switch
+        {
+            LoanScheduleComparisonRowState.Added => "loan-schedule-preview-table__state loan-schedule-preview-table__state--added",
+            LoanScheduleComparisonRowState.Removed => "loan-schedule-preview-table__state loan-schedule-preview-table__state--removed",
+            LoanScheduleComparisonRowState.Changed => "loan-schedule-preview-table__state loan-schedule-preview-table__state--changed",
+            _ => "loan-schedule-preview-table__state"
+        };
+
+    private static string GetStateLabel(LoanScheduleComparisonRowState state)
+        => state switch
+        {
+            LoanScheduleComparisonRowState.Added => "Dodana",
+            LoanScheduleComparisonRowState.Removed => "Usunięta",
+            LoanScheduleComparisonRowState.Changed => "Zmiana",
+            _ => "Bez zmian"
+        };
+}

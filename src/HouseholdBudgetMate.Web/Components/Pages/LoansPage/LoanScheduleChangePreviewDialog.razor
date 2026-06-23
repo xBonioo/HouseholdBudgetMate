@@ -1,0 +1,111 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+
+<MudDialog Visible="@Visible"
+           VisibleChanged="OnVisibleChanged"
+           Options="@_dialogOptions"
+           Class="loan-schedule-change-preview-dialog">
+    <TitleContent>
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h6">@GetTitle()</MudText>
+            @if (Preview is not null)
+            {
+                <MudText Typo="Typo.body2" Class="hb-muted">
+                    @Preview.LoanName
+                </MudText>
+            }
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <div class="loan-schedule-change-preview-dialog__content">
+            @if (IsSubmitting)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+            }
+
+            @if (Preview is null)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Przygotowuję podgląd harmonogramu.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+                    @Preview.ChangeLabel
+                    od @Preview.AffectedFrom.ToString("dd.MM.yyyy", Culture)
+                </MudAlert>
+
+                <LoanSchedulePreviewSummary Before="@Preview.BeforeSummary"
+                                            After="@Preview.AfterSummary"
+                                            Culture="@Culture" />
+
+                <LoanSchedulePreviewYearPanel Rows="@Preview.Rows"
+                                              AffectedFrom="@Preview.AffectedFrom"
+                                              Culture="@Culture" />
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <div class="loan-schedule-change-preview-dialog__actions">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       Disabled="@IsSubmitting"
+                       OnClick="OnBackToEditClicked">
+                Wróć do edycji
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Disabled="@(!CanConfirm)"
+                       OnClick="OnConfirmClicked">
+                Potwierdź i zapisz
+            </MudButton>
+        </div>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly DialogOptions _dialogOptions = new()
+    {
+        CloseOnEscapeKey = true,
+        CloseButton = true,
+        FullWidth = true,
+        MaxWidth = MaxWidth.ExtraLarge
+    };
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public LoanScheduleChangePreviewDto? Preview { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public CultureInfo Culture { get; set; } = new("pl-PL");
+    [Parameter, EditorRequired] public EventCallback OnConfirm { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnBackToEdit { get; set; }
+
+    private bool CanConfirm => Preview is not null && !IsSubmitting;
+
+    private string GetTitle()
+        => Preview is null
+            ? "Podgląd zmiany harmonogramu"
+            : $"{Preview.ChangeType}: {Preview.LoanName}";
+
+    private async Task OnVisibleChanged(bool value)
+    {
+        Visible = value;
+        await VisibleChanged.InvokeAsync(value);
+    }
+
+    private async Task OnBackToEditClicked()
+    {
+        await OnBackToEdit.InvokeAsync();
+    }
+
+    private async Task OnConfirmClicked()
+    {
+        if (!CanConfirm)
+        {
+            return;
+        }
+
+        await OnConfirm.InvokeAsync();
+    }
+}

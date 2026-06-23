@@ -1,0 +1,95 @@
+@using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto
+
+<MudPaper Class="pa-4 mb-4 loan-schedule-preview-summary" Elevation="0">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" lg="4">
+            <MudText Typo="Typo.overline" Class="hb-muted">Pozostały kapitał</MudText>
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.body2">Przed: @Before.RemainingPrincipal.ToString("N2", Culture) PLN</MudText>
+                <MudText Typo="Typo.body2">Po: @After.RemainingPrincipal.ToString("N2", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">@GetMoneyDelta(Before.RemainingPrincipal, After.RemainingPrincipal)</MudText>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" lg="4">
+            <MudText Typo="Typo.overline" Class="hb-muted">Następna rata</MudText>
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.body2">Przed: @Before.NextInstallment.ToString("N2", Culture) PLN</MudText>
+                <MudText Typo="Typo.body2">Po: @After.NextInstallment.ToString("N2", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">@GetMoneyDelta(Before.NextInstallment, After.NextInstallment)</MudText>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" lg="4">
+            <MudText Typo="Typo.overline" Class="hb-muted">Przyszłe odsetki</MudText>
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.body2">Przed: @Before.TotalFutureInterest.ToString("N2", Culture) PLN</MudText>
+                <MudText Typo="Typo.body2">Po: @After.TotalFutureInterest.ToString("N2", Culture) PLN</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">@GetMoneyDelta(Before.TotalFutureInterest, After.TotalFutureInterest)</MudText>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" lg="4">
+            <MudText Typo="Typo.overline" Class="hb-muted">Data końcowa</MudText>
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.body2">Przed: @Before.EndDate.ToString("dd.MM.yyyy", Culture)</MudText>
+                <MudText Typo="Typo.body2">Po: @After.EndDate.ToString("dd.MM.yyyy", Culture)</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">@GetDateDelta()</MudText>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" lg="4">
+            <MudText Typo="Typo.overline" Class="hb-muted">Liczba rat</MudText>
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.body2">Przed: @Before.InstallmentCount</MudText>
+                <MudText Typo="Typo.body2">Po: @After.InstallmentCount</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">@GetCountDelta()</MudText>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public LoanScheduleSummaryDto Before { get; set; } = default!;
+    [Parameter, EditorRequired] public LoanScheduleSummaryDto After { get; set; } = default!;
+    [Parameter] public CultureInfo Culture { get; set; } = new("pl-PL");
+
+    private string GetMoneyDelta(decimal before, decimal after)
+    {
+        var delta = after - before;
+        if (delta == 0)
+        {
+            return "Brak zmiany.";
+        }
+
+        return delta > 0
+            ? $"Wzrost o {delta.ToString("N2", Culture)} PLN."
+            : $"Spadek o {Math.Abs(delta).ToString("N2", Culture)} PLN.";
+    }
+
+    private string GetDateDelta()
+    {
+        if (Before.EndDate == After.EndDate)
+        {
+            return "Data końcowa bez zmian.";
+        }
+
+        var difference = After.EndDate.ToDateTime(TimeOnly.MinValue) - Before.EndDate.ToDateTime(TimeOnly.MinValue);
+        var direction = difference.TotalDays >= 0 ? "wydłużenie" : "skrócenie";
+        return $"{direction} o {Math.Abs((int)Math.Round(difference.TotalDays))} dni.";
+    }
+
+    private string GetCountDelta()
+    {
+        var delta = After.InstallmentCount - Before.InstallmentCount;
+        if (delta == 0)
+        {
+            return "Liczba rat bez zmian.";
+        }
+
+        return delta > 0
+            ? $"Więcej o {delta} rat."
+            : $"Mniej o {Math.Abs(delta)} rat.";
+    }
+}

@@ -11,6 +11,9 @@ using HouseholdBudgetMate.Application.Validation.Loans;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Migrations;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HouseholdBudgetMate.Application.Services;
 
@@ -47,6 +50,46 @@ public sealed class LoanService(
             .ToListAsync(cancellationToken);
 
         return loans;
+    }
+
+    public async Task<DebtSummaryDto> GetDebtSummaryAsync(int year, int month, CancellationToken cancellationToken)
+    {
+        var monthStart = new DateOnly(year, month, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var loans = await dbContext.Loans
+            .AsNoTracking()
+            .Include(x => x.RateEntries)
+            .Include(x => x.Installments)
+            .ThenInclude(x => x.Expense)
+            .ToListAsync(cancellationToken);
+
+        if (loans.Count == 0)
+        {
+            return new DebtSummaryDto();
+        }
+
+        var prepaymentAdjustments = await LoadFuturePrepaymentAdjustmentsAsync(dbContext, year, month, cancellationToken);
+
+        var activeLoans = loans
+            .Where(loan => loan.IsActive)
+            .Where(loan => IsLoanVisibleInSelectedMonth(loan, monthStart, monthEnd))
+            .ToList();
+
+        var activeDebt = activeLoans.Sum(loan =>
+        {
+            var remainingPrincipal = GetRemainingPrincipalForSelectedMonth(loan, monthEnd);
+            var adjustment = prepaymentAdjustments.GetValueOrDefault(BuildPrepaymentAdjustmentKey(loan));
+            return decimal.Round(remainingPrincipal + adjustment, 2, MidpointRounding.AwayFromZero);
+        });
+
+        return new DebtSummaryDto
+        {
+            ActiveDebt = decimal.Round(activeDebt, 2, MidpointRounding.AwayFromZero),
+            ActiveLoanCount = activeLoans.Count
+        };
     }
 
     public async Task<LoanDto> CreateLoanAsync(CreateLoanRequest request, CancellationToken cancellationToken)
@@ -172,6 +215,82 @@ public sealed class LoanService(
         return await BuildLoanDtoAsync(dbContext, loan.Id, cancellationToken);
     }
 
+    public async Task<LoanScheduleChangePreviewDto> PreviewAddLoanRateEntryAsync(AddLoanRateEntryRequest request,
+        CancellationToken cancellationToken)
+    {
+        AddLoanRateEntryValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var loan = await LoadLoanForSchedulePreviewAsync(dbContext, request.LoanId, cancellationToken);
+        var beforeDto = loan.MapToDto();
+        var projection = ProjectRateEntryChange(loan, request);
+        ApplyProjectionToPreview(loan, projection);
+        var afterDto = loan.MapToDto();
+
+        return BuildLoanScheduleChangePreview(
+            beforeDto,
+            afterDto,
+            loan.Id,
+            loan.Name,
+            "AddLoanRateEntry",
+            "Aktualizacja WIBOR",
+            projection.ScheduleStart,
+            projection.SourceVersion);
+    }
+
+    public async Task<LoanScheduleChangePreviewDto> PreviewApplyLoanPrepaymentAsync(ApplyLoanPrepaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ApplyLoanPrepaymentValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var loan = await LoadLoanForSchedulePreviewByInstallmentAsync(
+            dbContext,
+            request.LoanInstallmentId,
+            cancellationToken);
+        var beforeDto = loan.MapToDto();
+        var projection = ProjectPrepayment(loan, request);
+        ApplyProjectionToPreview(loan, projection);
+        var afterDto = loan.MapToDto();
+
+        return BuildLoanScheduleChangePreview(
+            beforeDto,
+            afterDto,
+            loan.Id,
+            loan.Name,
+            "ApplyLoanPrepayment",
+            "Nadpłata",
+            projection.ScheduleStart,
+            projection.SourceVersion);
+    }
+
+    public async Task<LoanScheduleChangePreviewDto> PreviewApplyLoanInstallmentAmountChangeAsync(
+        ApplyLoanInstallmentAmountChangeRequest request,
+        CancellationToken cancellationToken)
+    {
+        ApplyInstallmentAmountChangeValidator.ValidateOrThrowBadRequest(request);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var loan = await LoadLoanForSchedulePreviewByInstallmentAsync(
+            dbContext,
+            request.LoanInstallmentId,
+            cancellationToken);
+        var beforeDto = loan.MapToDto();
+        var projection = ProjectInstallmentAmountChange(loan, request);
+        ApplyProjectionToPreview(loan, projection);
+        var afterDto = loan.MapToDto();
+
+        return BuildLoanScheduleChangePreview(
+            beforeDto,
+            afterDto,
+            loan.Id,
+            loan.Name,
+            "ApplyLoanInstallmentAmountChange",
+            "Zmiana raty z banku",
+            projection.ScheduleStart,
+            projection.SourceVersion);
+    }
+
     public async Task<LoanDto> AddLoanRateEntryAsync(AddLoanRateEntryRequest request,
         CancellationToken cancellationToken)
     {
@@ -187,39 +306,13 @@ public sealed class LoanService(
                        .FirstOrDefaultAsync(x => x.Id == request.LoanId, cancellationToken)
                    ?? throw new NotFoundException("Loan not found.");
 
-        if (loan.LoanType != (int)LoanType.Mortgage)
-        {
-            throw new BadRequestException("Rate updates are available only for mortgage loans.");
-        }
-
-        var variablePhaseStart = GetVariablePhaseStartDate(loan);
-        if (request.EffectiveFrom < variablePhaseStart)
-        {
-            throw new BadRequestException(
-                $"Rate updates are available from {variablePhaseStart:yyyy-MM-dd} for this loan.");
-        }
-
-        if (loan.RateEntries.Any(x => x.EffectiveFrom == request.EffectiveFrom))
-        {
-            throw new BadRequestException("Rate entry for this date already exists.");
-        }
-
-        if (loan.Installments.Any(x => x.IsPaid && x.DueDate >= request.EffectiveFrom))
-        {
-            throw new BadRequestException("Cannot change rate for already paid installments.");
-        }
-
-        loan.RateEntries.Add(new LoanRateEntry
-        {
-            LoanId = loan.Id,
-            EffectiveFrom = request.EffectiveFrom,
-            ReferenceRate = request.ReferenceRate
-        });
-
-        await RebuildInstallmentsFromAsync(dbContext, loan, request.EffectiveFrom, cancellationToken);
+        var projection = ProjectRateEntryChange(loan, request);
+        ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
+        loan.RateEntries.Add(projection.RateEntry!);
+        PersistProjectedInstallments(dbContext, loan, projection);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await SyncOpenLoanInstallmentPlansAsync(request.EffectiveFrom, loan.EndDate, cancellationToken);
+        await SyncOpenLoanInstallmentPlansAsync(projection.ScheduleStart, projection.ScheduleEnd, cancellationToken);
 
         var today = dateTimeProvider.GetLocalDateOnly();
         await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
@@ -244,81 +337,14 @@ public sealed class LoanService(
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
                    ?? throw new NotFoundException("Loan installment not found.");
 
-        var targetInstallment = loan.Installments.First(x => x.Id == request.LoanInstallmentId);
-        if (targetInstallment.IsPaid)
-        {
-            throw new BadRequestException("Cannot apply prepayment to paid installment.");
-        }
-
-        var affectedInstallments = loan.Installments
-            .Where(x => !x.IsPaid && x.DueDate >= targetInstallment.DueDate)
-            .OrderBy(x => x.DueDate)
-            .ThenBy(x => x.Id)
-            .ToList();
-
-        if (affectedInstallments.Count == 0)
-        {
-            throw new BadRequestException("No installments available for prepayment recalculation.");
-        }
-
-        var remainingPrincipal = decimal.Round(affectedInstallments.Sum(x => x.PrincipalAmount), 2, MidpointRounding.AwayFromZero);
-        if (request.Amount >= remainingPrincipal)
-        {
-            throw new BadRequestException("Prepayment amount must be lower than remaining principal.");
-        }
-
-        var principalAfterPrepayment = decimal.Round(remainingPrincipal - request.Amount, 2, MidpointRounding.AwayFromZero);
-        if (principalAfterPrepayment <= 0)
-        {
-            throw new BadRequestException("Prepayment leaves no principal to recalculate.");
-        }
-
-        foreach (var installment in affectedInstallments)
-        {
-            if (installment.Expense is null)
-            {
-                continue;
-            }
-
-            installment.Expense.IsDeleted = true;
-            installment.Expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
-        }
-
-        dbContext.LoanInstallments.RemoveRange(affectedInstallments);
-
-        var scheduleStart = affectedInstallments[0].DueDate;
-        var scheduleEnd = loan.EndDate;
-        if (request.Strategy == LoanPrepaymentStrategyType.ShortenPeriod)
-        {
-            scheduleEnd = ResolveShortenedEndDate(
-                loan,
-                principalAfterPrepayment,
-                scheduleStart,
-                loan.EndDate,
-                affectedInstallments[0].Amount);
-            loan.EndDate = scheduleEnd;
-        }
-
-        var schedule = BuildSchedule(loan, principalAfterPrepayment, scheduleStart, scheduleEnd);
-        foreach (var row in schedule)
-        {
-            dbContext.LoanInstallments.Add(new LoanInstallment
-            {
-                LoanId = loan.Id,
-                Year = row.Year,
-                Month = row.Month,
-                DueDate = row.DueDate,
-                Amount = row.Amount,
-                PrincipalAmount = row.PrincipalAmount,
-                InterestAmount = row.InterestAmount,
-                IsPaid = false
-            });
-        }
+        var projection = ProjectPrepayment(loan, request);
+        ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
+        PersistProjectedInstallments(dbContext, loan, projection);
 
         await UpsertPrepaymentExpenseAsync(dbContext, loan, request.Amount, today, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await SyncOpenLoanInstallmentPlansAsync(scheduleStart, scheduleEnd, cancellationToken);
+        await SyncOpenLoanInstallmentPlansAsync(projection.ScheduleStart, projection.ScheduleEnd, cancellationToken);
 
         await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
 
@@ -343,86 +369,17 @@ public sealed class LoanService(
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
                    ?? throw new NotFoundException("Loan installment not found.");
 
-        var targetInstallment = loan.Installments.First(x => x.Id == request.LoanInstallmentId);
-        if (targetInstallment.IsPaid)
+        var projection = ProjectInstallmentAmountChange(loan, request);
+        ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
+        PersistProjectedInstallments(dbContext, loan, projection);
+
+        if (projection.PrepaymentAmount > 0)
         {
-            throw new BadRequestException("Cannot change installment amount for paid installment.");
-        }
-
-        var affectedInstallments = loan.Installments
-            .Where(x => !x.IsPaid && x.DueDate >= targetInstallment.DueDate)
-            .OrderBy(x => x.DueDate)
-            .ThenBy(x => x.Id)
-            .ToList();
-
-        if (affectedInstallments.Count == 0)
-        {
-            throw new BadRequestException("No installments available for amount recalculation.");
-        }
-
-        var remainingPrincipal = decimal.Round(affectedInstallments.Sum(x => x.PrincipalAmount), 2, MidpointRounding.AwayFromZero);
-        var scheduleStart = affectedInstallments[0].DueDate;
-        if (request.LastInstallmentDate < scheduleStart)
-        {
-            throw new BadRequestException("Last installment date must be greater than or equal to schedule start.");
-        }
-
-        if (request.LastInstallmentDate > loan.EndDate)
-        {
-            throw new BadRequestException("Last installment date cannot extend the current loan period.");
-        }
-
-        var targetPrincipal = ResolvePrincipalForTargetInstallmentAmount(
-            loan,
-            request.InstallmentAmount,
-            scheduleStart,
-            request.LastInstallmentDate,
-            remainingPrincipal);
-
-        if (targetPrincipal > remainingPrincipal)
-        {
-            throw new BadRequestException("Installment amount does not imply a lower remaining principal.");
-        }
-
-        var prepaymentAmount = decimal.Round(remainingPrincipal - targetPrincipal, 2, MidpointRounding.AwayFromZero);
-        foreach (var installment in affectedInstallments)
-        {
-            if (installment.Expense is null)
-            {
-                continue;
-            }
-
-            installment.Expense.IsDeleted = true;
-            installment.Expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
-        }
-
-        dbContext.LoanInstallments.RemoveRange(affectedInstallments);
-
-        loan.EndDate = request.LastInstallmentDate;
-
-        var schedule = BuildSchedule(loan, targetPrincipal, scheduleStart, loan.EndDate);
-        foreach (var row in schedule)
-        {
-            dbContext.LoanInstallments.Add(new LoanInstallment
-            {
-                LoanId = loan.Id,
-                Year = row.Year,
-                Month = row.Month,
-                DueDate = row.DueDate,
-                Amount = row.Amount,
-                PrincipalAmount = row.PrincipalAmount,
-                InterestAmount = row.InterestAmount,
-                IsPaid = false
-            });
-        }
-
-        if (prepaymentAmount > 0)
-        {
-            await UpsertPrepaymentExpenseAsync(dbContext, loan, prepaymentAmount, today, cancellationToken);
+            await UpsertPrepaymentExpenseAsync(dbContext, loan, projection.PrepaymentAmount, today, cancellationToken);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await SyncOpenLoanInstallmentPlansAsync(scheduleStart, loan.EndDate, cancellationToken);
+        await SyncOpenLoanInstallmentPlansAsync(projection.ScheduleStart, projection.ScheduleEnd, cancellationToken);
         await SyncLoanInstallmentsForMonthAsync(today.Year, today.Month, cancellationToken);
 
         return await BuildLoanDtoAsync(dbContext, loan.Id, cancellationToken);
@@ -746,6 +703,514 @@ public sealed class LoanService(
         return loan.MapToDto();
     }
 
+    private async Task<Loan> LoadLoanForSchedulePreviewAsync(
+        ApplicationDbContext dbContext,
+        int loanId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Loans
+                   .AsNoTracking()
+                   .Include(x => x.Tag)
+                   .Include(x => x.RateEntries)
+                   .Include(x => x.Charges)
+                   .Include(x => x.Installments)
+                   .ThenInclude(x => x.Expense)
+               .FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken)
+               ?? throw new NotFoundException("Loan not found.");
+    }
+
+    private async Task<Loan> LoadLoanForSchedulePreviewByInstallmentAsync(
+        ApplicationDbContext dbContext,
+        int loanInstallmentId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Loans
+                   .AsNoTracking()
+                   .Include(x => x.Tag)
+                   .Include(x => x.RateEntries)
+                   .Include(x => x.Charges)
+                   .Include(x => x.Installments)
+                   .ThenInclude(x => x.Expense)
+                   .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == loanInstallmentId), cancellationToken)
+               ?? throw new NotFoundException("Loan installment not found.");
+    }
+
+    private static ScheduleChangeProjection ProjectRateEntryChange(Loan loan, AddLoanRateEntryRequest request)
+    {
+        if (loan.LoanType != (int)LoanType.Mortgage)
+        {
+            throw new BadRequestException("Rate updates are available only for mortgage loans.");
+        }
+
+        var variablePhaseStart = GetVariablePhaseStartDate(loan);
+        if (request.EffectiveFrom < variablePhaseStart)
+        {
+            throw new BadRequestException(
+                $"Rate updates are available from {variablePhaseStart:yyyy-MM-dd} for this loan.");
+        }
+
+        if (loan.RateEntries.Any(x => x.EffectiveFrom == request.EffectiveFrom))
+        {
+            throw new BadRequestException("Rate entry for this date already exists.");
+        }
+
+        if (loan.Installments.Any(x => x.IsPaid && x.DueDate >= request.EffectiveFrom))
+        {
+            throw new BadRequestException("Cannot change rate for already paid installments.");
+        }
+
+        var affectedInstallments = loan.Installments
+            .Where(x => x.DueDate >= request.EffectiveFrom)
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToList();
+        var rateEntry = new LoanRateEntry
+        {
+            LoanId = loan.Id,
+            EffectiveFrom = request.EffectiveFrom,
+            ReferenceRate = request.ReferenceRate
+        };
+
+        IReadOnlyList<ScheduleRowDto> schedule = [];
+        if (affectedInstallments.Count > 0)
+        {
+            var remainingPrincipal = affectedInstallments.Sum(x => x.PrincipalAmount);
+            if (remainingPrincipal > 0)
+            {
+                loan.RateEntries.Add(rateEntry);
+                try
+                {
+                    schedule = BuildSchedule(
+                        loan,
+                        remainingPrincipal,
+                        affectedInstallments[0].DueDate,
+                        loan.EndDate);
+                }
+                finally
+                {
+                    loan.RateEntries.Remove(rateEntry);
+                }
+            }
+            else
+            {
+                affectedInstallments = [];
+            }
+        }
+
+        return new ScheduleChangeProjection(
+            ComputeLoanScheduleVersion(loan),
+            request.EffectiveFrom,
+            loan.EndDate,
+            affectedInstallments,
+            schedule,
+            rateEntry,
+            0m);
+    }
+
+    private static ScheduleChangeProjection ProjectPrepayment(Loan loan, ApplyLoanPrepaymentRequest request)
+    {
+        var targetInstallment = loan.Installments.FirstOrDefault(x => x.Id == request.LoanInstallmentId)
+            ?? throw new NotFoundException("Loan installment not found.");
+        if (targetInstallment.IsPaid)
+        {
+            throw new BadRequestException("Cannot apply prepayment to paid installment.");
+        }
+
+        var affectedInstallments = GetAffectedPreviewInstallments(loan, targetInstallment.DueDate);
+        if (affectedInstallments.Count == 0)
+        {
+            throw new BadRequestException("No installments available for prepayment recalculation.");
+        }
+
+        var remainingPrincipal = decimal.Round(
+            affectedInstallments.Sum(x => x.PrincipalAmount),
+            2,
+            MidpointRounding.AwayFromZero);
+        if (request.Amount >= remainingPrincipal)
+        {
+            throw new BadRequestException("Prepayment amount must be lower than remaining principal.");
+        }
+
+        var principalAfterPrepayment = decimal.Round(
+            remainingPrincipal - request.Amount,
+            2,
+            MidpointRounding.AwayFromZero);
+        if (principalAfterPrepayment <= 0)
+        {
+            throw new BadRequestException("Prepayment leaves no principal to recalculate.");
+        }
+
+        var scheduleStart = affectedInstallments[0].DueDate;
+        var scheduleEnd = loan.EndDate;
+        if (request.Strategy == LoanPrepaymentStrategyType.ShortenPeriod)
+        {
+            scheduleEnd = ResolveShortenedEndDate(
+                loan,
+                principalAfterPrepayment,
+                scheduleStart,
+                loan.EndDate,
+                affectedInstallments[0].Amount);
+        }
+
+        var originalEndDate = loan.EndDate;
+        loan.EndDate = scheduleEnd;
+        IReadOnlyList<ScheduleRowDto> schedule;
+        try
+        {
+            schedule = BuildSchedule(loan, principalAfterPrepayment, scheduleStart, scheduleEnd);
+        }
+        finally
+        {
+            loan.EndDate = originalEndDate;
+        }
+
+        return new ScheduleChangeProjection(
+            ComputeLoanScheduleVersion(loan),
+            scheduleStart,
+            scheduleEnd,
+            affectedInstallments,
+            schedule,
+            null,
+            request.Amount);
+    }
+
+    private static ScheduleChangeProjection ProjectInstallmentAmountChange(
+        Loan loan,
+        ApplyLoanInstallmentAmountChangeRequest request)
+    {
+        var targetInstallment = loan.Installments.FirstOrDefault(x => x.Id == request.LoanInstallmentId)
+            ?? throw new NotFoundException("Loan installment not found.");
+        if (targetInstallment.IsPaid)
+        {
+            throw new BadRequestException("Cannot change installment amount for paid installment.");
+        }
+
+        var affectedInstallments = GetAffectedPreviewInstallments(loan, targetInstallment.DueDate);
+        if (affectedInstallments.Count == 0)
+        {
+            throw new BadRequestException("No installments available for amount recalculation.");
+        }
+
+        var remainingPrincipal = decimal.Round(
+            affectedInstallments.Sum(x => x.PrincipalAmount),
+            2,
+            MidpointRounding.AwayFromZero);
+        var scheduleStart = affectedInstallments[0].DueDate;
+        if (request.LastInstallmentDate < scheduleStart)
+        {
+            throw new BadRequestException("Last installment date must be greater than or equal to schedule start.");
+        }
+
+        if (request.LastInstallmentDate > loan.EndDate)
+        {
+            throw new BadRequestException("Last installment date cannot extend the current loan period.");
+        }
+
+        var targetPrincipal = ResolvePrincipalForTargetInstallmentAmount(
+            loan,
+            request.InstallmentAmount,
+            scheduleStart,
+            request.LastInstallmentDate,
+            remainingPrincipal);
+        if (targetPrincipal > remainingPrincipal)
+        {
+            throw new BadRequestException("Installment amount does not imply a lower remaining principal.");
+        }
+
+        var originalEndDate = loan.EndDate;
+        loan.EndDate = request.LastInstallmentDate;
+        IReadOnlyList<ScheduleRowDto> schedule;
+        try
+        {
+            schedule = BuildSchedule(loan, targetPrincipal, scheduleStart, request.LastInstallmentDate);
+        }
+        finally
+        {
+            loan.EndDate = originalEndDate;
+        }
+
+        return new ScheduleChangeProjection(
+            ComputeLoanScheduleVersion(loan),
+            scheduleStart,
+            request.LastInstallmentDate,
+            affectedInstallments,
+            schedule,
+            null,
+            decimal.Round(remainingPrincipal - targetPrincipal, 2, MidpointRounding.AwayFromZero));
+    }
+
+    private static void ApplyProjectionToPreview(Loan loan, ScheduleChangeProjection projection)
+    {
+        if (projection.RateEntry is not null)
+        {
+            loan.RateEntries.Add(projection.RateEntry);
+        }
+
+        ApplyPreviewInstallmentRemoval(loan, projection.AffectedInstallments);
+        loan.EndDate = projection.ScheduleEnd;
+        AddPreviewInstallments(loan, projection.Schedule);
+    }
+
+    private void PersistProjectedInstallments(
+        ApplicationDbContext dbContext,
+        Loan loan,
+        ScheduleChangeProjection projection)
+    {
+        foreach (var installment in projection.AffectedInstallments)
+        {
+            if (installment.Expense is null)
+            {
+                continue;
+            }
+
+            installment.Expense.IsDeleted = true;
+            installment.Expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
+        }
+
+        dbContext.LoanInstallments.RemoveRange(projection.AffectedInstallments);
+        loan.EndDate = projection.ScheduleEnd;
+
+        foreach (var row in projection.Schedule)
+        {
+            dbContext.LoanInstallments.Add(new LoanInstallment
+            {
+                LoanId = loan.Id,
+                Year = row.Year,
+                Month = row.Month,
+                DueDate = row.DueDate,
+                Amount = row.Amount,
+                PrincipalAmount = row.PrincipalAmount,
+                InterestAmount = row.InterestAmount,
+                IsPaid = false
+            });
+        }
+    }
+
+    private static LoanScheduleChangePreviewDto BuildLoanScheduleChangePreview(
+        LoanDto beforeDto,
+        LoanDto afterDto,
+        int loanId,
+        string loanName,
+        string changeType,
+        string changeLabel,
+        DateOnly affectedFrom,
+        string sourceVersion)
+    {
+        return new LoanScheduleChangePreviewDto
+        {
+            LoanId = loanId,
+            LoanName = loanName,
+            ChangeType = changeType,
+            ChangeLabel = changeLabel,
+            AffectedFrom = affectedFrom,
+            SourceVersion = sourceVersion,
+            BeforeSummary = BuildLoanScheduleSummary(beforeDto),
+            AfterSummary = BuildLoanScheduleSummary(afterDto),
+            Rows = BuildLoanScheduleComparisonRows(beforeDto.Installments, afterDto.Installments)
+        };
+    }
+
+    private static LoanScheduleSummaryDto BuildLoanScheduleSummary(LoanDto loan)
+    {
+        var openInstallments = loan.Installments
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Month)
+            .ThenBy(x => x.Year)
+            .ToList();
+
+        return new LoanScheduleSummaryDto
+        {
+            RemainingPrincipal = loan.RemainingPrincipal,
+            NextInstallment = openInstallments.FirstOrDefault(x => !x.IsPaid)?.Amount ?? 0m,
+            TotalFutureInterest = decimal.Round(
+                openInstallments.Where(x => !x.IsPaid).Sum(x => x.InterestAmount),
+                2,
+                MidpointRounding.AwayFromZero),
+            EndDate = loan.EndDate,
+            InstallmentCount = loan.Installments.Count
+        };
+    }
+
+    private static IReadOnlyList<LoanScheduleComparisonRowDto> BuildLoanScheduleComparisonRows(
+        IReadOnlyList<LoanInstallmentDto> beforeRows,
+        IReadOnlyList<LoanInstallmentDto> afterRows)
+    {
+        var beforeByDueDate = beforeRows
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x));
+
+        var afterByDueDate = afterRows
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToDictionary(x => x.DueDate, x => ToScheduleRow(x));
+
+        var dueDates = beforeByDueDate.Keys
+            .Union(afterByDueDate.Keys)
+            .OrderBy(x => x)
+            .ToList();
+
+        var rows = new List<LoanScheduleComparisonRowDto>(dueDates.Count);
+        foreach (var dueDate in dueDates)
+        {
+            beforeByDueDate.TryGetValue(dueDate, out var beforeRow);
+            afterByDueDate.TryGetValue(dueDate, out var afterRow);
+
+            var state = (beforeRow, afterRow) switch
+            {
+                (null, not null) => LoanScheduleComparisonRowState.Added,
+                (not null, null) => LoanScheduleComparisonRowState.Removed,
+                (not null, not null) when beforeRow == afterRow => LoanScheduleComparisonRowState.Unchanged,
+                (not null, not null) => LoanScheduleComparisonRowState.Changed,
+                _ => LoanScheduleComparisonRowState.Unchanged
+            };
+
+            rows.Add(new LoanScheduleComparisonRowDto
+            {
+                DueDate = dueDate,
+                State = state,
+                BeforeIsPaid = beforeRows.Any(x => x.DueDate == dueDate && x.IsPaid),
+                AfterIsPaid = afterRows.Any(x => x.DueDate == dueDate && x.IsPaid),
+                Before = beforeRow,
+                After = afterRow
+            });
+        }
+
+        return rows;
+    }
+
+    private static ScheduleRowDto ToScheduleRow(LoanInstallmentDto installment)
+    {
+        return new ScheduleRowDto(
+            installment.Year,
+            installment.Month,
+            installment.DueDate,
+            installment.Amount,
+            installment.PrincipalAmount,
+            installment.InterestAmount);
+    }
+
+    private static void AddPreviewInstallments(Loan loan, IEnumerable<ScheduleRowDto> schedule)
+    {
+        foreach (var row in schedule)
+        {
+            loan.Installments.Add(new LoanInstallment
+            {
+                LoanId = loan.Id,
+                Year = row.Year,
+                Month = row.Month,
+                DueDate = row.DueDate,
+                Amount = row.Amount,
+                PrincipalAmount = row.PrincipalAmount,
+                InterestAmount = row.InterestAmount,
+                IsPaid = false,
+                PaidAtUtc = null
+            });
+        }
+    }
+
+    private static void ApplyPreviewInstallmentRemoval(Loan loan, IReadOnlyCollection<LoanInstallment> affectedInstallments)
+    {
+        var affectedIds = affectedInstallments.Select(x => x.Id).ToHashSet();
+        loan.Installments = loan.Installments
+            .Where(x => !affectedIds.Contains(x.Id))
+            .ToList();
+    }
+
+    private static IReadOnlyList<LoanInstallment> GetAffectedPreviewInstallments(Loan loan, DateOnly scheduleStart)
+    {
+        return loan.Installments
+            .Where(x => !x.IsPaid && x.DueDate >= scheduleStart)
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
+    private static void ValidateExpectedScheduleVersion(string currentVersion, string? expectedScheduleVersion)
+    {
+        if (string.IsNullOrWhiteSpace(expectedScheduleVersion))
+        {
+            throw new BadRequestException("Expected schedule version is required.");
+        }
+
+        if (!string.Equals(currentVersion, expectedScheduleVersion, StringComparison.Ordinal))
+        {
+            throw new ConflictException("The loan schedule preview is stale. Please recalculate before confirming.");
+        }
+    }
+
+    private sealed record ScheduleChangeProjection(
+        string SourceVersion,
+        DateOnly ScheduleStart,
+        DateOnly ScheduleEnd,
+        IReadOnlyList<LoanInstallment> AffectedInstallments,
+        IReadOnlyList<ScheduleRowDto> Schedule,
+        LoanRateEntry? RateEntry,
+        decimal PrepaymentAmount);
+
+    private static string ComputeLoanScheduleVersion(Loan loan)
+    {
+        var builder = new StringBuilder();
+        AppendLoanSnapshot(builder, loan);
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        return Convert.ToHexString(hash);
+    }
+
+    private static void AppendLoanSnapshot(StringBuilder builder, Loan loan)
+    {
+        builder.Append(loan.LoanType).Append('|')
+            .Append(loan.InterestMode).Append('|')
+            .Append(loan.WiborPeriodType?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.Principal.ToString(CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.OriginalPrincipal?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.GracePeriodMonths?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.InterestRate.ToString(CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.MarginRate?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.RepaymentDayOfMonth).Append('|')
+            .Append(loan.StartDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.EndDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.TagId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.IsActive).AppendLine();
+
+        foreach (var rateEntry in loan.RateEntries
+                     .OrderBy(x => x.EffectiveFrom)
+                     .ThenBy(x => x.Id))
+        {
+            builder.Append("R|")
+                .Append(rateEntry.EffectiveFrom.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+                .Append(rateEntry.ReferenceRate.ToString(CultureInfo.InvariantCulture)).AppendLine();
+        }
+
+        foreach (var charge in loan.Charges
+                     .OrderBy(x => x.Id)
+                     .ThenBy(x => x.Name))
+        {
+            builder.Append("C|")
+                .Append(charge.Name).Append('|')
+                .Append(charge.ChargeType).Append('|')
+                .Append(charge.FrequencyType).Append('|')
+                .Append(charge.Amount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(charge.IsPercentageBased).Append('|')
+                .Append(charge.StartDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+                .Append(charge.EndDate?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+                .Append(charge.IsActive).AppendLine();
+        }
+
+        foreach (var installment in loan.Installments
+                     .OrderBy(x => x.DueDate)
+                     .ThenBy(x => x.Id))
+        {
+            builder.Append("I|")
+                .Append(installment.DueDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.Amount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.PrincipalAmount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.InterestAmount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.IsPaid).Append('|')
+                .Append(installment.PaidAtUtc?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty).AppendLine();
+        }
+    }
+
     private static async Task UpsertPrepaymentExpenseAsync(
         ApplicationDbContext dbContext,
         Loan loan,
@@ -832,59 +1297,6 @@ public sealed class LoanService(
                 InterestAmount = row.InterestAmount,
                 IsPaid = false,
                 PaidAtUtc = null
-            });
-        }
-    }
-
-    private async Task RebuildInstallmentsFromAsync(
-        ApplicationDbContext dbContext,
-        Loan loan,
-        DateOnly effectiveFrom,
-        CancellationToken cancellationToken)
-    {
-        var affectedInstallments = loan.Installments
-            .Where(x => x.DueDate >= effectiveFrom)
-            .OrderBy(x => x.DueDate)
-            .ThenBy(x => x.Id)
-            .ToList();
-
-        if (affectedInstallments.Count == 0)
-        {
-            return;
-        }
-
-        var remainingPrincipal = affectedInstallments.Sum(x => x.PrincipalAmount);
-        if (remainingPrincipal <= 0)
-        {
-            return;
-        }
-
-        foreach (var installment in affectedInstallments)
-        {
-            if (installment.Expense is null)
-            {
-                continue;
-            }
-
-            installment.Expense.IsDeleted = true;
-            installment.Expense.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
-        }
-
-        dbContext.LoanInstallments.RemoveRange(affectedInstallments);
-
-        var schedule = BuildSchedule(loan, remainingPrincipal, affectedInstallments[0].DueDate, loan.EndDate);
-        foreach (var row in schedule)
-        {
-            dbContext.LoanInstallments.Add(new LoanInstallment
-            {
-                LoanId = loan.Id,
-                Year = row.Year,
-                Month = row.Month,
-                DueDate = row.DueDate,
-                Amount = row.Amount,
-                PrincipalAmount = row.PrincipalAmount,
-                InterestAmount = row.InterestAmount,
-                IsPaid = false
             });
         }
     }
@@ -1347,6 +1759,72 @@ public sealed class LoanService(
         dbContext.Categories.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
         return category.Id;
+    }
+
+    private static async Task<Dictionary<string, decimal>> LoadFuturePrepaymentAdjustmentsAsync(
+        ApplicationDbContext dbContext,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var adjustments = await dbContext.Expenses
+            .AsNoTracking()
+            .Include(x => x.MonthPlan)
+            .Where(x =>
+                x.LoanInstallmentId == null
+                && x.RegularExpenseDefinitionId == null
+                && x.PlannedAmount == 0
+                && x.ActualAmount > 0
+                && x.Name.EndsWith(" - nadpłata"))
+            .Where(x => x.MonthPlan.Year > year || (x.MonthPlan.Year == year && x.MonthPlan.Month > month))
+            .Select(x => new
+            {
+                LoanName = x.Name.Substring(0, x.Name.Length - " - nadpłata".Length),
+                x.ActualAmount
+            })
+            .ToListAsync(cancellationToken);
+
+        return adjustments
+            .GroupBy(x => x.LoanName, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.Sum(item => item.ActualAmount), StringComparer.Ordinal);
+    }
+
+    private static bool IsLoanVisibleInSelectedMonth(
+        Loan loan,
+        DateOnly monthStart,
+        DateOnly monthEnd)
+    {
+        var firstRateEntryDate = loan.RateEntries
+            .OrderBy(rate => rate.EffectiveFrom)
+            .Select(rate => (DateOnly?)rate.EffectiveFrom)
+            .FirstOrDefault();
+
+        if (!firstRateEntryDate.HasValue)
+        {
+            return false;
+        }
+
+        var hasStartedBySelectedMonth = firstRateEntryDate.Value <= monthEnd;
+
+        var hasNotEndedBeforeSelectedMonth = !loan.Installments.Any()
+            || loan.Installments.Any(installment => installment.DueDate >= monthStart);
+
+        return hasStartedBySelectedMonth && hasNotEndedBeforeSelectedMonth;
+    }
+
+    private static decimal GetRemainingPrincipalForSelectedMonth(Loan loan, DateOnly monthEnd)
+    {
+        return decimal.Round(
+            loan.Installments
+                .Where(installment => installment.DueDate > monthEnd)
+                .Sum(installment => installment.PrincipalAmount),
+            2,
+            MidpointRounding.AwayFromZero);
+    }
+
+    private static string BuildPrepaymentAdjustmentKey(Loan loan)
+    {
+        return loan.Name;
     }
 
     private static async Task ValidateLoanTagAsync(

@@ -7,6 +7,7 @@
 @using HouseholdBudgetMate.Abstractions.Extensions
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Abstractions.Parsing
+@using HouseholdBudgetMate.Application.Kernel.Exceptions
 @using MudBlazor
 
 @inject ILoanService LoanService
@@ -146,6 +147,14 @@ else
     </DialogActions>
 </MudDialog>
 
+<LoanScheduleChangePreviewDialog Visible="@_loanScheduleChangePreviewOpen"
+                                 VisibleChanged="@OnLoanScheduleChangePreviewVisibleChanged"
+                                 Preview="@_loanScheduleChangePreview"
+                                 IsSubmitting="@_loanScheduleChangePreviewBusy"
+                                 Culture="@_culture"
+                                 OnConfirm="@ConfirmLoanScheduleChangeAsync"
+                                 OnBackToEdit="@BackToEditLoanScheduleChangeAsync" />
+
 <LoanBankScheduleUpdateDialog Visible="@_installmentAmountChangeDialogOpen"
                               VisibleChanged="@OnInstallmentAmountChangeDialogVisibleChanged"
                               Installment="@_installmentAmountChangeInstallment"
@@ -189,7 +198,7 @@ else
                    OnClick="CancelPrepayment">
             Anuluj
         </MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyPrepaymentAsync">Nadpłać</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyPrepaymentAsync">Podgląd nadpłaty</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -249,6 +258,10 @@ else
     private bool _installmentAmountChangeDialogOpen;
     private string _bankInstallmentAmountInput = string.Empty;
     private DateTime? _bankLastInstallmentDate;
+    private LoanScheduleChangePreviewDto? _loanScheduleChangePreview;
+    private bool _loanScheduleChangePreviewOpen;
+    private bool _loanScheduleChangePreviewBusy;
+    private LoanScheduleChangeOperation _loanScheduleChangeOperation = LoanScheduleChangeOperation.None;
 
     private readonly CreateLoanChargeRequest _newLoanCharge = new()
     {
@@ -260,6 +273,14 @@ else
     private string _newLoanChargeAmountInput = string.Empty;
     private DateTime? _newLoanChargeStartDate = DateTime.Today;
     private DateTime? _newLoanChargeEndDate;
+
+    private enum LoanScheduleChangeOperation
+    {
+        None = 0,
+        Wibor = 1,
+        Prepayment = 2,
+        InstallmentAmountChange = 3
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -446,24 +467,16 @@ else
 
     private async Task AddRateEntryAsync()
     {
-        if (_selectedLoan is null || !_rateEffectiveFrom.HasValue || !LocalizedDecimalParser.TryParse(_newReferenceRateInput, out var rate))
+        if (!TryBuildAddRateEntryRequest(out var request))
         {
-            Snackbar.Add("Podaj date i nowy WIBOR.", Severity.Warning);
             return;
         }
 
         try
         {
-            await LoanService.AddLoanRateEntryAsync(new AddLoanRateEntryRequest
-            {
-                LoanId = _selectedLoan.Id,
-                EffectiveFrom = DateOnly.FromDateTime(_rateEffectiveFrom.Value),
-                ReferenceRate = rate
-            }, CancellationToken.None);
-
-            _newReferenceRateInput = string.Empty;
-            await LoadAsync();
-            Snackbar.Add("Zaktualizowano WIBOR i przeliczono przyszłe raty.", Severity.Success);
+            await PreviewLoanScheduleChangeAsync(
+                LoanScheduleChangeOperation.Wibor,
+                () => LoanService.PreviewAddLoanRateEntryAsync(request, CancellationToken.None));
         }
         catch (Exception ex)
         {
@@ -718,7 +731,26 @@ else
         _prepaymentDialogOpen = false;
         _prepaymentInstallment = null;
         _prepaymentAmountInput = string.Empty;
+        _loanScheduleChangePreviewOpen = false;
+        _loanScheduleChangePreview = null;
+        _loanScheduleChangeOperation = LoanScheduleChangeOperation.None;
         MarkDirtyStatePristine();
+    }
+
+    private bool TryBuildPrepaymentRequest(out ApplyLoanPrepaymentRequest request)
+    {
+        request = new ApplyLoanPrepaymentRequest();
+
+        if (_prepaymentInstallment is null || !LocalizedDecimalParser.TryParse(_prepaymentAmountInput, out var amount))
+        {
+            Snackbar.Add("Podaj poprawną kwotę nadpłaty.", Severity.Warning);
+            return false;
+        }
+
+        request.LoanInstallmentId = _prepaymentInstallment.Id;
+        request.Amount = amount;
+        request.Strategy = _prepaymentStrategy;
+        return true;
     }
 
     private void StartInstallmentAmountChange(LoanInstallmentDto installment)
@@ -736,38 +768,100 @@ else
         _installmentAmountChangeInstallment = null;
         _bankInstallmentAmountInput = string.Empty;
         _bankLastInstallmentDate = null;
+        _loanScheduleChangePreviewOpen = false;
+        _loanScheduleChangePreview = null;
+        _loanScheduleChangeOperation = LoanScheduleChangeOperation.None;
         MarkDirtyStatePristine();
     }
 
-    private async Task ApplyInstallmentAmountChangeAsync()
+    private bool TryBuildInstallmentAmountChangeRequest(out ApplyLoanInstallmentAmountChangeRequest request)
     {
+        request = new ApplyLoanInstallmentAmountChangeRequest();
+
         if (_installmentAmountChangeInstallment is null
             || !_bankLastInstallmentDate.HasValue
             || !LocalizedDecimalParser.TryParse(_bankInstallmentAmountInput, out var installmentAmount))
         {
             Snackbar.Add("Podaj poprawną kwotę raty i datę ostatniej raty.", Severity.Warning);
+            return false;
+        }
+
+        request.LoanInstallmentId = _installmentAmountChangeInstallment.Id;
+        request.InstallmentAmount = installmentAmount;
+        request.LastInstallmentDate = DateOnly.FromDateTime(_bankLastInstallmentDate.Value);
+        return true;
+    }
+
+    private async Task ApplyInstallmentAmountChangeAsync()
+    {
+        if (!TryBuildInstallmentAmountChangeRequest(out var request))
+        {
             return;
         }
 
         try
         {
-            await LoanService.ApplyLoanInstallmentAmountChangeAsync(new ApplyLoanInstallmentAmountChangeRequest
-            {
-                LoanInstallmentId = _installmentAmountChangeInstallment.Id,
-                InstallmentAmount = installmentAmount,
-                LastInstallmentDate = DateOnly.FromDateTime(_bankLastInstallmentDate.Value)
-            }, CancellationToken.None);
-
-            _installmentAmountChangeDialogOpen = false;
-            _installmentAmountChangeInstallment = null;
-            _bankInstallmentAmountInput = string.Empty;
-            _bankLastInstallmentDate = null;
-            await LoadAsync();
-            Snackbar.Add("Zastosowano ratę z banku i przeliczono harmonogram.", Severity.Success);
+            await PreviewLoanScheduleChangeAsync(
+                LoanScheduleChangeOperation.InstallmentAmountChange,
+                () => LoanService.PreviewApplyLoanInstallmentAmountChangeAsync(request, CancellationToken.None));
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private bool TryBuildAddRateEntryRequest(out AddLoanRateEntryRequest request)
+    {
+        request = new AddLoanRateEntryRequest();
+
+        if (_selectedLoan is null || !_rateEffectiveFrom.HasValue || !LocalizedDecimalParser.TryParse(_newReferenceRateInput, out var rate))
+        {
+            Snackbar.Add("Podaj date i nowy WIBOR.", Severity.Warning);
+            return false;
+        }
+
+        request.LoanId = _selectedLoan.Id;
+        request.EffectiveFrom = DateOnly.FromDateTime(_rateEffectiveFrom.Value);
+        request.ReferenceRate = rate;
+        return true;
+    }
+
+    private async Task PreviewLoanScheduleChangeAsync(
+        LoanScheduleChangeOperation operation,
+        Func<Task<LoanScheduleChangePreviewDto>> previewFactory)
+    {
+        if (_loanScheduleChangePreviewBusy)
+        {
+            return;
+        }
+
+        _loanScheduleChangePreviewBusy = true;
+        _loanScheduleChangeOperation = operation;
+        try
+        {
+            _loanScheduleChangePreview = await previewFactory();
+            _loanScheduleChangePreviewOpen = true;
+
+            if (operation == LoanScheduleChangeOperation.Prepayment)
+            {
+                _prepaymentDialogOpen = false;
+            }
+            else if (operation == LoanScheduleChangeOperation.InstallmentAmountChange)
+            {
+                _installmentAmountChangeDialogOpen = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _loanScheduleChangePreview = null;
+            _loanScheduleChangePreviewOpen = false;
+            _loanScheduleChangeOperation = LoanScheduleChangeOperation.None;
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loanScheduleChangePreviewBusy = false;
         }
     }
 
@@ -785,31 +879,174 @@ else
 
     private async Task ApplyPrepaymentAsync()
     {
-        if (_prepaymentInstallment is null || !LocalizedDecimalParser.TryParse(_prepaymentAmountInput, out var amount))
+        if (!TryBuildPrepaymentRequest(out var request))
         {
-            Snackbar.Add("Podaj poprawną kwotę nadpłaty.", Severity.Warning);
             return;
         }
 
         try
         {
-            await LoanService.ApplyLoanPrepaymentAsync(new ApplyLoanPrepaymentRequest
-            {
-                LoanInstallmentId = _prepaymentInstallment.Id,
-                Amount = amount,
-                Strategy = _prepaymentStrategy
-            }, CancellationToken.None);
-
-            _prepaymentDialogOpen = false;
-            _prepaymentInstallment = null;
-            _prepaymentAmountInput = string.Empty;
-            await LoadAsync();
-            Snackbar.Add("Nadpłata zapisana, harmonogram przeliczony.", Severity.Success);
+            await PreviewLoanScheduleChangeAsync(
+                LoanScheduleChangeOperation.Prepayment,
+                () => LoanService.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None));
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    private async Task ConfirmLoanScheduleChangeAsync()
+    {
+        if (_loanScheduleChangePreview is null || _loanScheduleChangeOperation == LoanScheduleChangeOperation.None)
+        {
+            return;
+        }
+
+        if (_loanScheduleChangePreviewBusy)
+        {
+            return;
+        }
+
+        _loanScheduleChangePreviewBusy = true;
+        try
+        {
+            var confirmed = false;
+            switch (_loanScheduleChangeOperation)
+            {
+                case LoanScheduleChangeOperation.Wibor:
+                    confirmed = await ConfirmAddRateEntryAsync(_loanScheduleChangePreview.SourceVersion);
+                    break;
+                case LoanScheduleChangeOperation.Prepayment:
+                    confirmed = await ConfirmPrepaymentAsync(_loanScheduleChangePreview.SourceVersion);
+                    break;
+                case LoanScheduleChangeOperation.InstallmentAmountChange:
+                    confirmed = await ConfirmInstallmentAmountChangeAsync(_loanScheduleChangePreview.SourceVersion);
+                    break;
+            }
+
+            if (confirmed)
+            {
+                await CloseLoanSchedulePreviewAsync();
+            }
+        }
+        catch (ConflictException ex)
+        {
+            await HandleLoanSchedulePreviewConflictAsync(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loanScheduleChangePreviewBusy = false;
+        }
+    }
+
+    private async Task<bool> ConfirmAddRateEntryAsync(string sourceVersion)
+    {
+        if (!TryBuildAddRateEntryRequest(out var request))
+        {
+            return false;
+        }
+
+        request.ExpectedScheduleVersion = sourceVersion;
+        await LoanService.AddLoanRateEntryAsync(request, CancellationToken.None);
+        _newReferenceRateInput = string.Empty;
+        await LoadAsync();
+        Snackbar.Add("Zaktualizowano WIBOR i przeliczono przyszłe raty.", Severity.Success);
+        return true;
+    }
+
+    private async Task<bool> ConfirmPrepaymentAsync(string sourceVersion)
+    {
+        if (!TryBuildPrepaymentRequest(out var request))
+        {
+            return false;
+        }
+
+        request.ExpectedScheduleVersion = sourceVersion;
+        await LoanService.ApplyLoanPrepaymentAsync(request, CancellationToken.None);
+        _prepaymentAmountInput = string.Empty;
+        _prepaymentInstallment = null;
+        await LoadAsync();
+        Snackbar.Add("Nadpłata zapisana, harmonogram przeliczony.", Severity.Success);
+        return true;
+    }
+
+    private async Task<bool> ConfirmInstallmentAmountChangeAsync(string sourceVersion)
+    {
+        if (!TryBuildInstallmentAmountChangeRequest(out var request))
+        {
+            return false;
+        }
+
+        request.ExpectedScheduleVersion = sourceVersion;
+        await LoanService.ApplyLoanInstallmentAmountChangeAsync(request, CancellationToken.None);
+        _bankInstallmentAmountInput = string.Empty;
+        _bankLastInstallmentDate = null;
+        _installmentAmountChangeInstallment = null;
+        await LoadAsync();
+        Snackbar.Add("Zastosowano ratę z banku i przeliczono harmonogram.", Severity.Success);
+        return true;
+    }
+
+    private async Task BackToEditLoanScheduleChangeAsync()
+    {
+        _loanScheduleChangePreviewOpen = false;
+        _loanScheduleChangePreview = null;
+
+        switch (_loanScheduleChangeOperation)
+        {
+            case LoanScheduleChangeOperation.Prepayment:
+                _prepaymentDialogOpen = true;
+                break;
+            case LoanScheduleChangeOperation.InstallmentAmountChange:
+                _installmentAmountChangeDialogOpen = true;
+                break;
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task OnLoanScheduleChangePreviewVisibleChanged(bool value)
+    {
+        if (value)
+        {
+            _loanScheduleChangePreviewOpen = true;
+            await Task.CompletedTask;
+            return;
+        }
+
+        await BackToEditLoanScheduleChangeAsync();
+    }
+
+    private async Task CloseLoanSchedulePreviewAsync()
+    {
+        _loanScheduleChangePreviewOpen = false;
+        _loanScheduleChangePreview = null;
+        _loanScheduleChangeOperation = LoanScheduleChangeOperation.None;
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleLoanSchedulePreviewConflictAsync(string message)
+    {
+        _loanScheduleChangePreviewOpen = false;
+        _loanScheduleChangePreview = null;
+        Snackbar.Add(message, Severity.Warning);
+
+        switch (_loanScheduleChangeOperation)
+        {
+            case LoanScheduleChangeOperation.Prepayment:
+                _prepaymentDialogOpen = true;
+                break;
+            case LoanScheduleChangeOperation.InstallmentAmountChange:
+                _installmentAmountChangeDialogOpen = true;
+                break;
+        }
+
+        await Task.CompletedTask;
     }
 
     private string GetInterestLabel(LoanDto loan)

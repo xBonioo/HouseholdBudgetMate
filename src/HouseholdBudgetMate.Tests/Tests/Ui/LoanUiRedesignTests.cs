@@ -34,6 +34,24 @@ public sealed class LoanUiRedesignTests
     }
 
     [Fact]
+    public void LoanSchedulePreviewFlow_Should_Expose_TwoStep_Confirmation_Contracts()
+    {
+        var loansPageMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Loans.razor");
+        var wiborMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanWiborPanel.razor");
+        var bankMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanBankScheduleUpdateDialog.razor");
+        var previewMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleChangePreviewDialog.razor");
+
+        loansPageMarkup.Should().Contain("LoanScheduleChangePreviewDialog");
+        loansPageMarkup.Should().Contain("PreviewAddLoanRateEntryAsync");
+        loansPageMarkup.Should().Contain("PreviewApplyLoanPrepaymentAsync");
+        loansPageMarkup.Should().Contain("PreviewApplyLoanInstallmentAmountChangeAsync");
+        loansPageMarkup.Should().Contain("ExpectedScheduleVersion");
+        wiborMarkup.Should().Contain("Podgląd przeliczenia");
+        bankMarkup.Should().Contain("Podgląd zmiany");
+        previewMarkup.Should().Contain("Potwierdź i zapisz");
+    }
+
+    [Fact]
     public void LoanScheduleTable_Should_Surface_Filter_Toolbar_And_Bank_Update_Entry_Point()
     {
         var tableMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleTable.razor");

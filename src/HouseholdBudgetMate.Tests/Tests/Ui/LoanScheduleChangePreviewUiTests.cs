@@ -58,6 +58,28 @@ public sealed class LoanScheduleChangePreviewUiTests : BunitContext
     }
 
     [Fact]
+    public void ComparisonTable_Should_Render_Project_Charges()
+    {
+        var rows = new[]
+        {
+            new LoanScheduleComparisonRowDto
+            {
+                DueDate = new DateOnly(2025, 4, 1),
+                State = LoanScheduleComparisonRowState.Changed,
+                Before = new ScheduleRowDto(2025, 4, new DateOnly(2025, 4, 1), 3_100m, 2_100m, 800m, 200m),
+                After = new ScheduleRowDto(2025, 4, new DateOnly(2025, 4, 1), 2_950m, 2_110m, 760m, 80m)
+            }
+        };
+
+        var cut = Render<LoanSchedulePreviewTable>(parameters => parameters
+            .Add(component => component.Rows, rows)
+            .Add(component => component.Culture, new("pl-PL")));
+
+        cut.Markup.Should().Contain("200,00 PLN");
+        cut.Markup.Should().Contain("80,00 PLN");
+    }
+
+    [Fact]
     public void Dialog_Should_Render_User_Facing_ChangeLabel_In_Title()
     {
         var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleChangePreviewDialog.razor");

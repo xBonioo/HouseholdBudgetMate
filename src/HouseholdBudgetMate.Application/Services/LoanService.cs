@@ -335,7 +335,7 @@ public sealed class LoanService(
                        .Include(x => x.Installments)
                        .ThenInclude(x => x.Expense)
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
-                   ?? throw new NotFoundException("Loan installment not found.");
+                   ?? throw new ConflictException("The loan schedule preview is stale. Please recalculate before confirming.");
 
         var projection = ProjectPrepayment(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
@@ -368,7 +368,7 @@ public sealed class LoanService(
                        .Include(x => x.Installments)
                        .ThenInclude(x => x.Expense)
                        .FirstOrDefaultAsync(x => x.Installments.Any(i => i.Id == request.LoanInstallmentId), cancellationToken)
-                   ?? throw new NotFoundException("Loan installment not found.");
+                   ?? throw new ConflictException("The loan schedule preview is stale. Please recalculate before confirming.");
 
         var projection = ProjectInstallmentAmountChange(loan, request);
         ValidateExpectedScheduleVersion(projection.SourceVersion, request.ExpectedScheduleVersion);
@@ -1089,7 +1089,8 @@ public sealed class LoanService(
             installment.DueDate,
             installment.Amount,
             installment.PrincipalAmount,
-            installment.InterestAmount);
+            installment.InterestAmount,
+            decimal.Round(installment.Amount - installment.PrincipalAmount - installment.InterestAmount, 2, MidpointRounding.AwayFromZero));
     }
 
     private static void AddPreviewInstallments(Loan loan, IEnumerable<ScheduleRowDto> schedule)
@@ -1803,12 +1804,7 @@ public sealed class LoanService(
         DateOnly monthStart,
         DateOnly monthEnd)
     {
-        var firstActivityDate = loan.RateEntries
-            .OrderBy(rate => rate.EffectiveFrom)
-            .Select(rate => (DateOnly?)rate.EffectiveFrom)
-            .FirstOrDefault() ?? loan.StartDate;
-
-        var hasStartedBySelectedMonth = firstActivityDate <= monthEnd;
+        var hasStartedBySelectedMonth = loan.StartDate <= monthEnd;
 
         var hasNotEndedBeforeSelectedMonth = !loan.Installments.Any()
             || loan.Installments.Any(installment => installment.DueDate >= monthStart);

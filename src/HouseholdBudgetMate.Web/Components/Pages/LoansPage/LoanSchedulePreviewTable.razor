@@ -83,8 +83,7 @@
             return "—";
         }
 
-        var charges = row.Amount - row.PrincipalAmount - row.InterestAmount;
-        return $"{charges.ToString("N2", Culture)} PLN";
+        return $"{row.ChargesAmount.ToString("N2", Culture)} PLN";
     }
 
     private static string GetStateClass(LoanScheduleComparisonRowState state)

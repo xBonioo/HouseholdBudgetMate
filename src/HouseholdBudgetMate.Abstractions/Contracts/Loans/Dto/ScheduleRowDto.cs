@@ -7,4 +7,5 @@ public sealed record ScheduleRowDto(
     DateOnly DueDate,
     decimal Amount,
     decimal PrincipalAmount,
-    decimal InterestAmount);
+    decimal InterestAmount,
+    decimal ChargesAmount = 0m);

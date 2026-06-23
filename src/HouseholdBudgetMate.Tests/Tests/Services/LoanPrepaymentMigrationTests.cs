@@ -1,10 +1,39 @@
 using FluentAssertions;
+using HouseholdBudgetMate.Migrations.Migrations;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using System.Reflection;
 
 namespace HouseholdBudgetMate.Tests.Tests.Services;
 
 public sealed class LoanPrepaymentMigrationTests
 {
+    [Fact]
+    public void AddLoanPrepayments_Should_Build_PostgreSql_Migration_Operations()
+    {
+        var migrationBuilder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        var migration = new AddLoanPrepayments();
+
+        typeof(AddLoanPrepayments)
+            .GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(migration, [migrationBuilder]);
+
+        var createTable = migrationBuilder.Operations
+            .OfType<CreateTableOperation>()
+            .Single(x => x.Name == "LoanPrepayments");
+        var sql = migrationBuilder.Operations
+            .OfType<SqlOperation>()
+            .Single()
+            .Sql;
+
+        createTable.Columns.Select(x => x.Name).Should().Contain(["LoanId", "PrepaymentDate", "Amount"]);
+        sql.Should().Contain("make_date(matched.\"Year\", matched.\"Month\", 1)");
+        sql.Should().Contain("NOW()");
+        sql.Should().Contain("left(e.\"Name\", length(e.\"Name\") - length(' - nadpłata'))");
+        sql.Should().Contain("WHERE matched.\"MatchCount\" = 1");
+    }
+
     [Fact]
     public void AddLoanPrepayments_Should_Backfill_Only_Unambiguous_Legacy_Prepayment_Expenses()
     {

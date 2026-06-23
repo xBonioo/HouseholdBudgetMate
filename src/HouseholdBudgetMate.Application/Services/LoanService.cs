@@ -1321,13 +1321,14 @@ public sealed class LoanService(
         var expenseName = $"{loan.Name} - nadpłata";
         var existingExpense = monthPlanWasCreated
             ? null
-            : await dbContext.Expenses
-                .Where(x => x.MonthPlanId == monthPlan.Id)
-                .Where(x => x.CategoryId == categoryId)
-                .Where(x => loan.TagId.HasValue ? x.TagId == loan.TagId.Value : x.TagId == null)
-                .Where(x => x.LoanInstallmentId == null)
-                .Where(x => x.RegularExpenseDefinitionId == null)
-                .FirstOrDefaultAsync(x => x.Name == expenseName, cancellationToken);
+            : await FindExistingPrepaymentExpenseAsync(
+                dbContext,
+                monthPlan.Id,
+                categoryId,
+                loan,
+                expenseName,
+                prepaymentDate,
+                cancellationToken);
 
         if (existingExpense is not null)
         {
@@ -1353,6 +1354,45 @@ public sealed class LoanService(
             ActualAmount = amount,
             ShowRemainingInUI = true
         });
+    }
+
+    private static async Task<Expense?> FindExistingPrepaymentExpenseAsync(
+        ApplicationDbContext dbContext,
+        int monthPlanId,
+        int categoryId,
+        Loan loan,
+        string expenseName,
+        DateOnly prepaymentDate,
+        CancellationToken cancellationToken)
+    {
+        var candidates = await dbContext.Expenses
+            .Where(x => x.MonthPlanId == monthPlanId)
+            .Where(x => x.CategoryId == categoryId)
+            .Where(x => x.LoanInstallmentId == null)
+            .Where(x => x.RegularExpenseDefinitionId == null)
+            .Where(x => x.Name.EndsWith(LegacyPrepaymentSuffix))
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var currentMetadataMatch = candidates.FirstOrDefault(x =>
+            x.Name == expenseName
+            && (loan.TagId.HasValue ? x.TagId == loan.TagId.Value : x.TagId == null));
+        if (currentMetadataMatch is not null)
+        {
+            return currentMetadataMatch;
+        }
+
+        var previousPrepaymentTotal = await dbContext.LoanPrepayments
+            .AsNoTracking()
+            .Where(x => x.LoanId == loan.Id)
+            .Where(x => x.PrepaymentDate.Year == prepaymentDate.Year && x.PrepaymentDate.Month == prepaymentDate.Month)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        var amountMatches = candidates
+            .Where(x => x.ActualAmount == previousPrepaymentTotal)
+            .ToList();
+
+        return amountMatches.Count == 1 ? amountMatches[0] : null;
     }
 
     private static async Task RegenerateInstallmentsAsync(
@@ -1976,16 +2016,7 @@ public sealed class LoanService(
             }
         }
 
-        if (!expense.TagId.HasValue)
-        {
-            return null;
-        }
-
-        var tagMatches = loans
-            .Where(x => x.TagId == expense.TagId)
-            .ToList();
-
-        return tagMatches.Count == 1 ? tagMatches[0] : null;
+        return null;
     }
 
     private static string? TryGetLegacyPrepaymentLoanName(string expenseName)

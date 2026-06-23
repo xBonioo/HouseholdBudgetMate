@@ -21,6 +21,8 @@ public sealed class LoanService(
     IDbContextFactory<ApplicationDbContext> dbContextFactory,
     IDateTimeProvider dateTimeProvider) : ILoanService
 {
+    private const string LegacyPrepaymentSuffix = " - nadpłata";
+
     private static readonly YearMonthRequestValidator YearMonthValidator = new();
     private static readonly CreateLoanRequestValidator CreateLoanValidator = new();
     private static readonly UpdateLoanRequestValidator UpdateLoanValidator = new();
@@ -73,7 +75,7 @@ public sealed class LoanService(
             return new DebtSummaryDto();
         }
 
-        var prepaymentAdjustments = await LoadFuturePrepaymentAdjustmentsAsync(dbContext, year, month, cancellationToken);
+        var prepaymentAdjustments = await LoadFuturePrepaymentAdjustmentsAsync(dbContext, loans, year, month, cancellationToken);
 
         var activeLoans = loans
             .Where(loan => loan.IsActive)
@@ -1242,9 +1244,7 @@ public sealed class LoanService(
             .Append(loan.MarginRate?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
             .Append(loan.RepaymentDayOfMonth).Append('|')
             .Append(loan.StartDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
-            .Append(loan.EndDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
-            .Append(loan.TagId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
-            .Append(loan.IsActive).AppendLine();
+            .Append(loan.EndDate.ToString("O", CultureInfo.InvariantCulture)).AppendLine();
 
         foreach (var rateEntry in loan.RateEntries
                      .OrderBy(x => x.EffectiveFrom)
@@ -1256,11 +1256,16 @@ public sealed class LoanService(
         }
 
         foreach (var charge in loan.Charges
-                     .OrderBy(x => x.Id)
-                     .ThenBy(x => x.Name))
+                     .OrderBy(x => x.ChargeType)
+                     .ThenBy(x => x.FrequencyType)
+                     .ThenBy(x => x.StartDate)
+                     .ThenBy(x => x.EndDate)
+                     .ThenBy(x => x.Amount)
+                     .ThenBy(x => x.IsPercentageBased)
+                     .ThenBy(x => x.IsActive)
+                     .ThenBy(x => x.Id))
         {
             builder.Append("C|")
-                .Append(charge.Name).Append('|')
                 .Append(charge.ChargeType).Append('|')
                 .Append(charge.FrequencyType).Append('|')
                 .Append(charge.Amount.ToString(CultureInfo.InvariantCulture)).Append('|')
@@ -1854,6 +1859,7 @@ public sealed class LoanService(
 
     private static async Task<Dictionary<int, decimal>> LoadFuturePrepaymentAdjustmentsAsync(
         ApplicationDbContext dbContext,
+        IReadOnlyList<Loan> loans,
         int year,
         int month,
         CancellationToken cancellationToken)
@@ -1864,13 +1870,129 @@ public sealed class LoanService(
             .Select(x => new
             {
                 x.LoanId,
+                x.PrepaymentDate,
                 x.Amount
             })
             .ToListAsync(cancellationToken);
 
+        var legacyExpenses = await dbContext.Expenses
+            .AsNoTracking()
+            .Where(x => x.MonthPlan.Year > year || (x.MonthPlan.Year == year && x.MonthPlan.Month > month))
+            .Where(x => x.LoanInstallmentId == null)
+            .Where(x => x.RegularExpenseDefinitionId == null)
+            .Where(x => x.ActualAmount > 0)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name,
+                x.TagId,
+                x.ActualAmount,
+                x.MonthPlan.Year,
+                x.MonthPlan.Month
+            })
+            .ToListAsync(cancellationToken);
+
+        var representedPrepayments = adjustments
+            .GroupBy(x => (x.LoanId, x.PrepaymentDate.Year, x.PrepaymentDate.Month, x.Amount))
+            .ToDictionary(x => x.Key, x => x.Count());
+        var representedMonthlyTotals = adjustments
+            .GroupBy(x => (x.LoanId, x.PrepaymentDate.Year, x.PrepaymentDate.Month))
+            .ToDictionary(x => x.Key, x => x.Sum(item => item.Amount));
+
+        var fallbackAdjustments = legacyExpenses
+            .Where(x => x.Name.Contains("nadpłata", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Id)
+            .Select(x => new LegacyPrepaymentExpense(
+                x.Id,
+                x.Name,
+                x.TagId,
+                x.ActualAmount,
+                new DateOnly(x.Year, x.Month, 1)))
+            .Select(x => ResolveLegacyPrepaymentAdjustment(x, loans, representedPrepayments, representedMonthlyTotals))
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .ToList();
+
         return adjustments
+            .Select(x => new PrepaymentAdjustment(x.LoanId, x.Amount))
+            .Concat(fallbackAdjustments)
             .GroupBy(x => x.LoanId)
             .ToDictionary(x => x.Key, x => x.Sum(item => item.Amount));
+    }
+
+    private static PrepaymentAdjustment? ResolveLegacyPrepaymentAdjustment(
+        LegacyPrepaymentExpense expense,
+        IReadOnlyList<Loan> loans,
+        Dictionary<(int LoanId, int Year, int Month, decimal Amount), int> representedPrepayments,
+        IReadOnlyDictionary<(int LoanId, int Year, int Month), decimal> representedMonthlyTotals)
+    {
+        var loan = ResolveLegacyPrepaymentLoan(expense, loans);
+        if (loan is null)
+        {
+            return null;
+        }
+
+        var representedKey = (loan.Id, expense.PrepaymentDate.Year, expense.PrepaymentDate.Month, expense.Amount);
+        if (representedPrepayments.TryGetValue(representedKey, out var representedCount) && representedCount > 0)
+        {
+            representedPrepayments[representedKey] = representedCount - 1;
+            return null;
+        }
+
+        var representedMonthKey = (loan.Id, expense.PrepaymentDate.Year, expense.PrepaymentDate.Month);
+        if (representedMonthlyTotals.TryGetValue(representedMonthKey, out var representedMonthTotal)
+            && representedMonthTotal == expense.Amount)
+        {
+            return null;
+        }
+
+        return new PrepaymentAdjustment(loan.Id, expense.Amount);
+    }
+
+    private static Loan? ResolveLegacyPrepaymentLoan(LegacyPrepaymentExpense expense, IReadOnlyList<Loan> loans)
+    {
+        var exactName = TryGetLegacyPrepaymentLoanName(expense.Name);
+        if (exactName is not null)
+        {
+            var nameMatches = loans
+                .Where(x => string.Equals(x.Name, exactName, StringComparison.Ordinal))
+                .ToList();
+
+            if (nameMatches.Count == 1)
+            {
+                return nameMatches[0];
+            }
+
+            if (expense.TagId.HasValue)
+            {
+                var taggedNameMatches = nameMatches
+                    .Where(x => x.TagId == expense.TagId)
+                    .ToList();
+
+                if (taggedNameMatches.Count == 1)
+                {
+                    return taggedNameMatches[0];
+                }
+            }
+        }
+
+        if (!expense.TagId.HasValue)
+        {
+            return null;
+        }
+
+        var tagMatches = loans
+            .Where(x => x.TagId == expense.TagId)
+            .ToList();
+
+        return tagMatches.Count == 1 ? tagMatches[0] : null;
+    }
+
+    private static string? TryGetLegacyPrepaymentLoanName(string expenseName)
+    {
+        return expenseName.EndsWith(LegacyPrepaymentSuffix, StringComparison.Ordinal)
+            ? expenseName[..^LegacyPrepaymentSuffix.Length]
+            : null;
     }
 
     private static void RecordLoanPrepayment(
@@ -1886,6 +2008,15 @@ public sealed class LoanService(
             Amount = amount
         });
     }
+
+    private sealed record LegacyPrepaymentExpense(
+        int Id,
+        string Name,
+        int? TagId,
+        decimal Amount,
+        DateOnly PrepaymentDate);
+
+    private sealed record PrepaymentAdjustment(int LoanId, decimal Amount);
 
     private static bool IsLoanVisibleInSelectedMonth(
         Loan loan,

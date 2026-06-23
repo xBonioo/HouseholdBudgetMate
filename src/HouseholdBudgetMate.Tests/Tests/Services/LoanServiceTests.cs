@@ -1365,6 +1365,83 @@ public sealed class LoanServiceTests
     }
 
     [Fact]
+    public async Task ApplyLoanPrepaymentAsync_Should_Accept_Metadata_Changes_After_Preview()
+    {
+        var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka metadata preview",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+        var charge = await service.CreateLoanChargeAsync(new CreateLoanChargeRequest
+        {
+            LoanId = loan.Id,
+            Name = "Ubezpieczenie",
+            ChargeType = LoanChargeType.Insurance,
+            FrequencyType = LoanChargeFrequencyType.Monthly,
+            Amount = 0.05m,
+            IsPercentageBased = true,
+            StartDate = new DateOnly(2026, 6, 1),
+            IsActive = true
+        }, CancellationToken.None);
+        var targetInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 8, 15));
+        var request = new ApplyLoanPrepaymentRequest
+        {
+            LoanId = loan.Id,
+            LoanInstallmentId = targetInstallment.Id,
+            Amount = 20_000m,
+            Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+        };
+        var preview = await service.PreviewApplyLoanPrepaymentAsync(request, CancellationToken.None);
+
+        int metadataTagId;
+        await using (var dbContext = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var tag = new Tag
+            {
+                CategoryId = category.Id,
+                Name = "Po preview"
+            };
+            dbContext.Tags.Add(tag);
+            await dbContext.SaveChangesAsync();
+            metadataTagId = tag.Id;
+
+            var loanEntity = await dbContext.Loans.SingleAsync(x => x.Id == loan.Id);
+            loanEntity.TagId = metadataTagId;
+            await dbContext.SaveChangesAsync();
+        }
+
+        await service.UpdateLoanChargeAsync(new UpdateLoanChargeRequest
+        {
+            Id = charge.Id,
+            Name = "Ubezpieczenie po zmianie nazwy",
+            ChargeType = charge.ChargeType,
+            FrequencyType = charge.FrequencyType,
+            Amount = charge.Amount,
+            IsPercentageBased = charge.IsPercentageBased,
+            StartDate = charge.StartDate,
+            EndDate = charge.EndDate,
+            IsActive = charge.IsActive
+        }, CancellationToken.None);
+
+        request.ExpectedScheduleVersion = preview.SourceVersion;
+        var updated = await service.ApplyLoanPrepaymentAsync(request, CancellationToken.None);
+
+        Assert.Equal(metadataTagId, updated.TagId);
+    }
+
+    [Fact]
     public async Task PreviewApplyLoanPrepaymentAsync_Should_Include_Fixed_And_Percentage_Charges_In_Summary()
     {
         var service = CreateService();
@@ -2481,6 +2558,81 @@ public sealed class LoanServiceTests
         Assert.Equal(mayBefore.ActiveDebt, mayAfter.ActiveDebt);
         Assert.Equal(mayBefore.ActiveLoanCount, mayAfter.ActiveLoanCount);
         Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Use_Skipped_Legacy_Prepayment_Expenses_As_Fallback()
+    {
+        var factory = TestDbContextFactory.CreateFactory(_dbName);
+        var service = new LoanService(
+            factory,
+            new StaticDateTimeProvider(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc)));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka legacy fallback",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        int loanTagId;
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            var category = await dbContext.Categories.SingleAsync(x => x.Name == "Kredyt");
+            var tag = new Tag
+            {
+                CategoryId = category.Id,
+                Name = "Legacy nadplata"
+            };
+            dbContext.Tags.Add(tag);
+            await dbContext.SaveChangesAsync();
+            loanTagId = tag.Id;
+
+            var loanEntity = await dbContext.Loans.SingleAsync(x => x.Id == loan.Id);
+            loanEntity.TagId = loanTagId;
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneBefore = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+        var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
+
+        await service.ApplyLoanPrepaymentAsync(
+            await AttachExpectedScheduleVersionAsync(service, new ApplyLoanPrepaymentRequest
+            {
+                LoanId = loan.Id,
+                LoanInstallmentId = julyInstallment.Id,
+                Amount = 1_000m,
+                Strategy = LoanPrepaymentStrategyType.ReduceInstallment
+            }),
+            CancellationToken.None);
+
+        await using (var dbContext = await factory.CreateDbContextAsync())
+        {
+            dbContext.LoanPrepayments.RemoveRange(await dbContext.LoanPrepayments.ToListAsync());
+
+            var julyPlan = await dbContext.MonthPlans.SingleAsync(x => x.Year == 2026 && x.Month == 7);
+            var legacyExpense = await dbContext.Expenses.SingleAsync(x =>
+                x.MonthPlanId == julyPlan.Id
+                && x.LoanInstallmentId == null
+                && x.ActualAmount == 1_000m);
+            legacyExpense.Name = "Ręczna nadpłata po migracji";
+            legacyExpense.TagId = loanTagId;
+
+            await dbContext.SaveChangesAsync();
+        }
+
+        var juneAfter = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(juneBefore.ActiveDebt, juneAfter.ActiveDebt);
+        Assert.Equal(juneBefore.ActiveLoanCount, juneAfter.ActiveLoanCount);
     }
 
     [Fact]

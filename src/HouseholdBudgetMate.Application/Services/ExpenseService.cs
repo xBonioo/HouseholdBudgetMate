@@ -1211,7 +1211,8 @@ public sealed class ExpenseService(
                 x.LineItems
                     .Select(lineItem => new ExpenseLineItemSearchSnapshot(
                         lineItem.Description,
-                        lineItem.TagId))
+                        lineItem.TagId,
+                        lineItem.Amount))
                     .ToList()))
             .ToListAsync(cancellationToken);
 
@@ -1220,24 +1221,21 @@ public sealed class ExpenseService(
         foreach (var expense in expenseRows)
         {
             var expenseTagHierarchy = ResolveRootAndSubTag(expense.TagId, tagById);
-
-            var matchesRootTag = !request.RootTagId.HasValue || expenseTagHierarchy.RootTagId == request.RootTagId.Value;
-            var matchesSubTag = !request.SubTagId.HasValue || expenseTagHierarchy.SubTagId == request.SubTagId.Value;
-
+            var matchesTagFilter = MatchesTagFilter(expenseTagHierarchy, request);
+            TagHierarchySnapshot? matchingLineItemTagHierarchy = null;
             string? matchingDescription = null;
+            decimal? matchingAmount = null;
             foreach (var lineItem in expense.LineItems)
             {
                 var lineItemEffectiveTagId = lineItem.TagId ?? expense.TagId;
                 var lineItemTagHierarchy = ResolveRootAndSubTag(lineItemEffectiveTagId, tagById);
 
-                if (!matchesRootTag && request.RootTagId.HasValue && lineItemTagHierarchy.RootTagId == request.RootTagId.Value)
+                if (!matchesTagFilter && MatchesTagFilter(lineItemTagHierarchy, request))
                 {
-                    matchesRootTag = true;
-                }
-
-                if (!matchesSubTag && request.SubTagId.HasValue && lineItemTagHierarchy.SubTagId == request.SubTagId.Value)
-                {
-                    matchesSubTag = true;
+                    matchesTagFilter = true;
+                    matchingDescription = lineItem.Description;
+                    matchingAmount = lineItem.Amount;
+                    matchingLineItemTagHierarchy = lineItemTagHierarchy;
                 }
 
                 if (hasQuery
@@ -1246,10 +1244,12 @@ public sealed class ExpenseService(
                     && lineItem.Description.Contains(normalizedQuery!, StringComparison.CurrentCultureIgnoreCase))
                 {
                     matchingDescription = lineItem.Description;
+                    matchingAmount = lineItem.Amount;
+                    matchingLineItemTagHierarchy = lineItemTagHierarchy;
                 }
             }
 
-            if (!matchesRootTag || !matchesSubTag)
+            if (!matchesTagFilter)
             {
                 continue;
             }
@@ -1260,7 +1260,7 @@ public sealed class ExpenseService(
                 continue;
             }
 
-            var displayHierarchy = expenseTagHierarchy;
+            var displayHierarchy = matchingLineItemTagHierarchy ?? expenseTagHierarchy;
             if (!displayHierarchy.RootTagId.HasValue)
             {
                 var fallbackEffectiveTagId = expense.LineItems
@@ -1283,7 +1283,7 @@ public sealed class ExpenseService(
                 SubTagId = displayHierarchy.SubTagId,
                 SubTagName = displayHierarchy.SubTagName,
                 PlannedAmount = expense.PlannedAmount,
-                ActualAmount = expense.ActualAmount,
+                ActualAmount = matchingAmount ?? expense.ActualAmount,
                 MatchingDescription = matchingDescription
             });
 
@@ -1917,6 +1917,14 @@ public sealed class ExpenseService(
         }
 
         return createdCount;
+    }
+
+    private static bool MatchesTagFilter(TagHierarchySnapshot tagHierarchy, SearchExpenseHistoryRequest request)
+    {
+        var matchesRootTag = !request.RootTagId.HasValue || tagHierarchy.RootTagId == request.RootTagId.Value;
+        var matchesSubTag = !request.SubTagId.HasValue || tagHierarchy.SubTagId == request.SubTagId.Value;
+
+        return matchesRootTag && matchesSubTag;
     }
 
     public async Task<int> CopySelectedExpensesToMonthAsync(
@@ -2740,7 +2748,7 @@ public sealed class ExpenseService(
         decimal ActualAmount,
         IReadOnlyList<ExpenseLineItemSearchSnapshot> LineItems);
 
-    private sealed record ExpenseLineItemSearchSnapshot(string Description, int? TagId);
+    private sealed record ExpenseLineItemSearchSnapshot(string Description, int? TagId, decimal Amount);
 
     private sealed record TagSnapshot(int Id, int CategoryId, int? ParentTagId, string Name);
     private sealed record TagHierarchySnapshot(int? RootTagId, string? RootTagName, int? SubTagId, string? SubTagName);

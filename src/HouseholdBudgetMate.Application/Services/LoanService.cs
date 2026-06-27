@@ -126,7 +126,10 @@ public sealed class LoanService(
         {
             loan.RateEntries.Add(new LoanRateEntry
             {
-                EffectiveFrom = ResolveInitialRateEffectiveFrom(request.StartDate, request.InterestMode),
+                EffectiveFrom = ResolveInitialRateEffectiveFrom(
+                    request.StartDate,
+                    request.InterestMode,
+                    request.InitialRateEffectiveFrom),
                 ReferenceRate = request.InitialReferenceRate ?? 0
             });
         }
@@ -194,7 +197,10 @@ public sealed class LoanService(
             loan.RateEntries.Add(new LoanRateEntry
             {
                 LoanId = loan.Id,
-                EffectiveFrom = ResolveInitialRateEffectiveFrom(request.StartDate, request.InterestMode),
+                EffectiveFrom = ResolveInitialRateEffectiveFrom(
+                    request.StartDate,
+                    request.InterestMode,
+                    request.InitialRateEffectiveFrom),
                 ReferenceRate = request.InitialReferenceRate ?? 0
             });
         }
@@ -1678,9 +1684,13 @@ public sealed class LoanService(
         return rows;
     }
 
-    private static DateOnly ResolveInitialRateEffectiveFrom(DateOnly startDate, LoanInterestMode interestMode)
+    private static DateOnly ResolveInitialRateEffectiveFrom(
+        DateOnly startDate,
+        LoanInterestMode interestMode,
+        DateOnly? requestedEffectiveFrom)
     {
-        return interestMode == LoanInterestMode.VariableWibor ? startDate : startDate.AddYears(5);
+        return requestedEffectiveFrom
+               ?? (interestMode == LoanInterestMode.VariableWibor ? startDate : startDate.AddYears(5));
     }
 
     private static DateOnly GetVariablePhaseStartDate(Loan loan)
@@ -2080,7 +2090,16 @@ public sealed class LoanService(
         DateOnly monthStart,
         DateOnly monthEnd)
     {
-        var hasStartedBySelectedMonth = loan.StartDate <= monthEnd;
+        var visibleFrom = loan.RateEntries
+            .Select(x => (DateOnly?)x.EffectiveFrom)
+            .Min()
+            ?? loan.StartDate;
+        if (loan.StartDate < visibleFrom)
+        {
+            visibleFrom = loan.StartDate;
+        }
+
+        var hasStartedBySelectedMonth = visibleFrom <= monthEnd;
 
         var hasNotEndedBeforeSelectedMonth = !loan.Installments.Any()
             || loan.Installments.Any(installment => installment.DueDate >= monthStart);

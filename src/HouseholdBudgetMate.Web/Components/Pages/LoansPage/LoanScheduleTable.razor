@@ -7,12 +7,19 @@
         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
             <MudChip T="int" Color="Color.Primary">@Loan.Installments.Count rat</MudChip>
             <MudChip T="string" Color="Color.Info">Pozostały kapitał: @Loan.RemainingPrincipal.ToString("0.00", Culture) PLN</MudChip>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Paid"
+                       Disabled="@(_nextUnpaidInstallment is null)"
+                       OnClick="OnPrepayNextUnpaid">
+                Nadpłać
+            </MudButton>
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Straighten"
                        Disabled="@(_nextUnpaidInstallment is null)"
                        OnClick="OnChangeFromNextUnpaid">
-                Skróć od następnej raty
+                Skróć
             </MudButton>
         </MudStack>
     </MudStack>
@@ -70,8 +77,6 @@
                 <MudTd Class="loan-schedule-actions-column">
                     <LoanScheduleRowActions Installment="@item"
                                             TogglePaid="@TogglePaid"
-                                            Prepay="@Prepay"
-                                            ChangeFromBank="@ChangeFromBank"
                                             SyncToMonth="@SyncToMonth"
                                             EditInstallment="@EditInstallment" />
                 </MudTd>
@@ -184,6 +189,16 @@
         _selectedYear = null;
         _statusFilter = StatusUnpaid;
         return Task.CompletedTask;
+    }
+
+    private async Task OnPrepayNextUnpaid()
+    {
+        if (_nextUnpaidInstallment is null)
+        {
+            return;
+        }
+
+        await Prepay.InvokeAsync(_nextUnpaidInstallment);
     }
 
     private async Task OnChangeFromNextUnpaid()

@@ -104,6 +104,7 @@ public sealed class MonthlyBudgetingLoopUiTests
         expenses.Should().Contain("CreateExpenseAsync");
         expenses.Should().Contain("SaveEditAsync");
         expenses.Should().Contain("DeleteExpenseAsync");
+        expenses.Should().Contain("Czy na pewno chcesz usunąć?");
         expenses.Should().Contain("MoveExpenseAsync");
         expenses.Should().Contain("CopySelectedExpensesAsync");
         expenses.Should().Contain("ApplyMonthPlanSuggestionsAsync");
@@ -115,18 +116,21 @@ public sealed class MonthlyBudgetingLoopUiTests
         incomes.Should().Contain("CreateIncomeAsync");
         incomes.Should().Contain("SaveIncomeEditAsync");
         incomes.Should().Contain("DeleteIncomeAsync");
+        incomes.Should().Contain("Czy na pewno chcesz usunąć?");
         incomes.Should().Contain("ExecutePostSaveAsync");
         incomes.Should().Contain("PostSaveRefreshMode.FullReload");
 
         savingsTransfers.Should().Contain("CreateSavingsTransferAsync");
         savingsTransfers.Should().Contain("SaveSavingsTransferEditAsync");
         savingsTransfers.Should().Contain("DeleteSavingsTransferAsync");
+        savingsTransfers.Should().Contain("Czy na pewno chcesz usunąć?");
         savingsTransfers.Should().Contain("ExecutePostSaveAsync");
         savingsTransfers.Should().Contain("PostSaveRefreshMode.FullReload");
 
         lineItems.Should().Contain("CreateLineItemAsync");
         lineItems.Should().Contain("SaveLineItemEditAsync");
         lineItems.Should().Contain("DeleteLineItemAsync");
+        lineItems.Should().Contain("Czy na pewno chcesz usunąć?");
         lineItems.Should().Contain("ExecutePostSaveAsync");
         lineItems.Should().Contain("PostSaveRefreshMode.FullReload");
         lineItems.Should().Contain("_expandedExpenseIds.Add(expenseId)");
@@ -153,6 +157,21 @@ public sealed class MonthlyBudgetingLoopUiTests
         skipSuggestions.Should().Contain("PostSaveRefreshMode.BypassPreparation");
         skipSuggestions.Should().Contain("afterRefreshAsync: RefreshArchiveMonthsCacheAsync");
         AssertOccursBefore(skipSuggestions, "ClearMonthPreparation();", "afterRefreshAsync: RefreshArchiveMonthsCacheAsync");
+    }
+
+    [Fact]
+    public void PlanPage_PieChartTooltip_Should_Show_Percent_For_Selected_Categories()
+    {
+        var charts = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/PlanPage/PlanPage.Charts.cs");
+        var chartJs = ReadRepoFile("src/HouseholdBudgetMate.Web/wwwroot/js/charts.js");
+
+        charts.Should().Contain("_pieSelectedCategoryIds.Contains(e.CategoryId)");
+        charts.Should().Contain("RecomputePieChartData()");
+        chartJs.Should().Contain("if (isPie)");
+        chartJs.Should().Contain("ctx.dataset.data.reduce");
+        chartJs.Should().Contain("ctx.chart.getDataVisibility(index)");
+        chartJs.Should().Contain("percent.toFixed(1)");
+        chartJs.Should().Contain("+ '%)'");
     }
 
     [Fact]

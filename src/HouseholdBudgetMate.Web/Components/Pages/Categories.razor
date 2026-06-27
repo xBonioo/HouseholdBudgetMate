@@ -868,6 +868,19 @@
             return;
         }
 
+        var tagName = _categories
+            .SelectMany(x => x.Tags)
+            .FirstOrDefault(x => x.Id == tagId)
+            ?.Name;
+        var message = string.IsNullOrWhiteSpace(tagName)
+            ? "Czy na pewno chcesz usunąć tag?"
+            : $"Czy na pewno chcesz usunąć tag '{tagName}'?";
+
+        if (!await ConfirmAsync("Usuń tag", message))
+        {
+            return;
+        }
+
         try
         {
             await CategoryService.DeleteTagAsync(new DeleteTagRequest { Id = tagId }, CancellationToken.None);

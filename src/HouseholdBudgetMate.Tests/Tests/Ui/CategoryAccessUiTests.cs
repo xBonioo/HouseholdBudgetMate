@@ -18,6 +18,8 @@ public sealed class CategoryAccessUiTests
         markup.Should().Contain("_editCategory.Id == category.Id && IsAdminSession");
         markup.Should().Contain("_editTag.Id == rootTag.Id && IsAdminSession");
         markup.Should().Contain("_editTag.Id == childTag.Id && IsAdminSession");
+        markup.Should().Contain("Usuń tag");
+        markup.Should().Contain("Czy na pewno chcesz usunąć tag");
     }
 
     private static string ReadRepoFile(string relativePath)

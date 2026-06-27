@@ -173,7 +173,7 @@ public partial class PlanPage
             return;
         }
 
-        var confirmation = await ConfirmAsync("Usunąć wpływ?");
+        var confirmation = await ConfirmAsync("Czy na pewno chcesz usunąć?");
         if (!confirmation)
         {
             return;

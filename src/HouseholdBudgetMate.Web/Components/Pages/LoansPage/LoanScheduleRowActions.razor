@@ -14,16 +14,6 @@
              StartIcon="@Icons.Material.Filled.MoreVert"
              Label="Więcej"
              Dense="true">
-        <MudMenuItem Icon="@Icons.Material.Filled.Paid"
-                     Disabled="@Installment.IsPaid"
-                     OnClick="() => Prepay.InvokeAsync(Installment)">
-            Nadpłać
-        </MudMenuItem>
-        <MudMenuItem Icon="@Icons.Material.Filled.Straighten"
-                     Disabled="@Installment.IsPaid"
-                     OnClick="() => ChangeFromBank.InvokeAsync(Installment)">
-            Skróć okres
-        </MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.EventAvailable"
                      OnClick="() => SyncToMonth.InvokeAsync(Installment)">
             Dodaj do miesiąca
@@ -39,8 +29,6 @@
 @code {
     [Parameter, EditorRequired] public LoanInstallmentDto Installment { get; set; } = default!;
     [Parameter] public EventCallback<LoanInstallmentDto> TogglePaid { get; set; }
-    [Parameter] public EventCallback<LoanInstallmentDto> Prepay { get; set; }
-    [Parameter] public EventCallback<LoanInstallmentDto> ChangeFromBank { get; set; }
     [Parameter] public EventCallback<LoanInstallmentDto> SyncToMonth { get; set; }
     [Parameter] public EventCallback<LoanInstallmentDto> EditInstallment { get; set; }
 }

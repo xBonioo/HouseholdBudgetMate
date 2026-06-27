@@ -145,6 +145,12 @@ public partial class PlanPage
             return;
         }
 
+        var confirmation = await ConfirmAsync("Czy na pewno chcesz usunąć?");
+        if (!confirmation)
+        {
+            return;
+        }
+
         if (await ExecutePostSaveAsync(
             () => ExpenseService.DeleteExpenseLineItemAsync(new DeleteExpenseLineItemRequest { Id = lineItemId },
                 CancellationToken.None),

@@ -52,21 +52,24 @@ public sealed class LoanUiRedesignTests
     }
 
     [Fact]
-    public void LoanScheduleTable_Should_Surface_Filter_Toolbar_And_Bank_Update_Entry_Point()
+    public void LoanScheduleTable_Should_Surface_Loan_Level_Actions_And_Filter_Toolbar()
     {
         var tableMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleTable.razor");
         var toolbarMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleToolbar.razor");
         var actionsMarkup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/LoansPage/LoanScheduleRowActions.razor");
 
-        tableMarkup.Should().Contain("Skr");
+        tableMarkup.Should().Contain("Nadpłać");
+        tableMarkup.Should().Contain("Skróć");
         tableMarkup.Should().Contain("Nast");
         tableMarkup.Should().Contain("LoanScheduleRowActions");
         toolbarMarkup.Should().Contain("Reset filtr");
         toolbarMarkup.Should().Contain("Wszystkie lata");
         toolbarMarkup.Should().Contain("Sp");
         toolbarMarkup.Should().Contain("Niesp");
-        actionsMarkup.Should().Contain("Nadp");
-        actionsMarkup.Should().Contain("Skr");
+        actionsMarkup.Should().NotContain("Nadpłać");
+        actionsMarkup.Should().NotContain("Skróć okres");
+        actionsMarkup.Should().Contain("Dodaj do miesiąca");
+        actionsMarkup.Should().Contain("Edytuj");
     }
 
     [Fact]
@@ -78,6 +81,18 @@ public sealed class LoanUiRedesignTests
         markup.Should().Contain("Zmienimy przysz");
         markup.Should().Contain("Kwota raty z banku");
         markup.Should().Contain("Data ostatniej raty");
+    }
+
+    [Fact]
+    public void LoansPage_Should_Confirm_Delete_Actions_With_App_Dialog()
+    {
+        var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Loans.razor");
+
+        markup.Should().Contain("@inject IDialogService DialogService");
+        markup.Should().Contain("ConfirmDialog");
+        markup.Should().Contain("Czy na pewno chcesz usunąć koszt kredytu na stałe?");
+        markup.Should().Contain("Czy na pewno chcesz usunąć kredyt");
+        markup.Should().NotContain("InvokeAsync<bool>(\"confirm\"");
     }
 
     private static string ReadRepoFile(string relativePath)

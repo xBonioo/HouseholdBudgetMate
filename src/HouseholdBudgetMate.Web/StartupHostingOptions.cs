@@ -203,7 +203,7 @@ internal sealed class StartupHostingOptions
             try
             {
                 var existing = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, certificatePassword, keyStorageFlags);
-                if (CertificateMatchesCurrentHostNames(existing, lanAddresses))
+                if (CertificateCanBeReusedForLocalhost(existing))
                 {
                     return existing;
                 }
@@ -244,19 +244,19 @@ internal sealed class StartupHostingOptions
         return X509CertificateLoader.LoadPkcs12(pfxBytes, certificatePassword, keyStorageFlags);
     }
 
-    private static bool CertificateMatchesCurrentHostNames(X509Certificate2 certificate, IReadOnlyList<IPAddress> lanAddresses)
+    private static bool CertificateCanBeReusedForLocalhost(X509Certificate2 certificate)
     {
-        var subjectAlternativeName = certificate.Extensions
-            .FirstOrDefault(x => x.Oid?.Value == "2.5.29.17")
-            ?.Format(multiLine: false);
-
-        if (string.IsNullOrWhiteSpace(subjectAlternativeName)
-            || !subjectAlternativeName.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+        if (certificate.NotAfter <= DateTime.UtcNow.AddDays(30))
         {
             return false;
         }
 
-        return lanAddresses.All(address => subjectAlternativeName.Contains(address.ToString(), StringComparison.OrdinalIgnoreCase));
+        var subjectAlternativeName = certificate.Extensions
+            .FirstOrDefault(x => x.Oid?.Value == "2.5.29.17")
+            ?.Format(multiLine: false);
+
+        return !string.IsNullOrWhiteSpace(subjectAlternativeName)
+               && subjectAlternativeName.Contains("localhost", StringComparison.OrdinalIgnoreCase);
     }
 
     private static CertificateTrustResult TryTrustCertificate(X509Certificate2 certificate)

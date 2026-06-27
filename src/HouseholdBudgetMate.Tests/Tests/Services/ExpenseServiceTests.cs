@@ -2697,6 +2697,90 @@ public sealed class ExpenseServiceTests
         Assert.Equal("Farba scienna", found.MatchingDescription);
     }
 
+    [Fact]
+    public async Task SearchExpenseHistoryAsync_Should_Filter_Tag_Hierarchy_On_The_Same_Line_Item()
+    {
+        int foodCategoryId;
+        int rootTagId;
+        int internetTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var food = new Category { Name = "Spożywcze", Color = "#43A047", SupportsLineItems = true };
+            context.Categories.Add(food);
+            await context.SaveChangesAsync();
+            foodCategoryId = food.Id;
+
+            var groceriesTag = new Tag { CategoryId = foodCategoryId, Name = "Sklep" };
+            context.Tags.Add(groceriesTag);
+            await context.SaveChangesAsync();
+            rootTagId = groceriesTag.Id;
+
+            var internetTag = new Tag
+            {
+                CategoryId = foodCategoryId,
+                ParentTagId = rootTagId,
+                Name = "Internetowe"
+            };
+            context.Tags.Add(internetTag);
+            await context.SaveChangesAsync();
+            internetTagId = internetTag.Id;
+
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
+            context.MonthPlans.Add(monthPlan);
+            await context.SaveChangesAsync();
+
+            var mixedExpense = new Expense
+            {
+                MonthPlanId = monthPlan.Id,
+                Name = "Zakupy spożywcze",
+                CategoryId = foodCategoryId,
+                TagId = rootTagId,
+                PlannedAmount = 120m,
+                ActualAmount = 120m,
+                Order = 1
+            };
+            context.Expenses.Add(mixedExpense);
+            await context.SaveChangesAsync();
+
+            context.ExpenseLineItems.AddRange(
+                new ExpenseLineItem
+                {
+                    ExpenseId = mixedExpense.Id,
+                    Description = "Warzywa",
+                    Amount = 80m,
+                    OccurredAt = new DateOnly(2026, 4, 3)
+                },
+                new ExpenseLineItem
+                {
+                    ExpenseId = mixedExpense.Id,
+                    Description = "Internetowe zamówienie kawy",
+                    Amount = 40m,
+                    OccurredAt = new DateOnly(2026, 4, 4),
+                    TagId = internetTagId
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var result = await service.SearchExpenseHistoryAsync(new SearchExpenseHistoryRequest
+        {
+            CategoryId = foodCategoryId,
+            RootTagId = rootTagId,
+            SubTagId = internetTagId
+        }, CancellationToken.None);
+
+        var found = Assert.Single(result);
+        Assert.Equal("Zakupy spożywcze", found.ExpenseName);
+        Assert.Equal("Internetowe zamówienie kawy", found.MatchingDescription);
+        Assert.Equal(40m, found.ActualAmount);
+        Assert.Equal(rootTagId, found.RootTagId);
+        Assert.Equal("Sklep", found.RootTagName);
+        Assert.Equal(internetTagId, found.SubTagId);
+        Assert.Equal("Internetowe", found.SubTagName);
+    }
+
     /// <summary>
     /// Seeds expenses for two categories across three years and requests totals for the home category only.
     /// Verifies TotalSpent=1350, FirstYear=2024, LastYear=2025 for the filtered category.

@@ -105,6 +105,33 @@ public sealed class LoanServiceTests
         Assert.Empty(monthPlans);
     }
 
+    [Fact]
+    public async Task CreateLoanAsync_Should_Keep_Requested_Initial_Rate_Effective_Date()
+    {
+        var service = CreateService(new DateTime(2026, 5, 31, 12, 0, 0, DateTimeKind.Utc));
+        var loan = await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka z WIBOR maj",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            InitialRateEffectiveFrom = new DateOnly(2026, 5, 31),
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 6, 15),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var initialRate = await verifyContext.LoanRateEntries.SingleAsync(x => x.LoanId == loan.Id);
+
+        Assert.Equal(new DateOnly(2026, 5, 31), initialRate.EffectiveFrom);
+    }
+
     /// <summary>
     /// Verifies that interest is calculated using actual days between payment dates (actual/365 convention),
     /// not the number of days in the payment month.
@@ -2641,8 +2668,8 @@ public sealed class LoanServiceTests
 
         var mayBefore = await service.GetDebtSummaryAsync(2026, 5, CancellationToken.None);
         var juneBefore = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
-        Assert.Equal(0m, mayBefore.ActiveDebt);
-        Assert.Equal(0, mayBefore.ActiveLoanCount);
+        Assert.Equal(800_000m, mayBefore.ActiveDebt);
+        Assert.Equal(1, mayBefore.ActiveLoanCount);
         Assert.True(juneBefore.ActiveDebt > 0);
 
         var julyInstallment = loan.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15));
@@ -2884,6 +2911,35 @@ public sealed class LoanServiceTests
             loan.Installments.Where(x => x.DueDate > new DateOnly(2026, 6, 30)).Sum(x => x.PrincipalAmount),
             juneSummary.ActiveDebt);
         Assert.Equal(1, juneSummary.ActiveLoanCount);
+    }
+
+    [Fact]
+    public async Task GetDebtSummaryAsync_Should_Show_Original_Principal_In_Loan_Start_Month_When_First_Installment_Is_Next_Month()
+    {
+        var service = CreateService(new DateTime(2026, 5, 16, 12, 0, 0, DateTimeKind.Utc));
+        await service.CreateLoanAsync(new CreateLoanRequest
+        {
+            Name = "Hipoteka majowa",
+            LoanType = LoanType.Mortgage,
+            InterestMode = LoanInterestMode.VariableWibor,
+            WiborPeriodType = WiborPeriodType.Wibor1M,
+            MarginRate = 1.52m,
+            InitialReferenceRate = 3.8m,
+            Principal = 800_000m,
+            InterestRate = 0m,
+            StartDate = new DateOnly(2026, 5, 19),
+            EndDate = new DateOnly(2054, 5, 15),
+            RepaymentDayOfMonth = 15,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var maySummary = await service.GetDebtSummaryAsync(2026, 5, CancellationToken.None);
+        var juneSummary = await service.GetDebtSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(1, maySummary.ActiveLoanCount);
+        Assert.Equal(800_000m, maySummary.ActiveDebt);
+        Assert.Equal(1, juneSummary.ActiveLoanCount);
+        Assert.True(juneSummary.ActiveDebt < maySummary.ActiveDebt);
     }
 
     [Fact]

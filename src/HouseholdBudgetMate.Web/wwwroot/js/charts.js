@@ -98,6 +98,15 @@ window.HBM.charts = (function () {
                     callbacks: {
                         label: function (ctx) {
                             var val = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
+                            if (isPie) {
+                                var total = ctx.dataset.data.reduce(function (sum, item, index) {
+                                    return ctx.chart.getDataVisibility(index)
+                                        ? sum + Number(item || 0)
+                                        : sum;
+                                }, 0);
+                                var percent = total > 0 ? (Number(val || 0) / total) * 100 : 0;
+                                return ' ' + ctx.label + ': ' + val.toFixed(2) + ' zl (' + percent.toFixed(1) + '%)';
+                            }
                             return ' ' + ctx.dataset.label + ': ' + val.toFixed(2) + ' zł';
                         }
                     }

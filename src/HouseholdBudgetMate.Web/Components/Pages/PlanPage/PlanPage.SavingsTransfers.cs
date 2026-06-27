@@ -92,6 +92,12 @@ public partial class PlanPage
             return;
         }
 
+        var confirmation = await ConfirmAsync("Czy na pewno chcesz usunąć?");
+        if (!confirmation)
+        {
+            return;
+        }
+
         if (await ExecutePostSaveAsync(
             () => ExpenseService.DeleteMonthSavingsTransferItemAsync(
                 new DeleteMonthSavingsTransferItemRequest { Id = id }, CancellationToken.None),

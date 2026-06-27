@@ -8,11 +8,13 @@
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Abstractions.Parsing
 @using HouseholdBudgetMate.Application.Kernel.Exceptions
+@using HouseholdBudgetMate.Web.Components.Dialogs
 @using MudBlazor
 
 @inject ILoanService LoanService
 @inject ICategoryService CategoryService
 @inject IJSRuntime JsRuntime
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <DirtyStateMonitor @ref="_dirtyStateMonitor"
@@ -169,7 +171,7 @@ else
 <MudDialog @bind-Visible="_prepaymentDialogOpen" Options="@(new DialogOptions { CloseOnEscapeKey = true, CloseButton = true })">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            Nadpłata raty @(_prepaymentInstallment is not null ? $"{_prepaymentInstallment.Month:D2}/{_prepaymentInstallment.Year}" : string.Empty)
+            Nadpłata kredytu
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -584,7 +586,7 @@ else
 
     private async Task DeleteLoanChargeAsync(int chargeId)
     {
-        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", "Usunac koszt kredytu na stale?");
+        var confirmation = await ConfirmAsync("Usuń koszt kredytu", "Czy na pewno chcesz usunąć koszt kredytu na stałe?");
         if (!confirmation)
         {
             return;
@@ -594,7 +596,7 @@ else
         {
             await LoanService.DeleteLoanChargeAsync(new DeleteLoanChargeRequest { Id = chargeId }, CancellationToken.None);
             await LoadAsync();
-            Snackbar.Add("Usunieto koszt kredytu.", Severity.Success);
+            Snackbar.Add("Usunięto koszt kredytu.", Severity.Success);
         }
         catch (Exception ex)
         {
@@ -604,7 +606,7 @@ else
 
     private async Task DeleteLoanAsync(LoanDto loan)
     {
-        var confirmation = await JsRuntime.InvokeAsync<bool>("confirm", $"Usunac kredyt '{loan.Name}'?");
+        var confirmation = await ConfirmAsync("Usuń kredyt", $"Czy na pewno chcesz usunąć kredyt '{loan.Name}'?");
         if (!confirmation)
         {
             return;
@@ -619,12 +621,30 @@ else
             }
 
             await LoadAsync();
-            Snackbar.Add("Usunieto kredyt.", Severity.Success);
+            Snackbar.Add("Usunięto kredyt.", Severity.Success);
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(ConfirmDialog.Message)] = message
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
     }
 
     private async Task ToggleInstallmentPaidAsync(LoanInstallmentDto installment)

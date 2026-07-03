@@ -1,10 +1,10 @@
 ---
 change_id: loan-operation-revert
 title: Revert loan prepayment and WIBOR operations
-status: implementing
+status: archived
 created: 2026-07-02
-updated: 2026-07-02
-archived_at: null
+updated: 2026-07-03
+archived_at: 2026-07-03T17:35:59Z
 ---
 
 ## Notes

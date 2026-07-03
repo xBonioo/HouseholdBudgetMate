@@ -1,5 +1,6 @@
 @using System.Globalization
 @using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Common.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
 @using MudBlazor
 
@@ -22,12 +23,12 @@
             <div class="account-period-grid">
                 @foreach (var month in _months)
                 {
-                    var hasData = HasData(month.Value);
+                    var isSelectable = CanSelectPeriod(month.Value);
                     <MudButton Variant="@(_month == month.Value ? Variant.Filled : Variant.Outlined)"
                                Color="@(_month == month.Value ? Color.Primary : Color.Secondary)"
-                               Class="@GetMonthButtonClass(month.Value, hasData)"
+                               Class="@GetMonthButtonClass(month.Value, isSelectable)"
                                ButtonType="ButtonType.Button"
-                               StartIcon="@(hasData ? null : Icons.Material.Filled.Add)"
+                               Disabled="@(!isSelectable)"
                                OnClick="() => SelectMonth(month.Value)">
                         <span>@month.Label</span>
                     </MudButton>
@@ -35,7 +36,11 @@
             </div>
             <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                 <MudButton Variant="Variant.Text" ButtonType="ButtonType.Button" OnClick="Cancel">Anuluj</MudButton>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Check" ButtonType="ButtonType.Submit">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Check"
+                           Disabled="@(!CanSelectPeriod(_month))"
+                           ButtonType="ButtonType.Submit">
                     Wybierz
                 </MudButton>
             </MudStack>
@@ -45,8 +50,8 @@
 </MudDialog>
 
 @code {
-    private readonly IReadOnlyList<MonthOption> _months = Enumerable.Range(1, 12)
-        .Select(month => new MonthOption(month, new DateTime(2000, month, 1).ToString("MMM", new CultureInfo("pl-PL"))))
+    private readonly IReadOnlyList<MonthOptionDto> _months = Enumerable.Range(1, 12)
+        .Select(month => new MonthOptionDto(month, new DateTime(2000, month, 1).ToString("MMM", new CultureInfo("pl-PL"))))
         .ToList();
 
     private int _year;
@@ -56,10 +61,10 @@
 
     [Parameter] public int SelectedYear { get; set; }
     [Parameter] public int SelectedMonth { get; set; }
+    [Parameter] public int CurrentYear { get; set; }
+    [Parameter] public int CurrentMonth { get; set; }
     [Parameter] public IReadOnlyList<int> AvailableYears { get; set; } = [];
     [Parameter] public IReadOnlyList<AvailableMonthDto> AvailablePlanMonths { get; set; } = [];
-    [Parameter] public IReadOnlySet<YearMonthKeyDto> AccountBalanceMonths { get; set; } = new HashSet<YearMonthKeyDto>();
-
     protected override void OnInitialized()
     {
         _year = SelectedYear;
@@ -71,13 +76,27 @@
         }
     }
 
-    private bool HasData(int month)
+    private bool CanSelectPeriod(int month)
     {
-        return AvailablePlanMonths.Any(x => x.Year == _year && x.Month == month)
-               || AccountBalanceMonths.Contains(new YearMonthKeyDto(_year, month));
+        return HasMonthPlan(month) || IsPastOrCurrentMonth(month);
     }
 
-    private string GetMonthButtonClass(int month, bool hasData)
+    private bool HasMonthPlan(int month)
+    {
+        return AvailablePlanMonths.Any(x => x.Year == _year && x.Month == month);
+    }
+
+    private bool IsPastOrCurrentMonth(int month)
+    {
+        return ToMonthKey(_year, month) <= ToMonthKey(CurrentYear, CurrentMonth);
+    }
+
+    private static int ToMonthKey(int year, int month)
+    {
+        return (year * 12) + month;
+    }
+
+    private string GetMonthButtonClass(int month, bool isSelectable)
     {
         var classes = "account-period-month";
 
@@ -86,7 +105,7 @@
             classes += " account-period-month-selected";
         }
 
-        if (!hasData)
+        if (!isSelectable)
         {
             classes += " account-period-month-empty";
         }
@@ -101,6 +120,11 @@
 
     private void Save()
     {
+        if (!CanSelectPeriod(_month))
+        {
+            return;
+        }
+
         MudDialog.Close(DialogResult.Ok(new AccountPeriodSelectionDto(_year, _month)));
     }
 
@@ -108,6 +132,4 @@
     {
         MudDialog.Cancel();
     }
-
-    private readonly record struct MonthOption(int Value, string Label);
 }

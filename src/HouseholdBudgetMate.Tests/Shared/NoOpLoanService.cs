@@ -41,6 +41,9 @@ public class NoOpLoanService : ILoanService
         CancellationToken cancellationToken)
         => Task.FromResult(new LoanDto());
 
+    public virtual Task<LoanDto> RevertLoanOperationAsync(RevertLoanOperationRequest request, CancellationToken cancellationToken)
+        => Task.FromResult(new LoanDto());
+
     public Task<LoanChargeDto> CreateLoanChargeAsync(CreateLoanChargeRequest request, CancellationToken cancellationToken)
         => Task.FromResult(new LoanChargeDto());
 

@@ -203,10 +203,10 @@
     }
     else
     {
-        <MudList T="UpcomingInstallmentItem" Dense="true" Class="mt-2">
+        <MudList T="UpcomingInstallmentItemDto" Dense="true" Class="mt-2">
             @foreach (var item in _upcomingInstallments)
             {
-                <MudListItem T="UpcomingInstallmentItem">
+                <MudListItem T="UpcomingInstallmentItemDto">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width:100%;">
                         <MudStack Spacing="0">
                             <MudText Typo="Typo.body1">@item.LoanName</MudText>
@@ -327,7 +327,7 @@
     private string _monthLabel = string.Empty;
     private List<ExpenseDto> _recentExpenses = [];
     private LiveBalanceDto _liveBalance = new();
-    private List<UpcomingInstallmentItem> _upcomingInstallments = [];
+    private List<UpcomingInstallmentItemDto> _upcomingInstallments = [];
     private DashboardSummaryDto _dashboardSummary = new();
 
     private string BalanceBaseGuidance
@@ -363,7 +363,7 @@
             var windowStart = new DateOnly(now.Year, now.Month, 1);
             var windowEnd = windowStart.AddMonths(3);
             _upcomingInstallments = loans
-                .SelectMany(x => x.Installments.Select(i => new UpcomingInstallmentItem(x.Name, i.Year, i.Month, i.DueDate, i.Amount, i.IsPaid)))
+                .SelectMany(x => x.Installments.Select(i => new UpcomingInstallmentItemDto(x.Name, i.Year, i.Month, i.DueDate, i.Amount, i.IsPaid)))
                 .Where(x => !x.IsPaid)
                 .Where(x => x.DueDate >= windowStart && x.DueDate < windowEnd)
                 .OrderBy(x => x.DueDate)
@@ -400,13 +400,4 @@
         var now = DateTimeProvider.GetLocalDateTime();
         NavigationManager.NavigateTo($"/plan/{now.Year}/{now.Month}");
     }
-
-    private sealed record UpcomingInstallmentItem(
-        string LoanName,
-        int Year,
-        int Month,
-        DateOnly DueDate,
-        decimal Amount,
-        bool IsPaid);
-    
 }

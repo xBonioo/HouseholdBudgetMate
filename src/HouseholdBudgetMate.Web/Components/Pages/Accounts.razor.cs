@@ -2,6 +2,7 @@ using System.Globalization;
 using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto;
+using HouseholdBudgetMate.Abstractions.Contracts.Common.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto;
@@ -30,8 +31,8 @@ public partial class Accounts
 
     private readonly CultureInfo _culture = new("pl-PL");
     private readonly AccountType[] _accountTypes = Enum.GetValues<AccountType>();
-    private readonly IReadOnlyList<MonthOption> _monthOptions = Enumerable.Range(1, 12)
-        .Select(month => new MonthOption(
+    private readonly IReadOnlyList<MonthOptionDto> _monthOptions = Enumerable.Range(1, 12)
+        .Select(month => new MonthOptionDto(
             month,
             new DateTime(2000, month, 1).ToString("MMMM", new CultureInfo("pl-PL")),
             new DateTime(2000, month, 1).ToString("MMM", new CultureInfo("pl-PL"))))
@@ -46,15 +47,15 @@ public partial class Accounts
 
     private List<AccountDto> _accounts = [];
     private IReadOnlyList<CategoryDto> _categories = [];
-    private IReadOnlyList<AccountBalanceRow> _accountRows = [];
-    private IReadOnlyList<AccountBalanceRow> _balanceRows = [];
-    private IReadOnlyList<BudgetHealthItem> _overspentCategories = [];
-    private IReadOnlyList<BudgetHealthItem> _safeCategories = [];
+    private IReadOnlyList<AccountBalanceRowDto> _accountRows = [];
+    private IReadOnlyList<AccountBalanceRowDto> _balanceRows = [];
+    private IReadOnlyList<BudgetHealthItemDto> _overspentCategories = [];
+    private IReadOnlyList<BudgetHealthItemDto> _safeCategories = [];
     private IReadOnlyList<AvailableMonthDto> _availablePlanMonths = [];
     private MonthPlanDto? _selectedMonthPlan;
     private LiveBalanceDto _liveBalance = new();
-    private AccountsOverviewModel _overview = new();
-    private SavingsTransferSummary _savingsSummary = new();
+    private AccountsOverviewDto _overview = new();
+    private SavingsTransferSummaryDto _savingsSummary = new();
     private DebtSummaryDto _debtSummary = new();
 
     private UpdateAccountRequest? _editModel;
@@ -116,12 +117,11 @@ public partial class Accounts
             _availablePlanMonths = await ExpenseService.GetAvailableMonthsAsync(CancellationToken.None);
             SyncAvailableYears();
             SyncAvailableMonthsForSelectedYear();
+            EnsureSelectedPeriodIsSelectable();
 
-            _canEditSelectedMonth = !IsSelectedMonthClosed();
             _hasSelectedMonthPlan = _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == _selectedMonth);
-            var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
-            _selectedMonthPlan = monthlyPicture.MonthPlan;
-            _liveBalance = monthlyPicture.LiveBalance;
+            _canEditSelectedMonth = CanSelectAccountPeriod(_selectedYear, _selectedMonth) && !IsSelectedMonthClosed();
+            await LoadSelectedMonthFinancialPictureAsync();
             _debtSummary = await LoanService.GetDebtSummaryAsync(_selectedYear, _selectedMonth, CancellationToken.None);
 
             SyncSelectedMonthAmounts();
@@ -144,10 +144,23 @@ public partial class Accounts
     private void SyncAvailableYears()
     {
         var today = DateTimeProvider.GetLocalDateOnly();
-        var years = _availablePlanMonths.Select(x => x.Year)
-            .Concat(_accounts.SelectMany(x => x.MonthBalances.Select(balance => balance.Year)))
+        var knownPeriods = _availablePlanMonths
+            .Select(x => new YearMonthKeyDto(x.Year, x.Month))
+            .Concat(_accounts.SelectMany(account => account.MonthBalances.Select(balance => new YearMonthKeyDto(balance.Year, balance.Month))))
+            .Append(new YearMonthKeyDto(today.Year, today.Month))
+            .ToList();
+
+        var earliestKnownPeriod = knownPeriods
+            .OrderBy(x => ToMonthKey(x.Year, x.Month))
+            .First();
+        var firstBalanceSetupPeriod = new DateOnly(earliestKnownPeriod.Year, earliestKnownPeriod.Month, 1).AddMonths(-1);
+        var startYear = firstBalanceSetupPeriod.Year;
+        var endYear = knownPeriods
+            .Select(x => x.Year)
             .Append(today.Year)
-            .Distinct()
+            .Max();
+
+        var years = Enumerable.Range(startYear, (endYear - startYear) + 1)
             .OrderByDescending(x => x)
             .ToList();
 
@@ -161,7 +174,9 @@ public partial class Accounts
 
     private void SyncAvailableMonthsForSelectedYear()
     {
-        _availableMonthsForSelectedYear = Enumerable.Range(1, 12).ToList();
+        _availableMonthsForSelectedYear = Enumerable.Range(1, 12)
+            .Where(month => CanSelectAccountPeriod(_selectedYear, month))
+            .ToList();
 
         if (_selectedMonth is < 1 or > 12)
         {
@@ -171,8 +186,28 @@ public partial class Accounts
 
     private async Task MoveSelectedPeriodAsync(int direction)
     {
-        var selectedDate = new DateOnly(_selectedYear, _selectedMonth, 1).AddMonths(direction);
-        await SelectPeriodAsync(selectedDate.Year, selectedDate.Month);
+        var nextPeriod = FindAdjacentSelectablePeriod(direction);
+        if (nextPeriod is null)
+        {
+            Snackbar.Add("Brak dostępnego miesiąca w tym kierunku.", Severity.Info);
+            return;
+        }
+
+        await SelectPeriodAsync(nextPeriod.Year, nextPeriod.Month);
+    }
+
+    private async Task LoadSelectedMonthFinancialPictureAsync()
+    {
+        if (_hasSelectedMonthPlan)
+        {
+            var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
+            _selectedMonthPlan = monthlyPicture.MonthPlan;
+            _liveBalance = monthlyPicture.LiveBalance;
+            return;
+        }
+
+        _selectedMonthPlan = null;
+        _liveBalance = await IncomeService.GetLiveBalanceAsync(_selectedYear, _selectedMonth, CancellationToken.None);
     }
 
     private async Task OpenPeriodDialogAsync()
@@ -183,7 +218,8 @@ public partial class Accounts
             [nameof(AccountPeriodDialog.SelectedMonth)] = _selectedMonth,
             [nameof(AccountPeriodDialog.AvailableYears)] = _availableYears,
             [nameof(AccountPeriodDialog.AvailablePlanMonths)] = _availablePlanMonths,
-            [nameof(AccountPeriodDialog.AccountBalanceMonths)] = BuildAccountBalanceMonths()
+            [nameof(AccountPeriodDialog.CurrentYear)] = DateTimeProvider.GetLocalDateOnly().Year,
+            [nameof(AccountPeriodDialog.CurrentMonth)] = DateTimeProvider.GetLocalDateOnly().Month
         };
 
         var options = new DialogOptions
@@ -205,6 +241,12 @@ public partial class Accounts
 
     private async Task SelectPeriodAsync(int year, int month)
     {
+        if (!CanSelectAccountPeriod(year, month))
+        {
+            Snackbar.Add("Nie można przejść do przyszłego miesiąca bez planu.", Severity.Warning);
+            return;
+        }
+
         _selectedYear = year;
         _selectedMonth = month;
         EnsureSelectedYearIsAvailable();
@@ -221,11 +263,24 @@ public partial class Accounts
         _availableYears = _availableYears.Append(_selectedYear).Distinct().OrderByDescending(x => x).ToList();
     }
 
-    private IReadOnlySet<YearMonthKeyDto> BuildAccountBalanceMonths()
+    private void EnsureSelectedPeriodIsSelectable()
     {
-        return _accounts
-            .SelectMany(account => account.MonthBalances.Select(balance => new YearMonthKeyDto(balance.Year, balance.Month)))
-            .ToHashSet();
+        if (CanSelectAccountPeriod(_selectedYear, _selectedMonth))
+        {
+            return;
+        }
+
+        var selectedPeriodKey = ToMonthKey(_selectedYear, _selectedMonth);
+        var fallback = _availableYears
+            .SelectMany(year => Enumerable.Range(1, 12).Select(month => new YearMonthKeyDto(year, month)))
+            .Where(period => CanSelectAccountPeriod(period.Year, period.Month))
+            .OrderBy(x => Math.Abs(ToMonthKey(x.Year, x.Month) - selectedPeriodKey))
+            .ThenByDescending(x => ToMonthKey(x.Year, x.Month))
+            .First();
+
+        _selectedYear = fallback.Year;
+        _selectedMonth = fallback.Month;
+        SyncAvailableMonthsForSelectedYear();
     }
 
     private async Task LoadSelectedMonthDetailsAsync()
@@ -235,11 +290,9 @@ public partial class Accounts
 
         try
         {
-            _canEditSelectedMonth = !IsSelectedMonthClosed();
             _hasSelectedMonthPlan = _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == _selectedMonth);
-            var monthlyPicture = await ExpenseService.GetMonthlyFinancialPictureAsync(_selectedYear, _selectedMonth, CancellationToken.None);
-            _selectedMonthPlan = monthlyPicture.MonthPlan;
-            _liveBalance = monthlyPicture.LiveBalance;
+            _canEditSelectedMonth = CanSelectAccountPeriod(_selectedYear, _selectedMonth) && !IsSelectedMonthClosed();
+            await LoadSelectedMonthFinancialPictureAsync();
             _debtSummary = await LoanService.GetDebtSummaryAsync(_selectedYear, _selectedMonth, CancellationToken.None);
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
@@ -282,11 +335,11 @@ public partial class Accounts
         _accountRows = _accounts
             .OrderBy(x => x.Order)
             .ThenBy(x => x.Name)
-            .Select(ToAccountBalanceRow)
+            .Select(ToAccountBalanceRowDto)
             .ToList();
 
         _balanceRows = GetAccountsForSelectedMonth()
-            .Select(ToAccountBalanceRow)
+            .Select(ToAccountBalanceRowDto)
             .ToList();
 
         var checkingBalance = _balanceRows
@@ -295,11 +348,11 @@ public partial class Accounts
 
         var allAccountsBalance = _balanceRows.Sum(x => x.Amount);
 
-        _savingsSummary = new SavingsTransferSummary(
+        _savingsSummary = new SavingsTransferSummaryDto(
             _selectedMonthPlan?.SavingsTransfers.Sum(x => x.Amount) ?? 0,
             _selectedMonthPlan?.SavingsTransfers.Count ?? 0);
 
-        var budgetHealthItems = BuildBudgetHealthItems().ToList();
+        var budgetHealthItems = BuildBudgetHealthItemDtos().ToList();
 
         _overspentCategories = budgetHealthItems
             .Where(x => x.RemainingAmount < 0)
@@ -313,7 +366,7 @@ public partial class Accounts
             .Take(5)
             .ToList();
 
-        _overview = new AccountsOverviewModel(
+        _overview = new AccountsOverviewDto(
             _liveBalance.CurrentBalance,
             _liveBalance.HasCompleteBalanceBase,
             _liveBalance.MissingBalanceAccountNames,
@@ -328,7 +381,7 @@ public partial class Accounts
             IsSelectedMonthClosed());
     }
 
-    private IEnumerable<BudgetHealthItem> BuildBudgetHealthItems()
+    private IEnumerable<BudgetHealthItemDto> BuildBudgetHealthItemDtos()
     {
         if (_selectedMonthPlan is null)
         {
@@ -346,13 +399,13 @@ public partial class Accounts
                 var limit = category.EnvelopeLimit!.Value;
                 var spent = spentByCategory.GetValueOrDefault(category.Id, 0);
 
-                return new BudgetHealthItem(category.Name, limit, spent, limit - spent);
+                return new BudgetHealthItemDto(category.Name, limit, spent, limit - spent);
             });
     }
 
-    private AccountBalanceRow ToAccountBalanceRow(AccountDto account)
+    private AccountBalanceRowDto ToAccountBalanceRowDto(AccountDto account)
     {
-        return new AccountBalanceRow(
+        return new AccountBalanceRowDto(
             account.Id,
             account.Name,
             account.Type,
@@ -402,7 +455,7 @@ public partial class Accounts
         }
     }
 
-    private void BeginEdit(AccountBalanceRow account)
+    private void BeginEdit(AccountBalanceRowDto account)
     {
         _editNameError = null;
         _editModel = new UpdateAccountRequest
@@ -455,7 +508,7 @@ public partial class Accounts
         MarkDirtyStatePristine();
     }
 
-    private async Task DeleteAccountAsync(AccountBalanceRow account)
+    private async Task DeleteAccountAsync(AccountBalanceRowDto account)
     {
         var parameters = new DialogParameters
         {
@@ -487,7 +540,7 @@ public partial class Accounts
         }
     }
 
-    private async Task ToggleArchiveAsync(AccountBalanceRow account)
+    private async Task ToggleArchiveAsync(AccountBalanceRowDto account)
     {
         _isBusy = true;
 
@@ -627,7 +680,11 @@ public partial class Accounts
     {
         if (!_canEditSelectedMonth)
         {
-            Snackbar.Add("Wybrany miesiąc jest zamknięty.", Severity.Info);
+            Snackbar.Add(
+                _hasSelectedMonthPlan
+                    ? "Wybrany miesiąc jest zamknięty."
+                    : "Nie można zapisać sald dla miesiąca bez planu.",
+                Severity.Info);
             return;
         }
 
@@ -698,8 +755,59 @@ public partial class Accounts
         return plan?.IsClosed ?? false;
     }
 
+    private bool HasMonthPlan(int year, int month)
+    {
+        return _availablePlanMonths.Any(x => x.Year == year && x.Month == month);
+    }
+
+    private bool CanSelectAccountPeriod(int year, int month)
+    {
+        return HasMonthPlan(year, month) || IsPastOrCurrentMonth(year, month);
+    }
+
+    private bool IsPastOrCurrentMonth(int year, int month)
+    {
+        var today = DateTimeProvider.GetLocalDateOnly();
+        return ToMonthKey(year, month) <= ToMonthKey(today.Year, today.Month);
+    }
+
+    private bool CanMoveSelectedPeriod(int direction)
+    {
+        return FindAdjacentSelectablePeriod(direction) is not null;
+    }
+
+    private YearMonthKeyDto? FindAdjacentSelectablePeriod(int direction)
+    {
+        if (direction == 0)
+        {
+            return null;
+        }
+
+        var selectedKey = ToMonthKey(_selectedYear, _selectedMonth);
+        var ordered = _availableYears
+            .SelectMany(year => Enumerable.Range(1, 12).Select(month => new YearMonthKeyDto(year, month)))
+            .Where(period => CanSelectAccountPeriod(period.Year, period.Month))
+            .Distinct()
+            .OrderBy(x => ToMonthKey(x.Year, x.Month))
+            .ToList();
+
+        return direction > 0
+            ? ordered.FirstOrDefault(x => ToMonthKey(x.Year, x.Month) > selectedKey)
+            : ordered.LastOrDefault(x => ToMonthKey(x.Year, x.Month) < selectedKey);
+    }
+
+    private static int ToMonthKey(int year, int month)
+    {
+        return (year * 12) + month;
+    }
+
     private IReadOnlyList<AccountDto> GetAccountsForSelectedMonth()
     {
+        if (!CanSelectAccountPeriod(_selectedYear, _selectedMonth))
+        {
+            return [];
+        }
+
         if (IsSelectedMonthClosed())
         {
             return _accounts
@@ -735,8 +843,7 @@ public partial class Accounts
 
     private bool HasPermanentBalanceTabForSelectedYear(int month)
     {
-        return _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == month)
-               || _accounts.Any(x => x.MonthBalances.Any(balance => balance.Year == _selectedYear && balance.Month == month));
+        return CanSelectAccountPeriod(_selectedYear, month);
     }
 
     private string GetShortMonthLabel(int month)
@@ -790,7 +897,6 @@ public partial class Accounts
         };
     }
 
-    private readonly record struct MonthOption(int Value, string Label, string ShortLabel);
 
     private void MarkDirtyStatePristine()
     {
@@ -823,40 +929,4 @@ public partial class Accounts
             }
     };
 
-    private sealed record AccountsOverviewModel(
-        decimal LiveBalance = 0,
-        bool HasCompleteBalanceBase = false,
-        IReadOnlyList<string>? MissingBalanceAccountNamesValue = null,
-        decimal CheckingBalance = 0,
-        decimal SavingsBalance = 0,
-        decimal IncomesTotal = 0,
-        decimal ExpensesTotal = 0,
-        decimal ActiveDebt = 0,
-        int OverspentCategoryCount = 0,
-        int TotalAccountCount = 0,
-        int ActiveAccountCount = 0,
-        bool IsMonthClosed = false)
-    {
-        public IReadOnlyList<string> MissingBalanceAccountNames => MissingBalanceAccountNamesValue ?? [];
-    }
-
-    private sealed record AccountBalanceRow(
-        int Id,
-        string Name,
-        AccountType Type,
-        string TypeLabel,
-        int Order,
-        decimal Amount,
-        bool IsArchived,
-        bool HasRecordedBalance);
-
-    private sealed record BudgetHealthItem(
-        string Name,
-        decimal LimitAmount,
-        decimal SpentAmount,
-        decimal RemainingAmount);
-
-    private sealed record SavingsTransferSummary(
-        decimal MonthlyTransfers = 0,
-        int TransferCount = 0);
 }

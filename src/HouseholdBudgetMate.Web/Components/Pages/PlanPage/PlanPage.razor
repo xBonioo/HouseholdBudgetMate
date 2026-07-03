@@ -1,4 +1,4 @@
-﻿@page "/plan/{Year:int}/{Month:int}"
+@page "/plan/{Year:int}/{Month:int}"
 
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Web.Services
@@ -396,13 +396,15 @@
                     <MudTextField
                         @bind-Value="_newIncome.Name"
                         Label="Nazwa wpływu"
-                        Variant="Variant.Outlined"/>
+                        Variant="Variant.Outlined"
+                        Disabled="@IsMonthClosed"/>
                 </MudItem>
                 <MudItem xs="12" md="6" lg="2">
                     <MudSelect T="int"
                                @bind-Value="_newIncome.AccountId"
                                Label="Konto"
-                               Variant="Variant.Outlined">
+                               Variant="Variant.Outlined"
+                               Disabled="@IsMonthClosed">
                         @foreach (var account in _accounts)
                         {
                             <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
@@ -413,20 +415,23 @@
                     <MudTextField T="string"
                                   Value="_newIncomeAmountInput"
                                   ValueChanged="SetNewIncomeAmountInputAsync"
-                                  Label="Kwota" Variant="Variant.Outlined"/>
+                                  Label="Kwota" Variant="Variant.Outlined"
+                                  Disabled="@IsMonthClosed"/>
                 </MudItem>
                 <MudItem xs="12" md="8" lg="3">
                     <MudDatePicker
                         Date="_newIncome.ExpectedDayOfMonth.ToDateTime(TimeOnly.MinValue)"
                         DateChanged="(date) => UpdateDateIfProvided(date, value => _newIncome.ExpectedDayOfMonth = value)"
                         Label="Oczekiwana data"
-                        Variant="Variant.Outlined"/>
+                        Variant="Variant.Outlined"
+                        Disabled="@IsMonthClosed"/>
                 </MudItem>
                 <MudItem xs="12" md="12" lg="2" Class="d-flex align-center income-add-action">
                     <MudButton
                         Variant="Variant.Filled"
                         Color="Color.Primary"
-                        ButtonType="ButtonType.Submit">
+                        ButtonType="ButtonType.Submit"
+                        Disabled="@IsMonthClosed">
                         DODAJ
                     </MudButton>
                 </MudItem>
@@ -453,10 +458,10 @@
                             @if (!income.IsRegular && _editIncome is not null && _editIncome.Id == income.Id)
                             {
                                 <MudTd DataLabel="Nazwa">
-                                    <MudTextField @bind-Value="_editIncome.Name" Variant="Variant.Outlined"/>
+                                    <MudTextField @bind-Value="_editIncome.Name" Variant="Variant.Outlined" Disabled="@IsMonthClosed"/>
                                 </MudTd>
                                 <MudTd DataLabel="Konto">
-                                    <MudSelect T="int" @bind-Value="_editIncome.AccountId" Variant="Variant.Outlined">
+                                    <MudSelect T="int" @bind-Value="_editIncome.AccountId" Variant="Variant.Outlined" Disabled="@IsMonthClosed">
                                         @foreach (var account in _accounts)
                                         {
                                             <MudSelectItem Value="@account.Id">@account.Name</MudSelectItem>
@@ -475,12 +480,14 @@
                                                   ValueChanged="SetEditIncomeAmountInputAsync"
                                                   Variant="Variant.Outlined"
                                                   Culture="Culture"
-                                                  Immediate="true"/>
+                                                  Immediate="true"
+                                                  Disabled="@IsMonthClosed"/>
                                 </MudTd>
                                 <MudTd DataLabel="Planowana data" Class="income-date-cell">
                                     <MudDatePicker
                                         Date="@_editIncomeDate.ToDateTime(TimeOnly.MinValue)"
-                                        DateChanged="(date) => UpdateDateIfProvided(date, value => _editIncomeDate = value)" Variant="Variant.Outlined"/>
+                                        DateChanged="(date) => UpdateDateIfProvided(date, value => _editIncomeDate = value)" Variant="Variant.Outlined"
+                                        Disabled="@IsMonthClosed"/>
                                 </MudTd>
                                 <MudTd DataLabel="Akcje">
                                     <div class="income-actions-wrap">
@@ -489,14 +496,16 @@
                                             Color="Color.Primary"
                                             Size="Size.Small"
                                             ButtonType="ButtonType.Button"
-                                            OnClick="SaveIncomeEditAsync">
+                                            OnClick="SaveIncomeEditAsync"
+                                            Disabled="@IsMonthClosed">
                                             Zapisz
                                         </MudButton>
                                         <MudButton
                                             Variant="Variant.Text"
                                             Size="Size.Small"
                                             ButtonType="ButtonType.Button"
-                                            OnClick="CancelIncomeEdit">
+                                            OnClick="CancelIncomeEdit"
+                                            Disabled="@IsMonthClosed">
                                             Anuluj
                                         </MudButton>
                                     </div>
@@ -525,6 +534,7 @@
                                                     Size="Size.Small"
                                                     Class="income-action-icon"
                                                     OnClick="() => PrepareBonusFromIncome(income)"
+                                                    Disabled="@IsMonthClosed"
                                                     aria-label="Dodaj bonus"/>
                                             </MudTooltip>
                                             <MudTooltip Text="Usuń w tym miesiącu" Placement="Placement.Top">
@@ -534,6 +544,7 @@
                                                     Size="Size.Small"
                                                     Class="income-action-icon"
                                                     OnClick="() => DeleteIncomeAsync(income.Id)"
+                                                    Disabled="@IsMonthClosed"
                                                     aria-label="Usuń w tym miesiącu"/>
                                             </MudTooltip>
                                         }
@@ -546,6 +557,7 @@
                                                     Size="Size.Small"
                                                     Class="income-action-icon"
                                                     OnClick="() => StartIncomeEdit(income)"
+                                                    Disabled="@IsMonthClosed"
                                                     aria-label="Edytuj"/>
                                             </MudTooltip>
                                             <MudTooltip Text="Usuń" Placement="Placement.Top">
@@ -555,6 +567,7 @@
                                                     Size="Size.Small"
                                                     Class="income-action-icon"
                                                     OnClick="() => DeleteIncomeAsync(income.Id)"
+                                                    Disabled="@IsMonthClosed"
                                                     aria-label="Usuń"/>
                                             </MudTooltip>
                                         }
@@ -689,7 +702,7 @@
                     <MudText Typo="Typo.body2">@envelope.CategoryName</MudText>
                     <MudText Typo="Typo.caption" Class="hb-muted">@envelope.SpentAmount.ToString("0.00", Culture) / @envelope.LimitAmount.ToString("0.00", Culture)zł</MudText>
                 </MudStack>
-                <MudProgressLinear Class="mt-1" Rounded="true" Value="@envelope.ProgressPercent" Color="@envelope.Color"/>
+                <MudProgressLinear Class="mt-1" Rounded="true" Value="@envelope.ProgressPercent" Color="@GetEnvelopeMudColor(envelope.ColorStatus)"/>
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-1">
                     <MudText Typo="Typo.caption" Class="hb-muted">Suma planów</MudText>
                     <MudText Typo="Typo.caption" Class="hb-muted">@envelope.PlannedAmount.ToString("0.00", Culture)zł</MudText>
@@ -749,9 +762,11 @@ else if (_monthPlan is not null)
                                 @bind-Value="_editExpense.Name"
                                 Label="Nazwa"
                                 Variant="Variant.Outlined"
+                                Disabled="@IsMonthClosed"
                                 Class="expense-field-name"/>
 
                             <MudSelect T="int" Value="_editExpense.CategoryId" ValueChanged="OnEditCategoryChanged" Label="Kategoria" Variant="Variant.Outlined"
+                                       Disabled="@IsMonthClosed"
                                        ToStringFunc="GetCategorySelectText" Class="hb-select-ellipsis">
                                 @foreach (var category in _categories)
                                 {
@@ -761,6 +776,7 @@ else if (_monthPlan is not null)
 
                             <div class="@($"expense-tag-grid {(canSelectEditSubTag ? "has-subtag" : "single-tag")}")">
                                 <MudSelect T="int?" Value="_editExpenseRootTagId" ValueChanged="OnEditRootTagChanged" Variant="Variant.Outlined" Label="Tag główny" Clearable="true"
+                                           Disabled="@IsMonthClosed"
                                            ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                                     @foreach (var tag in GetSelectableRootTags(_editExpense.CategoryId, _editExpenseRootTagId))
                                     {
@@ -777,6 +793,7 @@ else if (_monthPlan is not null)
                                                ValueChanged="OnEditSubTagChanged"
                                                Variant="Variant.Outlined"
                                                Label="Podtag" Clearable="true"
+                                               Disabled="@IsMonthClosed"
                                                ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                                         @foreach (var tag in GetSelectableSubTags(_editExpense.CategoryId, _editExpenseRootTagId, _editExpense.TagId))
                                         {
@@ -790,7 +807,8 @@ else if (_monthPlan is not null)
                                           Value="_editExpensePlannedAmountInput"
                                           ValueChanged="SetEditPlannedAmountInputAsync"
                                           Label="Planowana"
-                                          Variant="Variant.Outlined"/>
+                                          Variant="Variant.Outlined"
+                                          Disabled="@IsMonthClosed"/>
 
                             <div class="expense-actual-field">
                                 <MudTextField T="string"
@@ -798,7 +816,7 @@ else if (_monthPlan is not null)
                                               ValueChanged="SetEditActualAmountInputAsync"
                                               Label="Realna"
                                               Variant="Variant.Outlined"
-                                              Disabled="@isEditActualAmountDisabled"/>
+                                              Disabled="@(IsMonthClosed || isEditActualAmountDisabled)"/>
                                 @if (isEditActualAmountDisabled)
                                 {
                                     <MudText Typo="Typo.caption" Class="hb-muted">Kwota realna jest liczona z pozycji.</MudText>
@@ -808,7 +826,7 @@ else if (_monthPlan is not null)
 
                         <div class="expense-form-footer">
                             <div class="expense-form-options">
-                                <MudSwitch @bind-Value="_editExpense.ShowRemainingInUI" Color="Color.Primary" Label="Pokaż pozostało"/>
+                                <MudSwitch @bind-Value="_editExpense.ShowRemainingInUI" Color="Color.Primary" Label="Pokaż pozostało" Disabled="@IsMonthClosed"/>
                                 <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">
                                     Pozostało: @FormatRemaining(_editExpense.ShowRemainingInUI, _editExpense.PlannedAmount - _editExpense.ActualAmount)
                                 </MudChip>
@@ -817,14 +835,16 @@ else if (_monthPlan is not null)
                                 <MudButton
                                     Variant="Variant.Text"
                                     ButtonType="ButtonType.Button"
-                                    OnClick="CancelEdit">
+                                    OnClick="CancelEdit"
+                                    Disabled="@IsMonthClosed">
                                     Anuluj
                                 </MudButton>
                                 <MudButton
                                     Variant="Variant.Filled"
                                     Color="Color.Primary"
                                     StartIcon="@Icons.Material.Filled.Save"
-                                    ButtonType="ButtonType.Submit">
+                                    ButtonType="ButtonType.Submit"
+                                    Disabled="@IsMonthClosed">
                                     Zapisz
                                 </MudButton>
                             </div>
@@ -847,8 +867,8 @@ else if (_monthPlan is not null)
                 {
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudText Typo="Typo.caption">@expense.Order</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@(HasActiveExpenseFilters || IsFirstExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
-                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@(HasActiveExpenseFilters || IsLastExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Class="manual-order-action" Disabled="@(IsMonthClosed || HasActiveExpenseFilters || IsFirstExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, -1)"/>
+                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="manual-order-action" Disabled="@(IsMonthClosed || HasActiveExpenseFilters || IsLastExpense(expense.Id))" OnClick="() => MoveExpenseAsync(expense.Id, 1)"/>
                     </MudStack>
                 }
             </MudTd>
@@ -875,7 +895,7 @@ else if (_monthPlan is not null)
                         Variant="Variant.Outlined"
                         Color="Color.Primary"
                         Size="Size.Small"
-                        Disabled="@_isCopyMode"
+                        Disabled="@(IsMonthClosed || _isCopyMode)"
                         ButtonType="ButtonType.Button"
                         OnClick="() => StartEditAsync(expense)">
                         Edytuj
@@ -884,7 +904,7 @@ else if (_monthPlan is not null)
                         Variant="Variant.Outlined"
                         Color="Color.Error"
                         Size="Size.Small"
-                        Disabled="@_isCopyMode"
+                        Disabled="@(IsMonthClosed || _isCopyMode)"
                         ButtonType="ButtonType.Button"
                         OnClick="() => DeleteExpenseAsync(expense.Id)">
                         Usuń
@@ -927,25 +947,29 @@ else if (_monthPlan is not null)
                                                     @bind-Value="_editLineItem.Description"
                                                     Label="Opis"
                                                     Variant="Variant.Outlined"
-                                                    Margin="Margin.Dense"/>
+                                                    Margin="Margin.Dense"
+                                                    Disabled="@IsMonthClosed"/>
                                                 <MudTextField T="string"
                                                               Value="_editLineItemAmountInput"
                                                               ValueChanged="SetEditLineItemAmountInputAsync"
                                                               Label="Kwota"
                                                               Variant="Variant.Outlined"
-                                                              Margin="Margin.Dense"/>
+                                                              Margin="Margin.Dense"
+                                                              Disabled="@IsMonthClosed"/>
                                                 <MudDatePicker
                                                     Date="@_editLineItemDate.ToDateTime(TimeOnly.MinValue)"
                                                     DateChanged="(date) => UpdateDateIfProvided(date, value => _editLineItemDate = value, false)"
                                                     Label="Data"
                                                     Variant="Variant.Outlined"
-                                                    Margin="Margin.Dense"/>
+                                                    Margin="Margin.Dense"
+                                                    Disabled="@IsMonthClosed"/>
                                                 <MudSelect T="int?"
                                                            @bind-Value="_editLineItem.TagId"
                                                            Label="Tag"
                                                            Variant="Variant.Outlined"
                                                            Clearable="true"
                                                            Margin="Margin.Dense"
+                                                           Disabled="@IsMonthClosed"
                                                            ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                                                     @foreach (var tag in GetSelectableLineItemTags(
                                                                   _editLineItemExpenseId == expense.Id ? expense.CategoryId : 0,
@@ -960,14 +984,16 @@ else if (_monthPlan is not null)
                                                         Variant="Variant.Filled"
                                                         Color="Color.Primary"
                                                         Size="Size.Small"
-                                                        ButtonType="ButtonType.Submit">
+                                                        ButtonType="ButtonType.Submit"
+                                                        Disabled="@IsMonthClosed">
                                                         Zapisz
                                                     </MudButton>
                                                     <MudButton
                                                         Variant="Variant.Text"
                                                         Size="Size.Small"
                                                         ButtonType="ButtonType.Button"
-                                                        OnClick="CancelLineItemEdit">
+                                                        OnClick="CancelLineItemEdit"
+                                                        Disabled="@IsMonthClosed">
                                                         Anuluj
                                                     </MudButton>
                                                 </div>
@@ -982,8 +1008,8 @@ else if (_monthPlan is not null)
                                     <MudTd>@lineItem.OccurredAt.ToString("yyyy-MM-dd")</MudTd>
                                     <MudTd>@(lineItem.TagName ?? "-")</MudTd>
                                     <MudTd>
-                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => BeginLineItemEdit(lineItem, expense.Id)"/>
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteLineItemAsync(lineItem.Id, expense.Id)"/>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Disabled="@IsMonthClosed" OnClick="() => BeginLineItemEdit(lineItem, expense.Id)"/>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Disabled="@IsMonthClosed" OnClick="() => DeleteLineItemAsync(lineItem.Id, expense.Id)"/>
                                     </MudTd>
                                 }
                             </RowTemplate>
@@ -999,7 +1025,8 @@ else if (_monthPlan is not null)
                                 @bind-Value="createModel.Description"
                                 Label="Opis pozycji"
                                 Variant="Variant.Outlined"
-                                Margin="Margin.Dense"/>
+                                Margin="Margin.Dense"
+                                Disabled="@IsMonthClosed"/>
                         </MudItem>
                         <MudItem xs="12" md="2">
                             <MudTextField T="string"
@@ -1007,12 +1034,14 @@ else if (_monthPlan is not null)
                                           ValueChanged="(input) => SetLineItemCreateAmountInputAsync(expense.Id, input)"
                                           Label="Kwota"
                                           Variant="Variant.Outlined"
-                                          Margin="Margin.Dense"/>
+                                          Margin="Margin.Dense"
+                                          Disabled="@IsMonthClosed"/>
                         </MudItem>
                         <MudItem xs="12" md="2">
                             <MudDatePicker
                                 Date="@createModel.OccurredAt.ToDateTime(TimeOnly.MinValue)"
-                                DateChanged="(d) => createModel.OccurredAt = d.HasValue ? DateOnly.FromDateTime(d.Value) : createModel.OccurredAt" Margin="Margin.Dense"/>
+                                DateChanged="(d) => createModel.OccurredAt = d.HasValue ? DateOnly.FromDateTime(d.Value) : createModel.OccurredAt" Margin="Margin.Dense"
+                                Disabled="@IsMonthClosed"/>
                         </MudItem>
                         <MudItem xs="12" md="2">
                             <MudSelect T="int?"
@@ -1021,6 +1050,7 @@ else if (_monthPlan is not null)
                                        Variant="Variant.Outlined"
                                        Clearable="true"
                                        Margin="Margin.Dense"
+                                       Disabled="@IsMonthClosed"
                                        ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                                 @foreach (var tag in GetSelectableLineItemTags(expense.CategoryId, expense.TagId, createModel.TagId))
                                 {
@@ -1032,7 +1062,8 @@ else if (_monthPlan is not null)
                             <MudButton
                                 Variant="Variant.Outlined"
                                 Color="Color.Primary"
-                                ButtonType="ButtonType.Submit">
+                                ButtonType="ButtonType.Submit"
+                                Disabled="@IsMonthClosed">
                                 Dodaj pozycję
                             </MudButton>
                         </MudItem>
@@ -1053,7 +1084,8 @@ else if (_monthPlan is not null)
         Variant="Variant.Filled"
         Color="Color.Primary"
         StartIcon="@(_isCreateExpenseFormVisible ? Icons.Material.Filled.Close : Icons.Material.Filled.Add)"
-        OnClick="ToggleCreateExpenseForm">
+        OnClick="ToggleCreateExpenseForm"
+        Disabled="@IsMonthClosed">
         @(_isCreateExpenseFormVisible ? "Anuluj dodawanie" : "Dodaj wydatek")
     </MudButton>
 </MudStack>
@@ -1074,9 +1106,10 @@ else if (_monthPlan is not null)
         </div>
 
         <div class="expense-form-grid new-expense-form-grid">
-            <MudTextField @bind-Value="_newExpense.Name" Label="Nazwa" Variant="Variant.Outlined" Required="true" Class="expense-field-name"/>
+            <MudTextField @bind-Value="_newExpense.Name" Label="Nazwa" Variant="Variant.Outlined" Required="true" Disabled="@IsMonthClosed" Class="expense-field-name"/>
 
             <MudSelect T="int" Value="_newExpense.CategoryId" ValueChanged="OnCreateCategoryChanged" Label="Kategoria" Variant="Variant.Outlined"
+                       Disabled="@IsMonthClosed"
                        ToStringFunc="GetCategorySelectText" Class="hb-select-ellipsis">
                 @foreach (var category in _categories)
                 {
@@ -1089,6 +1122,7 @@ else if (_monthPlan is not null)
 
             <div class="@($"expense-tag-grid {(canSelectCreateSubTag ? "has-subtag" : "single-tag")}")">
                 <MudSelect T="int?" Value="_newExpenseRootTagId" ValueChanged="OnCreateRootTagChanged" Label="Tag główny" Variant="Variant.Outlined" Clearable="true"
+                           Disabled="@IsMonthClosed"
                            ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                     @foreach (var tag in GetSelectableRootTags(_newExpense.CategoryId, _newExpenseRootTagId))
                     {
@@ -1106,6 +1140,7 @@ else if (_monthPlan is not null)
                                Label="Podtag"
                                Variant="Variant.Outlined"
                                Clearable="true"
+                               Disabled="@IsMonthClosed"
                                ToStringFunc="GetTagSelectText" Class="hb-select-ellipsis">
                         @foreach (var tag in GetSelectableSubTags(_newExpense.CategoryId, _newExpenseRootTagId, _newExpense.TagId))
                         {
@@ -1119,14 +1154,15 @@ else if (_monthPlan is not null)
                           Value="_newExpensePlannedAmountInput"
                           ValueChanged="SetNewPlannedAmountInputAsync"
                           Label="Planowana"
-                          Variant="Variant.Outlined"/>
+                          Variant="Variant.Outlined"
+                          Disabled="@IsMonthClosed"/>
 
             <div class="expense-actual-field">
                 <MudTextField T="string"
                               Value="_newExpenseActualAmountInput"
                               ValueChanged="SetNewActualAmountInputAsync"
                               Label="Realna" Variant="Variant.Outlined"
-                              Disabled="@isCreateActualAmountDisabled"/>
+                              Disabled="@(IsMonthClosed || isCreateActualAmountDisabled)"/>
                 @if (isCreateActualAmountDisabled)
                 {
                     <MudText Typo="Typo.caption" Class="hb-muted">Kwota realna będzie liczona z pozycji.</MudText>
@@ -1143,14 +1179,16 @@ else if (_monthPlan is not null)
             <div class="expense-form-options">
                 <MudSwitch
                     @bind-Value="_newExpense.ShowRemainingInUI"
-                    Color="Color.Primary" Label="Pokaż pozostało"/>
+                    Color="Color.Primary" Label="Pokaż pozostało"
+                    Disabled="@IsMonthClosed"/>
             </div>
             <div class="expense-form-actions">
                 <MudButton
                     Variant="Variant.Filled"
                     Color="Color.Primary"
                     StartIcon="@Icons.Material.Filled.Add"
-                    ButtonType="ButtonType.Submit">
+                    ButtonType="ButtonType.Submit"
+                    Disabled="@IsMonthClosed">
                     Dodaj wydatek
                 </MudButton>
             </div>

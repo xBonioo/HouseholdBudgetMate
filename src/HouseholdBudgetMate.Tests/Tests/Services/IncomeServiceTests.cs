@@ -202,8 +202,7 @@ public sealed class IncomeServiceTests
 
             var income = new Income
             {
-                Year = 2026,
-                Month = 6,
+                MonthPlanId = monthPlan.Id,
                 Name = "Stary wpływ",
                 Amount = 1000m,
                 ExpectedDayOfMonth = new DateOnly(2026, 6, 10),
@@ -239,14 +238,15 @@ public sealed class IncomeServiceTests
         await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
         {
             var account = new Account { Name = "Rachunek", Type = (int)AccountType.Bank };
+            var monthPlan = new MonthPlan { Year = 2026, Month = 4 };
             context.Accounts.Add(account);
+            context.MonthPlans.Add(monthPlan);
             await context.SaveChangesAsync();
             accountId = account.Id;
 
             var income = new Income
             {
-                Year = 2026,
-                Month = 4,
+                MonthPlanId = monthPlan.Id,
                 Name = "Wpływ",
                 Amount = 1000m,
                 ExpectedDayOfMonth = new DateOnly(2026, 4, 10),
@@ -345,8 +345,7 @@ public sealed class IncomeServiceTests
 
             var income = new Income
             {
-                Year = 2026,
-                Month = 5,
+                MonthPlanId = monthPlan.Id,
                 Name = "Wpływ",
                 Amount = 500m,
                 ExpectedDayOfMonth = new DateOnly(2026, 5, 5),
@@ -1073,8 +1072,7 @@ public sealed class IncomeServiceTests
 
             context.Incomes.Add(new Income
             {
-                Year = 2026,
-                Month = 4,
+                MonthPlanId = monthPlan.Id,
                 Name = "Premia",
                 Amount = 500m,
                 ExpectedDayOfMonth = new DateOnly(2026, 4, 5),
@@ -1133,8 +1131,7 @@ public sealed class IncomeServiceTests
             context.Incomes.AddRange(
                 new Income
                 {
-                    Year = 2026,
-                    Month = 4,
+                    MonthPlanId = monthPlan.Id,
                     Name = "Wplyw dzisiaj",
                     Amount = 200m,
                     ExpectedDayOfMonth = new DateOnly(2026, 4, 10),
@@ -1142,8 +1139,7 @@ public sealed class IncomeServiceTests
                 },
                 new Income
                 {
-                    Year = 2026,
-                    Month = 4,
+                    MonthPlanId = monthPlan.Id,
                     Name = "Wplyw pozniej",
                     Amount = 500m,
                     ExpectedDayOfMonth = new DateOnly(2026, 4, 20),
@@ -1197,8 +1193,7 @@ public sealed class IncomeServiceTests
 
             context.Incomes.Add(new Income
             {
-                Year = 2026,
-                Month = 4,
+                MonthPlanId = monthPlan.Id,
                 Name = "Wyplata",
                 Amount = 500m,
                 ExpectedDayOfMonth = new DateOnly(2026, 4, 10),
@@ -1799,16 +1794,6 @@ public sealed class IncomeServiceTests
                 ClosingBalance = 1500m
             });
 
-            context.Incomes.Add(new Income
-            {
-                Year = 2026,
-                Month = 4,
-                Name = "Wpływ",
-                Amount = 300m,
-                ExpectedDayOfMonth = new DateOnly(2026, 4, 5),
-                AccountId = account.Id
-            });
-
             await context.SaveChangesAsync();
         }
 
@@ -1817,7 +1802,7 @@ public sealed class IncomeServiceTests
 
         Assert.Equal(0m, liveBalance.ExpensesTotal);
         Assert.Equal(0m, liveBalance.SavingsTransfersTotal);
-        Assert.Equal(1800m, liveBalance.CurrentBalance); // 1500 base + 300 income
+        Assert.Equal(1500m, liveBalance.CurrentBalance);
     }
 }
 

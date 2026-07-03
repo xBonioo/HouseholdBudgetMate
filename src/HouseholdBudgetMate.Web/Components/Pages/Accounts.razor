@@ -1,4 +1,5 @@
 @page "/accounts"
+@using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto
 @using HouseholdBudgetMate.Abstractions.Enums
 @using HouseholdBudgetMate.Abstractions.Extensions
 @using MudBlazor
@@ -37,6 +38,7 @@
                                Variant="Variant.Outlined"
                                aria-label="Poprzedni miesiąc"
                                title="Poprzedni miesiąc"
+                               Disabled="@(!CanMoveSelectedPeriod(-1))"
                                OnClick="() => MoveSelectedPeriodAsync(-1)"/>
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Secondary"
@@ -51,6 +53,7 @@
                                Variant="Variant.Outlined"
                                aria-label="Następny miesiąc"
                                title="Następny miesiąc"
+                               Disabled="@(!CanMoveSelectedPeriod(1))"
                                OnClick="() => MoveSelectedPeriodAsync(1)"/>
             </div>
         </div>
@@ -59,10 +62,13 @@
             <MudChip T="string" Color="@(_overview.IsMonthClosed ? Color.Info : Color.Success)" Variant="Variant.Filled">
                 @(_overview.IsMonthClosed ? "Miesiąc zamknięty" : "Miesiąc otwarty")
             </MudChip>
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CalendarMonth"
-                       Href="@SelectedMonthPlanHref">
-                Otwórz plan miesiąca
-            </MudButton>
+            @if (_hasSelectedMonthPlan)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CalendarMonth"
+                           Href="@SelectedMonthPlanHref">
+                    Otwórz plan miesiąca
+                </MudButton>
+            }
         </div>
     </MudPaper>
 
@@ -143,10 +149,7 @@
                 <div class="accounts-empty-state">
                     <MudIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Info"/>
                     <MudText Typo="Typo.subtitle2">Brak planu dla wybranego miesiąca.</MudText>
-                    <MudText Typo="Typo.body2" Class="hb-muted">Otwórz plan miesiąca, aby dodać kategorie i zobaczyć alerty budżetowe.</MudText>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Href="@SelectedMonthPlanHref">
-                        Otwórz plan miesiąca
-                    </MudButton>
+                    <MudText Typo="Typo.body2" Class="hb-muted">Wybierz miesiąc z istniejącym planem, aby zobaczyć alerty budżetowe.</MudText>
                 </div>
             }
             else if (_overspentCategories.Count == 0)
@@ -159,10 +162,10 @@
             }
             else
             {
-                <MudList T="BudgetHealthItem" Dense="true" Class="accounts-health-list">
+                <MudList T="BudgetHealthItemDto" Dense="true" Class="accounts-health-list">
                     @foreach (var item in _overspentCategories)
                     {
-                        <MudListItem T="BudgetHealthItem">
+                        <MudListItem T="BudgetHealthItemDto">
                             <div class="accounts-health-row">
                                 <div>
                                     <MudText Typo="Typo.body2" Class="accounts-row-title">@item.Name</MudText>
@@ -181,10 +184,10 @@
             {
                 <MudDivider Class="my-3"/>
                 <MudText Typo="Typo.subtitle2">Największy bufor</MudText>
-                <MudList T="BudgetHealthItem" Dense="true" Class="accounts-health-list">
+                <MudList T="BudgetHealthItemDto" Dense="true" Class="accounts-health-list">
                     @foreach (var item in _safeCategories)
                     {
-                        <MudListItem T="BudgetHealthItem">
+                        <MudListItem T="BudgetHealthItemDto">
                             <div class="accounts-health-row">
                                 <div>
                                     <MudText Typo="Typo.body2" Class="accounts-row-title">@item.Name</MudText>

@@ -1,10 +1,11 @@
-﻿using System.Globalization;
+using System.Globalization;
 using HouseholdBudgetMate.Abstractions.Contracts.Accounts.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
+using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Web.Components.Others;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
@@ -146,7 +147,7 @@ public partial class PlanPage : ComponentBase
     #region Month Preparation
 
     private MonthPlanPreparationDto? _monthPlanPreparation;
-    private readonly List<MonthPlanSuggestionDraft> _monthPlanSuggestionDrafts = [];
+    private readonly List<MonthPlanSuggestionDraftDto> _monthPlanSuggestionDrafts = [];
 
     #endregion
 
@@ -239,39 +240,6 @@ public partial class PlanPage : ComponentBase
         || _selectedExpensePaymentFilter != ExpensePaymentFilter.All;
 
     #endregion
-
-    #region DTOs
-
-    private sealed class EnvelopeProgressItemDto
-    {
-        public string CategoryName { get; init; } = string.Empty;
-        public decimal SpentAmount { get; init; }
-        public decimal PlannedAmount { get; init; }
-        public decimal LimitAmount { get; init; }
-        public double ProgressPercent { get; init; }
-        public Color Color { get; init; }
-    }
-
-    private sealed class MonthPlanSuggestionDraft
-    {
-        public MonthPlanSuggestionDraft(MonthPlanExpenseSuggestionDto suggestion)
-        {
-            Suggestion = suggestion;
-            IsSelected = false;
-            PlannedAmountInput = FormatDecimalInput(suggestion.SuggestedPlannedAmount);
-        }
-
-        public MonthPlanExpenseSuggestionDto Suggestion { get; }
-        public bool IsSelected { get; set; }
-        public string PlannedAmountInput { get; set; }
-    }
-
-    private enum ExpensePaymentFilter
-    {
-        All,
-        RemainingToPay,
-        PaidOff
-    }
 
     private void MarkDirtyStatePristine()
     {
@@ -381,7 +349,7 @@ public partial class PlanPage : ComponentBase
         _monthPlanPreparation = preparation;
         _monthPlanSuggestionDrafts.Clear();
         _monthPlanSuggestionDrafts.AddRange(
-            preparation.Suggestions.Select(suggestion => new MonthPlanSuggestionDraft(suggestion)));
+            preparation.Suggestions.Select(suggestion => new MonthPlanSuggestionDraftDto(suggestion, FormatDecimalInput(suggestion.SuggestedPlannedAmount)) { IsSelected = false }));
         MarkDirtyStatePristine();
     }
 
@@ -391,6 +359,4 @@ public partial class PlanPage : ComponentBase
         _monthPlanSuggestionDrafts.Clear();
         MarkDirtyStatePristine();
     }
-
-    #endregion
 }

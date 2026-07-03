@@ -1,4 +1,5 @@
 @using System.IO
+@using HouseholdBudgetMate.Abstractions.Contracts.Backup.Dto
 @using MudBlazor
 
 <MudDialog>
@@ -68,10 +69,10 @@
                 }
                 else
                 {
-                    <MudList T="FolderEntry" Dense="true">
+                    <MudList T="FolderEntryDto" Dense="true">
                         @foreach (var folder in _directories)
                         {
-                            <MudListItem T="FolderEntry"
+                            <MudListItem T="FolderEntryDto"
                                          Icon="@Icons.Material.Filled.Folder"
                                          OnClick="() => OpenFolderAsync(folder.FullName)">
                                 <MudText Typo="Typo.body2">@folder.Name</MudText>
@@ -101,7 +102,7 @@
 
     private string _currentPath = string.Empty;
     private List<string> _drives = [];
-    private List<FolderEntry> _directories = [];
+    private List<FolderEntryDto> _directories = [];
     private string? _error;
 
     private bool IsCurrentPathUsable => !string.IsNullOrWhiteSpace(_currentPath);
@@ -169,7 +170,7 @@
                 .EnumerateDirectories(fullPath)
                 .Select(path => new DirectoryInfo(path))
                 .OrderBy(directory => directory.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Select(directory => new FolderEntry(directory.Name, directory.FullName))
+                .Select(directory => new FolderEntryDto(directory.Name, directory.FullName))
                 .ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -229,6 +230,4 @@
             return null;
         }
     }
-
-    private sealed record FolderEntry(string Name, string FullName);
 }

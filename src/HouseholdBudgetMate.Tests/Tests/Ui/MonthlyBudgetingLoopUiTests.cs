@@ -38,8 +38,6 @@ public sealed class MonthlyBudgetingLoopUiTests
         markup.Should().Contain("Sp\u0142acone");
         markup.Should().Contain("Items=\"FilteredExpenses\"");
         markup.Should().Contain("Brak wydatk\u00f3w pasuj\u0105cych do filtr\u00f3w");
-        markup.Should().Contain("Disabled=\"@(HasActiveExpenseFilters || IsFirstExpense(expense.Id))\"");
-        markup.Should().Contain("Disabled=\"@(HasActiveExpenseFilters || IsLastExpense(expense.Id))\"");
         markup.Should().Contain("OnClick=\"SaveSavingsTransferEditAsync\"");
         markup.Should().NotContain("savings-transfer-editor-cell");
         markup.Should().NotContain("ActionForm OnSubmit=\"SaveSavingsTransferEditAsync\"");
@@ -213,6 +211,10 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsMarkup.Should().NotContain(RemainingInPlanLabel);
 
         accountsCode.Should().Contain("ExpenseService.GetMonthlyFinancialPictureAsync");
+        accountsCode.Should().Contain("private async Task LoadSelectedMonthFinancialPictureAsync()");
+        accountsCode.Should().Contain("if (_hasSelectedMonthPlan)");
+        accountsCode.Should().Contain("_selectedMonthPlan = null;");
+        accountsCode.Should().Contain("IncomeService.GetLiveBalanceAsync");
         accountsCode.Should().Contain("HasCompleteBalanceBase");
         accountsCode.Should().Contain("MissingBalanceAccountNames");
         accountsCode.Should().Contain(PreviousClosingBalanceGuidance);
@@ -221,6 +223,19 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsCode.Should().Contain("aktywnych kredyt\u00f3w");
         accountsCode.Should().Contain("1 wpis w miesi\u0105cu");
         accountsCode.Should().Contain("wpis\u00f3w w miesi\u0105cu");
+        accountsMarkup.Should().Contain("Disabled=\"@(!CanMoveSelectedPeriod(-1))\"");
+        accountsMarkup.Should().Contain("Disabled=\"@(!CanMoveSelectedPeriod(1))\"");
+        accountsCode.Should().Contain("firstBalanceSetupPeriod");
+        accountsCode.Should().Contain("AddMonths(-1)");
+        accountsCode.Should().Contain("Enumerable.Range(startYear, (endYear - startYear) + 1)");
+        accountsCode.Should().Contain("EnsureSelectedPeriodIsSelectable");
+        accountsCode.Should().Contain("if (!CanSelectAccountPeriod(year, month))");
+        accountsCode.Should().Contain("Nie można przejść do przyszłego miesiąca bez planu.");
+        accountsCode.Should().Contain("_canEditSelectedMonth = CanSelectAccountPeriod(_selectedYear, _selectedMonth) && !IsSelectedMonthClosed();");
+        accountsCode.Should().Contain("if (!CanSelectAccountPeriod(_selectedYear, _selectedMonth))");
+        accountsCode.Should().Contain("private bool HasMonthPlan(int year, int month)");
+        accountsCode.Should().Contain("private bool IsPastOrCurrentMonth(int year, int month)");
+        accountsCode.Should().Contain("private YearMonthKeyDto? FindAdjacentSelectablePeriod(int direction)");
 
         var balanceApplicability = ExtractMethodBlock(
             accountsCode,
@@ -229,6 +244,20 @@ public sealed class MonthlyBudgetingLoopUiTests
         AssertOccursBefore(balanceApplicability, "if (!account.IsArchived)", "account.ActiveFromUtc");
 
         AssertNoSafeToSpend(surface);
+    }
+
+    [Fact]
+    public void AccountPeriodDialog_Should_Allow_Past_Months_Without_MonthPlan()
+    {
+        var dialog = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Dialogs/AccountPeriodDialog.razor");
+
+        dialog.Should().Contain("Disabled=\"@(!isSelectable)\"");
+        dialog.Should().Contain("Disabled=\"@(!CanSelectPeriod(_month))\"");
+        dialog.Should().Contain("private bool CanSelectPeriod(int month)");
+        dialog.Should().Contain("private bool HasMonthPlan(int month)");
+        dialog.Should().Contain("private bool IsPastOrCurrentMonth(int month)");
+        dialog.Should().Contain("AvailablePlanMonths.Any(x => x.Year == _year && x.Month == month)");
+        dialog.Should().NotContain("AccountBalanceMonths");
     }
 
     [Fact]

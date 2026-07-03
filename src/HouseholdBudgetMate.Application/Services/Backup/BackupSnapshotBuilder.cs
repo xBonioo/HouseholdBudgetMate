@@ -227,10 +227,11 @@ internal sealed class BackupSnapshotBuilder(IDateTimeProvider dateTimeProvider)
         })));
 
         var incomes = (await dbContext.Incomes.IgnoreQueryFilters().AsNoTracking()
+            .Include(x => x.MonthPlan)
             .Where(x => includeAllBudgetOwners || x.UserId == ownerUserId)
             .OrderBy(x => x.Id)
             .ToListAsync(cancellationToken))
-            .Where(x => periodRange is null || periodRange.Value.Contains(x.Year, x.Month))
+            .Where(x => periodRange is null || periodRange.Value.Contains(x.MonthPlan.Year, x.MonthPlan.Month))
             .ToList();
         var incomeRegularDefinitionIds = incomes
             .Select(x => x.RegularIncomeDefinitionId)
@@ -238,6 +239,7 @@ internal sealed class BackupSnapshotBuilder(IDateTimeProvider dateTimeProvider)
             .Select(x => x!.Value)
             .ToHashSet();
         records.AddRange(incomes.Select(x => ToRecord("incomes", x.Id, x, References(
+            ("monthPlan", "monthPlans", x.MonthPlanId),
             ("account", "accounts", x.AccountId),
             ("regularIncomeDefinition", "regularIncomeDefinitions", x.RegularIncomeDefinitionId)))));
 

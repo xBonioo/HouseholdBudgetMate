@@ -10,8 +10,8 @@ public static class IncomeExtensionMapping
         return new IncomeDto
         {
             Id = income.Id,
-            Year = income.Year,
-            Month = income.Month,
+            Year = income.MonthPlan.Year,
+            Month = income.MonthPlan.Month,
             Name = income.Name,
             Amount = income.Amount,
             ExpectedDayOfMonth = income.ExpectedDayOfMonth,

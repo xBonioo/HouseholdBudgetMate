@@ -287,6 +287,12 @@ public sealed class LoanScheduleChangeWorkflowUiTests : BunitContext, IAsyncLife
         public Task<TagDto> UpdateTagAsync(UpdateTagRequest request, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
+        public Task<CategoryDeletionImpactDto> GetCategoryDeletionImpactAsync(int categoryId, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<TagDeletionImpactDto> GetTagDeletionImpactAsync(int tagId, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
         public Task DeleteCategoryAsync(DeleteCategoryRequest request, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 

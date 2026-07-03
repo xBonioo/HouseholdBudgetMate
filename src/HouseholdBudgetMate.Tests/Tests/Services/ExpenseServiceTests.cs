@@ -1624,7 +1624,7 @@ public sealed class ExpenseServiceTests
 
         var nextMonthIncomes = await verifyContext.Incomes
             .AsNoTracking()
-            .Where(x => x.Year == 2026 && x.Month == 2)
+            .Where(x => x.MonthPlanId == nextMonthPlan.Id)
             .ToListAsync();
         Assert.Empty(nextMonthIncomes);
     }
@@ -2049,8 +2049,7 @@ public sealed class ExpenseServiceTests
 
                 context.Incomes.Add(new Income
                 {
-                    Year = 2026,
-                    Month = month,
+                    MonthPlanId = monthPlan.Id,
                     Name = $"Wyplata {month}",
                     Amount = 2000m,
                     AccountId = accountId,
@@ -2507,8 +2506,7 @@ public sealed class ExpenseServiceTests
             context.Incomes.AddRange(
                 new Income
                 {
-                    Year = 2026,
-                    Month = 1,
+                    MonthPlanId = january.Id,
                     Name = "Wyplata 1",
                     Amount = 3000m,
                     AccountId = accountId,
@@ -2516,8 +2514,7 @@ public sealed class ExpenseServiceTests
                 },
                 new Income
                 {
-                    Year = 2026,
-                    Month = 2,
+                    MonthPlanId = february.Id,
                     Name = "Wyplata 2",
                     Amount = 3000m,
                     AccountId = accountId,
@@ -2965,8 +2962,7 @@ public sealed class ExpenseServiceTests
             context.Incomes.AddRange(
                 new Income
                 {
-                    Year = 2026,
-                    Month = 1,
+                    MonthPlanId = january.Id,
                     Name = "Wyplata 1",
                     Amount = 500m,
                     AccountId = accountId,
@@ -2974,8 +2970,7 @@ public sealed class ExpenseServiceTests
                 },
                 new Income
                 {
-                    Year = 2026,
-                    Month = 2,
+                    MonthPlanId = february.Id,
                     Name = "Wyplata 2",
                     Amount = 600m,
                     AccountId = accountId,
@@ -3292,8 +3287,7 @@ public sealed class ExpenseServiceTests
             context.Incomes.AddRange(
                 new Income
                 {
-                    Year = 2026,
-                    Month = 6,
+                    MonthPlanId = monthPlan.Id,
                     Name = "Wyplata przyszla",
                     Amount = 500m,
                     AccountId = accountId,
@@ -3301,8 +3295,7 @@ public sealed class ExpenseServiceTests
                 },
                 new Income
                 {
-                    Year = 2026,
-                    Month = 6,
+                    MonthPlanId = monthPlan.Id,
                     Name = "Wyplata juz doszla",
                     Amount = 700m,
                     AccountId = accountId,

@@ -810,7 +810,7 @@
         return $"Podsumowanie roczne (rok {_selectedYear}{rangeLabel})";
     }
 
-    private YearSummaryPeriod GetYearSummaryPeriod()
+    private YearSummaryPeriodDto GetYearSummaryPeriod()
     {
         var months = _statistics.MonthlyFinance
             .Select(x => x.Month)
@@ -820,7 +820,7 @@
 
         if (months.Count == 0)
         {
-            return new YearSummaryPeriod(1, 1, 0);
+            return new YearSummaryPeriodDto(1, 1, 0);
         }
 
         var today = DateTimeProvider.GetLocalDateOnly();
@@ -829,10 +829,10 @@
             ? Math.Max(startMonth, today.Month)
             : months[^1];
 
-        return new YearSummaryPeriod(startMonth, endMonth, endMonth - startMonth + 1);
+        return new YearSummaryPeriodDto(startMonth, endMonth, endMonth - startMonth + 1);
     }
 
-    private IReadOnlyList<YearSummaryRow> GetYearSummaryRows()
+    private IReadOnlyList<YearSummaryRowDto> GetYearSummaryRows()
     {
         var period = GetYearSummaryPeriod();
         var monthsCount = Math.Max(period.MonthsCount, 1);
@@ -845,9 +845,9 @@
 
         return
         [
-            new YearSummaryRow("Wpływy", totalIncome, totalIncome / monthsCount),
-            new YearSummaryRow("Wydatki", totalSpent, totalSpent / monthsCount),
-            new YearSummaryRow("Zaoszczędzone", totalSaved, totalSaved / monthsCount)
+            new YearSummaryRowDto("Wpływy", totalIncome, totalIncome / monthsCount),
+            new YearSummaryRowDto("Wydatki", totalSpent, totalSpent / monthsCount),
+            new YearSummaryRowDto("Zaoszczędzone", totalSaved, totalSaved / monthsCount)
         ];
     }
 
@@ -891,15 +891,15 @@
         }
     }
 
-    private IReadOnlyList<AnnualPlanComparisonRow> GetAnnualPlanComparisonRows()
+    private IReadOnlyList<AnnualPlanComparisonRowDto> GetAnnualPlanComparisonRows()
     {
         var actualIncome = _statistics.MonthlyFinance.Sum(x => x.IncomeAmount);
         var actualSavings = _statistics.MonthlyFinance.Sum(x => x.SavedAmount);
 
         return
         [
-            new AnnualPlanComparisonRow("Wpływy", _statistics.AnnualPlan.ExpectedIncomeAmount, actualIncome),
-            new AnnualPlanComparisonRow("Oszczędności", _statistics.AnnualPlan.ExpectedSavingsAmount, actualSavings)
+            new AnnualPlanComparisonRowDto("Wpływy", _statistics.AnnualPlan.ExpectedIncomeAmount, actualIncome),
+            new AnnualPlanComparisonRowDto("Oszczędności", _statistics.AnnualPlan.ExpectedSavingsAmount, actualSavings)
         ];
     }
 
@@ -1208,17 +1208,6 @@
         return Task.CompletedTask;
     }
 
-    private sealed record YearSummaryRow(string Label, decimal Total, decimal MonthlyAverage);
-
-    private sealed record AnnualPlanComparisonRow(string Label, decimal PlannedAmount, decimal ActualAmount)
-    {
-        public decimal Difference => ActualAmount - PlannedAmount;
-    }
-
-    private readonly record struct YearSummaryPeriod(
-        int StartMonth,
-        int EndMonth,
-        int MonthsCount);
 
     #region Charts — user-defined date range
 

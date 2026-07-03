@@ -1,0 +1,122 @@
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Responses
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                @Message
+            </MudAlert>
+
+            @if (IsCategoryDelete)
+            {
+                <MudSelect T="int?"
+                           Label="Nowa kategoria dla zakupów"
+                           @bind-Value="_replacementCategoryId"
+                           Variant="Variant.Outlined"
+                           Required="true">
+                    @foreach (var category in ReplacementCategories)
+                    {
+                        <MudSelectItem T="int?" Value="@category.Id">@category.Name</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudSelect T="int?"
+                           Label="Nowy tag (opcjonalnie)"
+                           @bind-Value="_replacementTagId"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           Disabled="@(!_replacementCategoryId.HasValue)">
+                    <MudSelectItem T="int?" Value="@((int?)null)">Bez tagu</MudSelectItem>
+                    @foreach (var tag in ReplacementTags)
+                    {
+                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <MudSelect T="int?"
+                           Label="Nowy tag"
+                           @bind-Value="_replacementTagId"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    <MudSelectItem T="int?" Value="@((int?)null)">Usuń tag z zakupów</MudSelectItem>
+                    @foreach (var tag in ReplacementTags)
+                    {
+                        <MudSelectItem T="int?" Value="@tag.Id">@tag.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Anuluj</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   Disabled="@(!CanConfirm)"
+                   OnClick="Confirm">
+            Usuń i przenieś
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public bool IsCategoryDelete { get; set; }
+    [Parameter] public string ItemName { get; set; } = string.Empty;
+    [Parameter] public int DeletedCategoryId { get; set; }
+    [Parameter] public int? DeletedTagId { get; set; }
+    [Parameter] public int ExpenseCount { get; set; }
+    [Parameter] public int ExpenseLineItemCount { get; set; }
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = [];
+
+    private int? _replacementCategoryId;
+    private int? _replacementTagId;
+
+    private IEnumerable<CategoryDto> ReplacementCategories =>
+        Categories.Where(x => !IsCategoryDelete || x.Id != DeletedCategoryId).OrderBy(x => x.Name);
+
+    private IEnumerable<TagDto> ReplacementTags
+    {
+        get
+        {
+            if (IsCategoryDelete)
+            {
+                return _replacementCategoryId.HasValue
+                    ? Categories.FirstOrDefault(x => x.Id == _replacementCategoryId.Value)?.Tags.OrderBy(x => x.Name)
+                      ?? Enumerable.Empty<TagDto>()
+                    : Enumerable.Empty<TagDto>();
+            }
+
+            return Categories
+                .FirstOrDefault(x => x.Id == DeletedCategoryId)?
+                .Tags
+                .Where(x => !DeletedTagId.HasValue || x.Id != DeletedTagId.Value)
+                .OrderBy(x => x.Name) ?? Enumerable.Empty<TagDto>();
+        }
+    }
+
+    private string Message
+    {
+        get
+        {
+            var target = IsCategoryDelete ? $"Kategoria '{ItemName}'" : $"Tag '{ItemName}'";
+            return $"{target} jest używany w zakupach: {ExpenseCount} zakupów i {ExpenseLineItemCount} pozycji. Wybierz, gdzie przenieść te przypisania przed usunięciem.";
+        }
+    }
+
+    private bool CanConfirm => IsCategoryDelete ? _replacementCategoryId.HasValue : true;
+
+    private void Confirm()
+    {
+        MudDialog.Close(DialogResult.Ok(new DeleteReassignResult(
+            _replacementCategoryId,
+            _replacementTagId,
+            ClearAssignments: !IsCategoryDelete && !_replacementTagId.HasValue)));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

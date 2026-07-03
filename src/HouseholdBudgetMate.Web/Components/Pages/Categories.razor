@@ -3,6 +3,7 @@
 @using System.Text.RegularExpressions
 @using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Categories.Requests
+@using HouseholdBudgetMate.Abstractions.Contracts.Categories.Responses
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Abstractions.Parsing
 @using HouseholdBudgetMate.Web.Components.Dialogs
@@ -690,14 +691,35 @@
             return;
         }
 
-        if (!await ConfirmAsync("Usuń kategorię", $"Usunąć kategorię '{category.Name}'?"))
-        {
-            return;
-        }
-
         try
         {
-            await CategoryService.DeleteCategoryAsync(new DeleteCategoryRequest { Id = category.Id }, CancellationToken.None);
+            var impact = await CategoryService.GetCategoryDeletionImpactAsync(category.Id, CancellationToken.None);
+            var request = new DeleteCategoryRequest { Id = category.Id };
+
+            if (impact.HasAssignments)
+            {
+                var reassignment = await OpenDeleteReassignDialogAsync(
+                    "Usuń kategorię",
+                    true,
+                    category.Name,
+                    category.Id,
+                    null,
+                    impact.ExpenseCount,
+                    impact.ExpenseLineItemCount);
+                if (reassignment is null)
+                {
+                    return;
+                }
+
+                request.ReplacementCategoryId = reassignment.ReplacementCategoryId;
+                request.ReplacementTagId = reassignment.ReplacementTagId;
+            }
+            else if (!await ConfirmAsync("Usuń kategorię", $"Usunąć kategorię '{category.Name}'?"))
+            {
+                return;
+            }
+
+            await CategoryService.DeleteCategoryAsync(request, CancellationToken.None);
             _expandedCategoryIds.Remove(category.Id);
             _tagCreateModels.Remove(category.Id);
             await LoadAsync();
@@ -708,7 +730,6 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
-
     private TagCreateRequest GetTagCreateModel(int categoryId)
     {
         if (_tagCreateModels.TryGetValue(categoryId, out var model))
@@ -868,22 +889,43 @@
             return;
         }
 
-        var tagName = _categories
+        var tag = _categories
             .SelectMany(x => x.Tags)
-            .FirstOrDefault(x => x.Id == tagId)
-            ?.Name;
+            .FirstOrDefault(x => x.Id == tagId);
+        var tagName = tag?.Name;
         var message = string.IsNullOrWhiteSpace(tagName)
             ? "Czy na pewno chcesz usunąć tag?"
             : $"Czy na pewno chcesz usunąć tag '{tagName}'?";
 
-        if (!await ConfirmAsync("Usuń tag", message))
-        {
-            return;
-        }
-
         try
         {
-            await CategoryService.DeleteTagAsync(new DeleteTagRequest { Id = tagId }, CancellationToken.None);
+            var impact = await CategoryService.GetTagDeletionImpactAsync(tagId, CancellationToken.None);
+            var request = new DeleteTagRequest { Id = tagId };
+
+            if (impact.HasAssignments)
+            {
+                var reassignment = await OpenDeleteReassignDialogAsync(
+                    "Usuń tag",
+                    false,
+                    tagName ?? "tag",
+                    tag?.CategoryId ?? impact.CategoryId,
+                    tagId,
+                    impact.ExpenseCount,
+                    impact.ExpenseLineItemCount);
+                if (reassignment is null)
+                {
+                    return;
+                }
+
+                request.ReplacementTagId = reassignment.ReplacementTagId;
+                request.ClearAssignments = reassignment.ClearAssignments;
+            }
+            else if (!await ConfirmAsync("Usuń tag", message))
+            {
+                return;
+            }
+
+            await CategoryService.DeleteTagAsync(request, CancellationToken.None);
             await LoadAsync();
             Snackbar.Add("Usunięto tag.", Severity.Success);
         }
@@ -892,7 +934,6 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
-
     private bool IsValidHexColor(string? color)
     {
         return !string.IsNullOrWhiteSpace(color) && HexColorRegex.IsMatch(color);
@@ -925,6 +966,32 @@
         return result is not null && !result.Canceled;
     }
 
+    private async Task<DeleteReassignResult?> OpenDeleteReassignDialogAsync(
+        string title,
+        bool isCategoryDelete,
+        string itemName,
+        int deletedCategoryId,
+        int? deletedTagId,
+        int expenseCount,
+        int expenseLineItemCount)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(CategoryDeleteReassignDialog.IsCategoryDelete)] = isCategoryDelete,
+            [nameof(CategoryDeleteReassignDialog.ItemName)] = itemName,
+            [nameof(CategoryDeleteReassignDialog.DeletedCategoryId)] = deletedCategoryId,
+            [nameof(CategoryDeleteReassignDialog.DeletedTagId)] = deletedTagId,
+            [nameof(CategoryDeleteReassignDialog.ExpenseCount)] = expenseCount,
+            [nameof(CategoryDeleteReassignDialog.ExpenseLineItemCount)] = expenseLineItemCount,
+            [nameof(CategoryDeleteReassignDialog.Categories)] = _categories
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CategoryDeleteReassignDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: DeleteReassignResult reassignment }
+            ? reassignment
+            : null;
+    }
     private static string FormatMoney(decimal amount)
     {
         return $"{amount.ToString("N2", Culture)} zł";

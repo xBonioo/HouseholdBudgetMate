@@ -49,7 +49,7 @@
         .OrderBy(x => x.DueDate)
         .ToList();
 
-    private readonly List<YearGroup> _yearGroups = [];
+    private readonly List<LoanScheduleYearGroupDto> _yearGroups = [];
     private IReadOnlyList<LoanScheduleComparisonRowDto>? _rowsSnapshot;
     private DateOnly? _affectedFromSnapshot;
 
@@ -70,7 +70,7 @@
                      .GroupBy(x => x.DueDate.Year))
         {
             var groupRows = yearGroup.ToList();
-            _yearGroups.Add(new YearGroup(
+            _yearGroups.Add(new LoanScheduleYearGroupDto(
                 yearGroup.Key,
                 groupRows,
                 groupRows.Sum(x => x.Before?.Amount ?? 0),
@@ -110,13 +110,4 @@
         return visibleRows[0].DueDate.Year;
     }
 
-    private sealed class YearGroup(int year, IReadOnlyList<LoanScheduleComparisonRowDto> rows, decimal beforeTotal, decimal afterTotal, bool isExpanded)
-    {
-        public int Year { get; } = year;
-        public IReadOnlyList<LoanScheduleComparisonRowDto> Rows { get; } = rows;
-        public decimal BeforeTotal { get; } = beforeTotal;
-        public decimal AfterTotal { get; } = afterTotal;
-        public int RowCount => Rows.Count;
-        public bool IsExpanded { get; set; } = isExpanded;
-    }
 }

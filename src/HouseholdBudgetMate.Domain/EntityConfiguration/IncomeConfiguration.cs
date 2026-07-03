@@ -12,10 +12,7 @@ public sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
         builder.Property(x => x.Id)
             .ValueGeneratedOnAdd();
 
-        builder.Property(x => x.Year)
-            .IsRequired();
-
-        builder.Property(x => x.Month)
+        builder.Property(x => x.MonthPlanId)
             .IsRequired();
 
         builder.Property(x => x.Name)
@@ -42,6 +39,11 @@ public sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
 
+        builder.HasOne(x => x.MonthPlan)
+            .WithMany(x => x.Incomes)
+            .HasForeignKey(x => x.MonthPlanId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne(x => x.Account)
             .WithMany()
             .HasForeignKey(x => x.AccountId)
@@ -52,8 +54,8 @@ public sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .HasForeignKey(x => x.RegularIncomeDefinitionId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        builder.HasIndex(x => new { x.Year, x.Month });
-        builder.HasIndex(x => new { x.Year, x.Month, x.RegularIncomeDefinitionId })
+        builder.HasIndex(x => x.MonthPlanId);
+        builder.HasIndex(x => new { x.MonthPlanId, x.RegularIncomeDefinitionId })
             .IsUnique();
         builder.HasIndex(x => x.AccountId);
         builder.HasIndex(x => x.RegularIncomeDefinitionId);

@@ -270,7 +270,21 @@ internal sealed class BackupRestoreExecutor
         foreach (var record in incomes)
         {
             var income = new Income();
-            ApplyFields(income, record, state, [("AccountId", "account"), ("RegularIncomeDefinitionId", "regularIncomeDefinition")], skipId: true);
+            ApplyFields(
+                income,
+                record,
+                state,
+                [
+                    ("MonthPlanId", "monthPlan"),
+                    ("AccountId", "account"),
+                    ("RegularIncomeDefinitionId", "regularIncomeDefinition")
+                ],
+                skipId: true);
+            if (income.MonthPlanId == 0)
+            {
+                income.MonthPlanId = await ResolveLegacyIncomeMonthPlanIdAsync(dbContext, record, cancellationToken);
+            }
+
             dbContext.Incomes.Add(income);
             await dbContext.SaveChangesAsync(cancellationToken);
             state.Map(record.PortableId, income.Id);
@@ -359,6 +373,43 @@ internal sealed class BackupRestoreExecutor
             state.MarkHandled(record.PortableId);
         }
         restoredCounts["monthSavingsTransferItems"] = transfers.Count;
+    }
+
+    private static async Task<int> ResolveLegacyIncomeMonthPlanIdAsync(
+        ApplicationDbContext dbContext,
+        BackupRecordDto record,
+        CancellationToken cancellationToken)
+    {
+        if (!record.Fields.TryGetValue(nameof(MonthPlan.Year), out var yearText)
+            || !record.Fields.TryGetValue(nameof(MonthPlan.Month), out var monthText)
+            || yearText is null
+            || monthText is null)
+        {
+            throw new BadRequestException($"Income backup record {record.PortableId} is missing month plan reference.");
+        }
+
+        var year = int.Parse(yearText, CultureInfo.InvariantCulture);
+        var month = int.Parse(monthText, CultureInfo.InvariantCulture);
+
+        var monthPlan = await dbContext.MonthPlans
+            .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
+
+        if (monthPlan is not null)
+        {
+            return monthPlan.Id;
+        }
+
+        monthPlan = new MonthPlan
+        {
+            Year = year,
+            Month = month,
+            IsClosed = false
+        };
+
+        dbContext.MonthPlans.Add(monthPlan);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return monthPlan.Id;
     }
 
     private static async Task RecalculateRestoredExpenseActualAmountsAsync(

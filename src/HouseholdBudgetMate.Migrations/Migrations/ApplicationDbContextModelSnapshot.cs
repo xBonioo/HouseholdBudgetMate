@@ -410,7 +410,7 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                     b.Property<bool>("IsRegular")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("Month")
+                    b.Property<int>("MonthPlanId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
@@ -429,20 +429,17 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
+
+                    b.HasIndex("MonthPlanId");
 
                     b.HasIndex("RegularIncomeDefinitionId");
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("Year", "Month");
-
-                    b.HasIndex("Year", "Month", "RegularIncomeDefinitionId")
+                    b.HasIndex("MonthPlanId", "RegularIncomeDefinitionId")
                         .IsUnique();
 
                     b.ToTable("Incomes");
@@ -625,6 +622,96 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("LoanInstallments");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.LoanOperationAudit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BudgetOwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LoanId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OperationPayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("RevertedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("RevertedByOperationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RevertedByUserId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("RevertsOperationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScheduleVersionAfter")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ScheduleVersionBefore")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BudgetOwnerUserId");
+
+                    b.HasIndex("LoanId");
+
+                    b.HasIndex("OccurredAtUtc");
+
+                    b.HasIndex("OperationType");
+
+                    b.HasIndex("RevertedByOperationId");
+
+                    b.HasIndex("RevertedByUserId");
+
+                    b.HasIndex("RevertsOperationId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("LoanOperationAudits");
                 });
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.LoanPrepayment", b =>
@@ -1115,6 +1202,12 @@ namespace HouseholdBudgetMate.Migrations.Migrations
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.Income", b =>
                 {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.MonthPlan", "MonthPlan")
+                        .WithMany("Incomes")
+                        .HasForeignKey("MonthPlanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("HouseholdBudgetMate.Domain.Entities.Account", "Account")
                         .WithMany()
                         .HasForeignKey("AccountId")
@@ -1133,6 +1226,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+
+                    b.Navigation("MonthPlan");
 
                     b.Navigation("RegularIncomeDefinition");
                 });
@@ -1173,6 +1268,54 @@ namespace HouseholdBudgetMate.Migrations.Migrations
                         .IsRequired();
 
                     b.Navigation("Loan");
+                });
+
+            modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.LoanOperationAudit", b =>
+                {
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", "BudgetOwnerUser")
+                        .WithMany()
+                        .HasForeignKey("BudgetOwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.Loan", "Loan")
+                        .WithMany()
+                        .HasForeignKey("LoanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.LoanOperationAudit", "RevertedByOperation")
+                        .WithMany()
+                        .HasForeignKey("RevertedByOperationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", "RevertedByUser")
+                        .WithMany()
+                        .HasForeignKey("RevertedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.LoanOperationAudit", "RevertsOperation")
+                        .WithMany()
+                        .HasForeignKey("RevertsOperationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("HouseholdBudgetMate.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BudgetOwnerUser");
+
+                    b.Navigation("Loan");
+
+                    b.Navigation("RevertedByOperation");
+
+                    b.Navigation("RevertedByUser");
+
+                    b.Navigation("RevertsOperation");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.LoanPrepayment", b =>
@@ -1327,6 +1470,8 @@ namespace HouseholdBudgetMate.Migrations.Migrations
             modelBuilder.Entity("HouseholdBudgetMate.Domain.Entities.MonthPlan", b =>
                 {
                     b.Navigation("Expenses");
+
+                    b.Navigation("Incomes");
 
                     b.Navigation("SavingsTransfers");
                 });

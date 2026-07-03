@@ -1,6 +1,7 @@
 ﻿@using HouseholdBudgetMate.Web.Components.Themes
 @using HouseholdBudgetMate.Application.Kernel.Timing
 @using System.Globalization
+@using HouseholdBudgetMate.Abstractions.Contracts.Common.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
 @using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto
 @using HouseholdBudgetMate.Web.Services
@@ -225,7 +226,7 @@ else
 
 @code {
     private readonly CultureInfo _culture = new("pl-PL");
-    private List<YearMonthGroup> _monthGroups = [];
+    private List<ArchiveYearMonthGroupDto> _monthGroups = [];
     private bool _drawerOpen;
     private bool _sessionReady;
     private bool _sessionInitializationStarted;
@@ -245,19 +246,6 @@ else
         _drawerOpen = false;
     }
     
-    private sealed class YearMonthGroup
-    {
-        public int Year { get; init; }
-        public IReadOnlyList<MonthLink> Months { get; init; } = [];
-    }
-
-    private sealed class MonthLink
-    {
-        public int Year { get; init; }
-        public int Month { get; init; }
-        public string Label { get; init; } = string.Empty;
-    }
-
     /// <summary>Computed once per render — safe to call before OnInitializedAsync.</summary>
     private string CurrentMonthHref
     {
@@ -449,17 +437,17 @@ else
         }
     }
 
-    private List<YearMonthGroup> BuildMonthGroups(IReadOnlyList<AvailableMonthDto> months)
+    private List<ArchiveYearMonthGroupDto> BuildMonthGroups(IReadOnlyList<AvailableMonthDto> months)
     {
         var groups = months
             .GroupBy(x => x.Year)
             .OrderByDescending(x => x.Key)
-            .Select(yearGroup => new YearMonthGroup
+            .Select(yearGroup => new ArchiveYearMonthGroupDto
             {
                 Year = yearGroup.Key,
                 Months = yearGroup
                     .OrderByDescending(x => x.Month)
-                    .Select(x => new MonthLink
+                    .Select(x => new ArchiveMonthLinkDto
                     {
                         Year = x.Year,
                         Month = x.Month,
@@ -477,10 +465,10 @@ else
         var now = DateTimeProvider.GetLocalDateTime();
         _monthGroups =
         [
-            new YearMonthGroup
+            new ArchiveYearMonthGroupDto
             {
                 Year = now.Year,
-                Months = [new MonthLink { Year = now.Year, Month = now.Month, Label = now.ToString("MMMM", _culture) }]
+                Months = [new ArchiveMonthLinkDto { Year = now.Year, Month = now.Month, Label = now.ToString("MMMM", _culture) }]
             }
         ];
     }

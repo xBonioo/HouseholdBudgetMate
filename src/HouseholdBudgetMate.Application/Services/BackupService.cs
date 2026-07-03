@@ -395,11 +395,11 @@ public sealed class BackupService(
 
         query = query
             .AsNoTracking()
-            .Where(x => x.Year == request.Year);
+            .Where(x => x.MonthPlan.Year == request.Year);
 
         if (request.Month.HasValue)
         {
-            query = query.Where(x => x.Month == request.Month.Value);
+            query = query.Where(x => x.MonthPlan.Month == request.Month.Value);
         }
 
         if (request.AccountId.HasValue)
@@ -408,10 +408,11 @@ public sealed class BackupService(
         }
 
         var incomes = await query
+            .Include(x => x.MonthPlan)
             .Include(x => x.Account)
             .Include(x => x.RegularIncomeDefinition)
-            .OrderBy(x => x.Year)
-            .ThenBy(x => x.Month)
+            .OrderBy(x => x.MonthPlan.Year)
+            .ThenBy(x => x.MonthPlan.Month)
             .ThenBy(x => x.ExpectedDayOfMonth)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -420,8 +421,8 @@ public sealed class BackupService(
         {
             builder.AddRow(
                 "Income",
-                income.Year,
-                income.Month,
+                income.MonthPlan.Year,
+                income.MonthPlan.Month,
                 income.Name,
                 null,
                 null,

@@ -13,13 +13,30 @@ public sealed class CategoryAccessUiTests
         markup.Should().Contain("private bool IsAdminSession => UserSessionService.CurrentUser?.IsAdmin == true;");
         markup.Should().Contain("Enabled=\"@(!_isLoading && IsAdminSession)\"");
         markup.Should().Contain("@if (IsAdminSession)");
-        markup.Should().Contain("Kategorie i tagi może zmieniać tylko administrator.");
         markup.Should().Contain("private bool EnsureAdminCanManageCategories()");
         markup.Should().Contain("_editCategory.Id == category.Id && IsAdminSession");
         markup.Should().Contain("_editTag.Id == rootTag.Id && IsAdminSession");
         markup.Should().Contain("_editTag.Id == childTag.Id && IsAdminSession");
         markup.Should().Contain("Usuń tag");
         markup.Should().Contain("Czy na pewno chcesz usunąć tag");
+    }
+
+    [Fact]
+    public void CategoriesPage_Should_Show_Reassignment_Dialog_When_Deleting_Used_Category_Or_Tag()
+    {
+        var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Categories.razor");
+        var dialog = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Dialogs/CategoryDeleteReassignDialog.razor");
+        var result = ReadRepoFile("src/HouseholdBudgetMate.Abstractions/Contracts/Categories/Responses/DeleteReassignResult.cs");
+
+        markup.Should().Contain("GetCategoryDeletionImpactAsync");
+        markup.Should().Contain("GetTagDeletionImpactAsync");
+        markup.Should().Contain("OpenDeleteReassignDialogAsync");
+        markup.Should().Contain("CategoryDeleteReassignDialog");
+        markup.Should().Contain("ReplacementCategoryId");
+        markup.Should().Contain("ClearAssignments");
+        dialog.Should().Contain("DeleteReassignResult");
+        result.Should().Contain("ReplacementCategoryId");
+        result.Should().Contain("ClearAssignments");
     }
 
     private static string ReadRepoFile(string relativePath)

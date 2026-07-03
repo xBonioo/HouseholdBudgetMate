@@ -330,7 +330,10 @@ public sealed class BackupServiceTests
         var historicalExpensePlan = await verify.MonthPlans
             .AsNoTracking()
             .SingleAsync(x => x.Id == historicalExpense.MonthPlanId);
-        var historicalIncome = await verify.Incomes.AsNoTracking().SingleAsync(x => x.Name == "Historical salary");
+        var historicalIncome = await verify.Incomes
+            .AsNoTracking()
+            .Include(x => x.MonthPlan)
+            .SingleAsync(x => x.Name == "Historical salary");
 
         Assert.True(restoreResult.IsSuccess);
         Assert.NotNull(restoreResult.PreRestoreBackupPath);
@@ -341,8 +344,8 @@ public sealed class BackupServiceTests
         Assert.Equal(5000m, restoredIncome.Amount);
         Assert.Equal(2024, historicalExpensePlan.Year);
         Assert.Equal(7, historicalExpensePlan.Month);
-        Assert.Equal(2024, historicalIncome.Year);
-        Assert.Equal(7, historicalIncome.Month);
+        Assert.Equal(2024, historicalIncome.MonthPlan.Year);
+        Assert.Equal(7, historicalIncome.MonthPlan.Month);
         Assert.True(restoredLoan.IsActive);
         Assert.Contains(restoreResult.RestoredCounts, x => x.Key == "expenses" && x.Value > 0);
         Assert.Contains(restoreResult.RestoredCounts, x => x.Key == "users" && x.Value > 0);
@@ -663,8 +666,7 @@ public sealed class BackupServiceTests
         context.Expenses.Add(expense);
         context.Incomes.Add(new Income
         {
-            Year = 2026,
-            Month = 4,
+            MonthPlan = monthPlan,
             Name = "Salary, bonus",
             Amount = 5000m,
             ExpectedDayOfMonth = new DateOnly(2026, 4, 5),
@@ -837,8 +839,7 @@ public sealed class BackupServiceTests
         context.Expenses.Add(expense);
         context.Incomes.Add(new Income
         {
-            Year = 2026,
-            Month = 4,
+            MonthPlan = monthPlan,
             Name = "Salary, bonus",
             Amount = 5000m,
             ExpectedDayOfMonth = new DateOnly(2026, 4, 5),
@@ -888,8 +889,7 @@ public sealed class BackupServiceTests
         });
         context.Incomes.Add(new Income
         {
-            Year = 2024,
-            Month = 7,
+            MonthPlan = historicalPlan,
             Name = "Historical salary",
             Amount = 4500m,
             ExpectedDayOfMonth = new DateOnly(2024, 7, 5),
@@ -992,6 +992,7 @@ public sealed class BackupServiceTests
         var fuelCategory = new Category { Name = "Car", Color = "#993333" };
         var otherAccount = new Account { Name = "Savings", Type = (int)AccountType.Savings };
         var mayPlan = new MonthPlan { Year = 2026, Month = 5 };
+        var aprilPlan = new MonthPlan { Year = 2026, Month = 4 };
         context.Categories.Add(fuelCategory);
         context.Accounts.Add(otherAccount);
         context.MonthPlans.Add(mayPlan);
@@ -1006,7 +1007,7 @@ public sealed class BackupServiceTests
             },
             new Expense
             {
-                MonthPlan = new MonthPlan { Year = 2026, Month = 4 },
+                MonthPlan = aprilPlan,
                 Name = "Fuel",
                 Category = fuelCategory,
                 PlannedAmount = 300m,
@@ -1014,8 +1015,7 @@ public sealed class BackupServiceTests
             });
         context.Incomes.Add(new Income
         {
-            Year = 2026,
-            Month = 4,
+            MonthPlan = aprilPlan,
             Name = "Side gig",
             Amount = 700m,
             ExpectedDayOfMonth = new DateOnly(2026, 4, 20),
@@ -1047,8 +1047,7 @@ public sealed class BackupServiceTests
         });
         context.Incomes.Add(new Income
         {
-            Year = 2026,
-            Month = 4,
+            MonthPlanId = plan.Id,
             Name = "Deleted income",
             Amount = 100m,
             ExpectedDayOfMonth = new DateOnly(2026, 4, 8),
@@ -1082,8 +1081,7 @@ public sealed class BackupServiceTests
         });
         context.Incomes.Add(new Income
         {
-            Year = 2026,
-            Month = 4,
+            MonthPlan = plan,
             Name = "Other budget income",
             Amount = 10m,
             ExpectedDayOfMonth = new DateOnly(2026, 4, 1),

@@ -458,15 +458,14 @@ public sealed class ExpenseService(
         {
             < 0 => await dbContext.Incomes
                 .AsNoTracking()
-                .CountAsync(x => x.Year == year && x.Month == month && x.Amount > 0, cancellationToken),
+                .CountAsync(x => x.MonthPlanId == monthPlan.Id && x.Amount > 0, cancellationToken),
 
             > 0 => 0,
 
             _ => await dbContext.Incomes
                 .AsNoTracking()
                 .CountAsync(
-                    x => x.Year == year
-                         && x.Month == month
+                    x => x.MonthPlanId == monthPlan.Id
                          && x.Amount > 0
                          && x.ExpectedDayOfMonth <= today,
                     cancellationToken)
@@ -505,8 +504,10 @@ public sealed class ExpenseService(
 
         var incomesByMonth = await dbContext.Incomes
             .AsNoTracking()
-            .Where(x => x.Year == year && x.Month >= firstMonthInYear && x.Month <= month)
-            .GroupBy(x => x.Month)
+            .Where(x => x.MonthPlan.Year == year
+                        && x.MonthPlan.Month >= firstMonthInYear
+                        && x.MonthPlan.Month <= month)
+            .GroupBy(x => x.MonthPlan.Month)
             .Select(g => new
             {
                 Month = g.Key,
@@ -864,8 +865,8 @@ public sealed class ExpenseService(
 
         var incomesByMonth = await dbContext.Incomes
             .AsNoTracking()
-            .Where(x => x.Year == year)
-            .GroupBy(x => x.Month)
+            .Where(x => x.MonthPlan.Year == year)
+            .GroupBy(x => x.MonthPlan.Month)
             .Select(group => new
             {
                 Month = group.Key,

@@ -1,5 +1,6 @@
-﻿using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
+using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
+using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Web.Services;
 using MudBlazor;
 
@@ -7,6 +8,12 @@ namespace HouseholdBudgetMate.Web.Components.Pages.PlanPage;
 
 public partial class PlanPage
 {
+    private enum ExpensePaymentFilter
+    {
+        All,
+        RemainingToPay,
+        PaidOff
+    }
     private void ApplyKpiFromMonthPlan()
     {
         _kpi = _monthPlan?.Kpi ?? new MonthPlanKpiDto();
@@ -541,7 +548,7 @@ public partial class PlanPage
                     PlannedAmount = planned,
                     LimitAmount = limit,
                     ProgressPercent = Math.Clamp(ratio, 0, 100),
-                    Color = GetEnvelopeColor(ratio)
+                    ColorStatus = GetEnvelopeColorStatus(ratio)
                 };
             })
             .ToList();
@@ -576,19 +583,30 @@ public partial class PlanPage
             $"Uwaga: po dodaniu wydatku kategoria '{selectedCategory.Name}' przekroczy limit koperty ({predictedSpent.ToString("0.00", Culture)} / {limit.ToString("0.00", Culture)}zł).";
     }
 
-    private static Color GetEnvelopeColor(double usagePercent)
+    private static string GetEnvelopeColorStatus(double usagePercent)
     {
         if (usagePercent > 100)
         {
-            return Color.Error;
+            return "Error";
         }
 
         if (usagePercent >= 75)
         {
-            return Color.Warning;
+            return "Warning";
         }
 
-        return Color.Success;
+        return "Success";
+    }
+
+
+    private static Color GetEnvelopeMudColor(string colorStatus)
+    {
+        return colorStatus switch
+        {
+            "Error" => Color.Error,
+            "Warning" => Color.Warning,
+            _ => Color.Success
+        };
     }
 
     private void ResetCreateExpenseForm()

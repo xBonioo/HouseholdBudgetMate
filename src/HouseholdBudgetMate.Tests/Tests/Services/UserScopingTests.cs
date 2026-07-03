@@ -433,7 +433,9 @@ public sealed class UserScopingTests
         await using (var ctxA = new ApplicationDbContext(options, CreateCurrentUserContext("user-a")))
         {
             var acc = new Account { Name = "A Bank", Type = (int)AccountType.Bank, Order = 1 };
+            var plan = new MonthPlan { Year = 2026, Month = 5 };
             ctxA.Accounts.Add(acc);
+            ctxA.MonthPlans.Add(plan);
             await ctxA.SaveChangesAsync();
             accountIdA = acc.Id;
 
@@ -441,8 +443,7 @@ public sealed class UserScopingTests
             {
                 Name = "Salary A",
                 Amount = 5000m,
-                Year = 2026,
-                Month = 5,
+                MonthPlanId = plan.Id,
                 ExpectedDayOfMonth = new DateOnly(2026, 5, 10),
                 AccountId = accountIdA
             });
@@ -455,7 +456,9 @@ public sealed class UserScopingTests
             incomes.Should().BeEmpty();
 
             var acc = new Account { Name = "B Bank", Type = (int)AccountType.Bank, Order = 1 };
+            var plan = new MonthPlan { Year = 2026, Month = 5 };
             ctxB.Accounts.Add(acc);
+            ctxB.MonthPlans.Add(plan);
             await ctxB.SaveChangesAsync();
             accountIdB = acc.Id;
 
@@ -463,8 +466,7 @@ public sealed class UserScopingTests
             {
                 Name = "Salary B",
                 Amount = 4000m,
-                Year = 2026,
-                Month = 5,
+                MonthPlanId = plan.Id,
                 ExpectedDayOfMonth = new DateOnly(2026, 5, 15),
                 AccountId = accountIdB
             });

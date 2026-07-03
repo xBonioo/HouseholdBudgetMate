@@ -298,8 +298,10 @@ public sealed class MonthlyBudgetingLoopTests
 
         var category = new Category { Name = "Dom", Color = "#43A047" };
         var account = new Account { Name = "Rachunek", Type = (int)AccountType.Bank };
+        var monthPlan = new MonthPlan { Year = Year, Month = Month };
         context.Categories.Add(category);
         context.Accounts.Add(account);
+        context.MonthPlans.Add(monthPlan);
         await context.SaveChangesAsync();
 
         context.AccountMonthBalances.Add(new AccountMonthBalance
@@ -312,8 +314,7 @@ public sealed class MonthlyBudgetingLoopTests
 
         context.Incomes.Add(new Income
         {
-            Year = Year,
-            Month = Month,
+            MonthPlanId = monthPlan.Id,
             Name = "Wynagrodzenie",
             Amount = 5000m,
             ExpectedDayOfMonth = new DateOnly(2026, 4, 5),

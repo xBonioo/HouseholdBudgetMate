@@ -1,9 +1,12 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using HouseholdBudgetMate.Abstractions.Contracts.Audit.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Audit.Requests;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
+using HouseholdBudgetMate.Domain;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
@@ -16,6 +19,7 @@ public sealed class AuditService(
     CurrentUserContext currentUserContext) : IAuditService
 {
     private static readonly CultureInfo PolishCulture = new("pl-PL");
+    private static readonly JsonSerializerOptions LoanOperationJsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyList<AuditLogDto>> SearchAsync(
         SearchAuditLogsRequest request,
@@ -70,6 +74,252 @@ public sealed class AuditService(
         var dtos = logs.Select(MapToDto).ToList();
         await EnrichEntityContextsAsync(dbContext, dtos, cancellationToken);
         return dtos;
+    }
+
+    public async Task<IReadOnlyList<LoanOperationAuditDto>> SearchLoanOperationsAsync(
+        SearchAuditLogsRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(currentUserContext.UserId)
+            || string.IsNullOrWhiteSpace(currentUserContext.BudgetOwnerUserId))
+        {
+            throw new ForbiddenException("Authenticated budget access is required.");
+        }
+
+        var budgetOwnerUserId = currentUserContext.BudgetOwnerUserId;
+        var query = dbContext.LoanOperationAudits
+            .AsNoTracking()
+            .Include(x => x.Loan)
+            .ThenInclude(x => x.RateEntries)
+            .Include(x => x.Loan)
+            .ThenInclude(x => x.Charges)
+            .Include(x => x.Loan)
+            .ThenInclude(x => x.Installments)
+            .Include(x => x.User)
+            .Include(x => x.RevertedByUser)
+            .Where(x => x.BudgetOwnerUserId == budgetOwnerUserId);
+
+        if (!string.IsNullOrWhiteSpace(request.Operation))
+        {
+            query = query.Where(x => x.OperationType == request.Operation);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.UserId))
+        {
+            query = query.Where(x => x.UserId == request.UserId);
+        }
+
+        if (request.FromUtc is not null)
+        {
+            query = query.Where(x => x.OccurredAtUtc >= request.FromUtc);
+        }
+
+        if (request.ToUtc is not null)
+        {
+            query = query.Where(x => x.OccurredAtUtc <= request.ToUtc);
+        }
+
+        var operations = await query
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .ThenByDescending(x => x.Id)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        return operations.Select(MapLoanOperationToDto).ToList();
+    }
+
+    private static LoanOperationAuditDto MapLoanOperationToDto(LoanOperationAudit operation)
+    {
+        var (canRevert, blockedReason) = GetRevertability(operation);
+
+        return new LoanOperationAuditDto
+        {
+            Id = operation.Id,
+            LoanId = operation.LoanId,
+            LoanName = operation.Loan.Name,
+            UserId = operation.UserId,
+            UserName = operation.User?.Username ?? operation.UserId,
+            BudgetOwnerUserId = operation.BudgetOwnerUserId,
+            OperationType = operation.OperationType,
+            Status = operation.Status,
+            OperationContext = BuildLoanOperationContext(operation),
+            OccurredAtUtc = operation.OccurredAtUtc,
+            ScheduleVersionBefore = operation.ScheduleVersionBefore,
+            ScheduleVersionAfter = operation.ScheduleVersionAfter,
+            OperationPayloadJson = operation.OperationPayloadJson,
+            RevertedAtUtc = operation.RevertedAtUtc,
+            RevertedByUserId = operation.RevertedByUserId,
+            RevertedByUserName = operation.RevertedByUser?.Username ?? operation.RevertedByUserId,
+            RevertsOperationId = operation.RevertsOperationId,
+            RevertedByOperationId = operation.RevertedByOperationId,
+            CanRevert = canRevert,
+            RevertBlockedReason = blockedReason
+        };
+    }
+
+    private static (bool CanRevert, string? BlockedReason) GetRevertability(LoanOperationAudit operation)
+    {
+        if (operation.OperationType is not LoanOperationAuditTypes.LoanPrepayment
+            and not LoanOperationAuditTypes.LoanRateEntry)
+        {
+            return (false, "Ta operacja nie obsługuje cofania.");
+        }
+
+        if (operation.Status == LoanOperationAuditStatuses.Reverted)
+        {
+            return (false, "Operacja została już cofnięta.");
+        }
+
+        if (operation.Status != LoanOperationAuditStatuses.Active)
+        {
+            return (false, "Operacja nie jest aktywna.");
+        }
+
+        var includePrepaymentExpenseIdentity = operation.OperationType == LoanOperationAuditTypes.LoanPrepayment;
+        var currentVersion = ComputeLoanScheduleVersion(operation.Loan, includePrepaymentExpenseIdentity);
+        if (!string.Equals(currentVersion, operation.ScheduleVersionAfter, StringComparison.Ordinal))
+        {
+            return (false, "Harmonogram kredytu zmienił się później.");
+        }
+
+        return (true, null);
+    }
+
+    private static string BuildLoanOperationContext(LoanOperationAudit operation)
+    {
+        return operation.OperationType switch
+        {
+            LoanOperationAuditTypes.LoanPrepayment => BuildPrepaymentContext(operation),
+            LoanOperationAuditTypes.LoanRateEntry => BuildRateEntryContext(operation),
+            LoanOperationAuditTypes.LoanOperationRevert => $"Cofnięcie operacji #{operation.RevertsOperationId}",
+            _ => operation.OperationType
+        };
+    }
+
+    private static string BuildPrepaymentContext(LoanOperationAudit operation)
+    {
+        var payload = ParseLoanOperationPayload<LoanPrepaymentOperationPayload>(operation.OperationPayloadJson);
+        if (payload is null)
+        {
+            return "Nadpłata kredytu";
+        }
+
+        return JoinContext(
+            "Nadpłata kredytu",
+            $"kwota: {payload.Amount.ToString("N2", PolishCulture)}",
+            $"data: {payload.PrepaymentDate:yyyy-MM-dd}",
+            string.IsNullOrWhiteSpace(payload.Strategy) ? null : $"strategia: {payload.Strategy}");
+    }
+
+    private static string BuildRateEntryContext(LoanOperationAudit operation)
+    {
+        var payload = ParseLoanOperationPayload<LoanRateEntryOperationPayload>(operation.OperationPayloadJson);
+        if (payload is null)
+        {
+            return "Aktualizacja WIBOR";
+        }
+
+        return JoinContext(
+            "Aktualizacja WIBOR",
+            $"od: {payload.EffectiveFrom:yyyy-MM-dd}",
+            $"stopa: {payload.ReferenceRate.ToString("N2", PolishCulture)}%");
+    }
+
+    private static TPayload? ParseLoanOperationPayload<TPayload>(string payloadJson)
+        where TPayload : class
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<TPayload>(payloadJson, LoanOperationJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string ComputeLoanScheduleVersion(Loan loan, bool includePrepaymentExpenseIdentity = false)
+    {
+        var builder = new StringBuilder();
+        AppendLoanSnapshot(builder, loan);
+        if (includePrepaymentExpenseIdentity)
+        {
+            builder.Append("P|")
+                .Append(loan.Name).Append('|')
+                .Append(loan.TagId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)
+                .AppendLine();
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        return Convert.ToHexString(hash);
+    }
+
+    private static void AppendLoanSnapshot(StringBuilder builder, Loan loan)
+    {
+        builder.Append(loan.LoanType).Append('|')
+            .Append(loan.InterestMode).Append('|')
+            .Append(loan.WiborPeriodType?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.Principal.ToString(CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.OriginalPrincipal?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.GracePeriodMonths?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.InterestRate.ToString(CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.MarginRate?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+            .Append(loan.RepaymentDayOfMonth).Append('|')
+            .Append(loan.StartDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+            .Append(loan.EndDate.ToString("O", CultureInfo.InvariantCulture)).AppendLine();
+
+        foreach (var rateEntry in loan.RateEntries.OrderBy(x => x.EffectiveFrom).ThenBy(x => x.Id))
+        {
+            builder.Append("R|")
+                .Append(rateEntry.EffectiveFrom.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+                .Append(rateEntry.ReferenceRate.ToString(CultureInfo.InvariantCulture)).AppendLine();
+        }
+
+        foreach (var charge in loan.Charges
+                     .OrderBy(x => x.ChargeType)
+                     .ThenBy(x => x.FrequencyType)
+                     .ThenBy(x => x.StartDate)
+                     .ThenBy(x => x.EndDate)
+                     .ThenBy(x => x.Amount)
+                     .ThenBy(x => x.IsPercentageBased)
+                     .ThenBy(x => x.IsActive)
+                     .ThenBy(x => x.Id))
+        {
+            builder.Append("C|")
+                .Append(charge.ChargeType).Append('|')
+                .Append(charge.FrequencyType).Append('|')
+                .Append(charge.Amount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(charge.IsPercentageBased).Append('|')
+                .Append(charge.StartDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+                .Append(charge.EndDate?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty).Append('|')
+                .Append(charge.IsActive).AppendLine();
+        }
+
+        foreach (var installment in loan.Installments.OrderBy(x => x.DueDate).ThenBy(x => x.Id))
+        {
+            builder.Append("I|")
+                .Append(installment.DueDate.ToString("O", CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.Amount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.PrincipalAmount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.InterestAmount.ToString(CultureInfo.InvariantCulture)).Append('|')
+                .Append(installment.IsPaid).Append('|')
+                .Append(installment.PaidAtUtc?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty).AppendLine();
+        }
+    }
+
+    private sealed record LoanPrepaymentOperationPayload
+    {
+        public decimal Amount { get; init; }
+        public string Strategy { get; init; } = string.Empty;
+        public DateOnly PrepaymentDate { get; init; }
+    }
+
+    private sealed record LoanRateEntryOperationPayload
+    {
+        public DateOnly EffectiveFrom { get; init; }
+        public decimal ReferenceRate { get; init; }
     }
 
     private static AuditLogDto MapToDto(AuditLog log)
@@ -202,6 +452,7 @@ public sealed class AuditService(
         var incomes = await dbContext.Incomes
             .IgnoreQueryFilters()
             .AsNoTracking()
+            .Include(x => x.MonthPlan)
             .Include(x => x.Account)
             .Where(x => ids.Contains(x.Id))
             .ToListAsync(cancellationToken);
@@ -212,7 +463,7 @@ public sealed class AuditService(
                 JoinContext(
                     $"Wpływ: {income.Name}",
                     $"konto: {income.Account.Name}",
-                    $"miesiąc: {income.Year}-{income.Month:D2}");
+                    $"miesiąc: {income.MonthPlan.Year}-{income.MonthPlan.Month:D2}");
         }
     }
 

@@ -90,6 +90,41 @@ public sealed class CategoryService(
         return category.MapToDto();
     }
 
+    public async Task<CategoryDeletionImpactDto> GetCategoryDeletionImpactAsync(
+        int categoryId,
+        CancellationToken cancellationToken)
+    {
+        if (categoryId <= 0)
+        {
+            throw new BadRequestException("Category id is required.");
+        }
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
+
+        var category = await dbContext.Categories
+                           .AsNoTracking()
+                           .FirstOrDefaultAsync(x => x.Id == categoryId, cancellationToken)
+                       ?? throw new NotFoundException("Category not found.");
+
+        var tagIds = await dbContext.Tags
+            .Where(x => x.CategoryId == categoryId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return new CategoryDeletionImpactDto
+        {
+            CategoryId = category.Id,
+            CategoryName = category.Name,
+            ExpenseCount = await dbContext.Expenses.CountAsync(x => x.CategoryId == categoryId, cancellationToken),
+            ExpenseLineItemCount = tagIds.Count == 0
+                ? 0
+                : await dbContext.ExpenseLineItems.CountAsync(
+                    x => x.TagId.HasValue && tagIds.Contains(x.TagId.Value),
+                    cancellationToken)
+        };
+    }
+
     public async Task DeleteCategoryAsync(DeleteCategoryRequest request, CancellationToken cancellationToken)
     {
         DeleteCategoryValidator.ValidateOrThrowBadRequest(request);
@@ -101,6 +136,8 @@ public sealed class CategoryService(
                            .Include(x => x.Tags)
                            .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                        ?? throw new NotFoundException("Category not found.");
+
+        await ReassignCategoryAssignmentsAsync(dbContext, category.Id, request, cancellationToken);
 
         category.IsDeleted = true;
         category.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
@@ -128,7 +165,13 @@ public sealed class CategoryService(
             throw new NotFoundException("Category not found.");
         }
 
-        await EnsureTagNameUniqueAsync(dbContext, request.CategoryId, normalizedName, null, cancellationToken);
+        await EnsureTagNameUniqueAsync(
+            dbContext,
+            request.CategoryId,
+            request.ParentTagId,
+            normalizedName,
+            null,
+            cancellationToken);
         await EnsureParentTagValidAsync(dbContext, request.CategoryId, request.ParentTagId, null, cancellationToken);
 
         var tag = new Tag
@@ -163,7 +206,13 @@ public sealed class CategoryService(
             throw new NotFoundException("Category not found.");
         }
 
-        await EnsureTagNameUniqueAsync(dbContext, request.CategoryId, normalizedName, tag.Id, cancellationToken);
+        await EnsureTagNameUniqueAsync(
+            dbContext,
+            request.CategoryId,
+            request.ParentTagId,
+            normalizedName,
+            tag.Id,
+            cancellationToken);
         await EnsureParentTagValidAsync(dbContext, request.CategoryId, request.ParentTagId, tag.Id, cancellationToken);
 
         tag.CategoryId = request.CategoryId;
@@ -176,6 +225,31 @@ public sealed class CategoryService(
         return tag.MapTag();
     }
 
+    public async Task<TagDeletionImpactDto> GetTagDeletionImpactAsync(int tagId, CancellationToken cancellationToken)
+    {
+        if (tagId <= 0)
+        {
+            throw new BadRequestException("Tag id is required.");
+        }
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCurrentUserIsAdminAsync(dbContext, cancellationToken);
+
+        var tag = await dbContext.Tags
+                      .AsNoTracking()
+                      .FirstOrDefaultAsync(x => x.Id == tagId, cancellationToken)
+                  ?? throw new NotFoundException("Tag not found.");
+
+        return new TagDeletionImpactDto
+        {
+            TagId = tag.Id,
+            TagName = tag.Name,
+            CategoryId = tag.CategoryId,
+            ExpenseCount = await dbContext.Expenses.CountAsync(x => x.TagId == tagId, cancellationToken),
+            ExpenseLineItemCount = await dbContext.ExpenseLineItems.CountAsync(x => x.TagId == tagId, cancellationToken)
+        };
+    }
+
     public async Task DeleteTagAsync(DeleteTagRequest request, CancellationToken cancellationToken)
     {
         DeleteTagValidator.ValidateOrThrowBadRequest(request);
@@ -186,6 +260,8 @@ public sealed class CategoryService(
         var tag = await dbContext.Tags
                       .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                   ?? throw new NotFoundException("Tag not found.");
+
+        await ReassignTagAssignmentsAsync(dbContext, tag, request, cancellationToken);
 
         var childTags = await dbContext.Tags
             .Where(x => x.ParentTagId == tag.Id)
@@ -200,6 +276,119 @@ public sealed class CategoryService(
         tag.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task ReassignCategoryAssignmentsAsync(
+        ApplicationDbContext dbContext,
+        int categoryId,
+        DeleteCategoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var expenses = await dbContext.Expenses
+            .Where(x => x.CategoryId == categoryId)
+            .ToListAsync(cancellationToken);
+
+        var categoryTagIds = await dbContext.Tags
+            .Where(x => x.CategoryId == categoryId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var lineItems = categoryTagIds.Count == 0
+            ? []
+            : await dbContext.ExpenseLineItems
+                .Where(x => x.TagId.HasValue && categoryTagIds.Contains(x.TagId.Value))
+                .ToListAsync(cancellationToken);
+
+        if (expenses.Count == 0 && lineItems.Count == 0)
+        {
+            return;
+        }
+
+        if (!request.ReplacementCategoryId.HasValue)
+        {
+            throw new ConflictException("Category is used by expenses. Choose a replacement category before deleting it.");
+        }
+
+        if (request.ReplacementCategoryId.Value == categoryId)
+        {
+            throw new BadRequestException("Replacement category must be different from deleted category.");
+        }
+
+        var replacementCategoryExists = await dbContext.Categories
+            .AnyAsync(x => x.Id == request.ReplacementCategoryId.Value, cancellationToken);
+        if (!replacementCategoryExists)
+        {
+            throw new NotFoundException("Replacement category not found.");
+        }
+
+        if (request.ReplacementTagId.HasValue)
+        {
+            await EnsureTagBelongsToCategoryAsync(
+                dbContext,
+                request.ReplacementTagId.Value,
+                request.ReplacementCategoryId.Value,
+                cancellationToken);
+        }
+
+        foreach (var expense in expenses)
+        {
+            expense.CategoryId = request.ReplacementCategoryId.Value;
+            expense.TagId = request.ReplacementTagId;
+        }
+
+        foreach (var lineItem in lineItems)
+        {
+            lineItem.TagId = request.ReplacementTagId;
+        }
+    }
+
+    private static async Task ReassignTagAssignmentsAsync(
+        ApplicationDbContext dbContext,
+        Tag tag,
+        DeleteTagRequest request,
+        CancellationToken cancellationToken)
+    {
+        var expenses = await dbContext.Expenses
+            .Where(x => x.TagId == tag.Id)
+            .ToListAsync(cancellationToken);
+
+        var lineItems = await dbContext.ExpenseLineItems
+            .Where(x => x.TagId == tag.Id)
+            .ToListAsync(cancellationToken);
+
+        if (expenses.Count == 0 && lineItems.Count == 0)
+        {
+            return;
+        }
+
+        if (!request.ClearAssignments && !request.ReplacementTagId.HasValue)
+        {
+            throw new ConflictException("Tag is used by expenses. Choose a replacement tag or clear the tag before deleting it.");
+        }
+
+        if (request.ReplacementTagId == tag.Id)
+        {
+            throw new BadRequestException("Replacement tag must be different from deleted tag.");
+        }
+
+        if (request.ReplacementTagId.HasValue)
+        {
+            await EnsureTagBelongsToCategoryAsync(
+                dbContext,
+                request.ReplacementTagId.Value,
+                tag.CategoryId,
+                cancellationToken);
+        }
+
+        foreach (var expense in expenses)
+        {
+            expense.TagId = request.ReplacementTagId;
+        }
+
+        foreach (var lineItem in lineItems)
+        {
+            lineItem.TagId = request.ReplacementTagId;
+        }
     }
 
     private static async Task EnsureCategoryNameUniqueAsync(
@@ -224,6 +413,7 @@ public sealed class CategoryService(
     private static async Task EnsureTagNameUniqueAsync(
         ApplicationDbContext dbContext,
         int categoryId,
+        int? parentTagId,
         string normalizedName,
         int? excludeId,
         CancellationToken cancellationToken)
@@ -231,6 +421,7 @@ public sealed class CategoryService(
         var exists = await dbContext.Tags
             .IgnoreQueryFilters()
             .AnyAsync(x => x.CategoryId == categoryId
+                           && x.ParentTagId == parentTagId
                            && !x.IsDeleted
                            && (!excludeId.HasValue || x.Id != excludeId.Value)
                            && x.Name.ToUpper() == normalizedName,
@@ -238,7 +429,21 @@ public sealed class CategoryService(
 
         if (exists)
         {
-            throw new ConflictException("Tag name must be unique within category.");
+            throw new ConflictException("Tag name must be unique within the same parent tag.");
+        }
+    }
+
+    private static async Task EnsureTagBelongsToCategoryAsync(
+        ApplicationDbContext dbContext,
+        int tagId,
+        int categoryId,
+        CancellationToken cancellationToken)
+    {
+        var belongs = await dbContext.Tags
+            .AnyAsync(x => x.Id == tagId && x.CategoryId == categoryId, cancellationToken);
+        if (!belongs)
+        {
+            throw new BadRequestException("Replacement tag must belong to selected category.");
         }
     }
 

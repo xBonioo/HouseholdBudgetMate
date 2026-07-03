@@ -460,6 +460,108 @@ public sealed class CategoryServiceTests
             service.DeleteCategoryAsync(new DeleteCategoryRequest { Id = 9999 }, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task DeleteCategoryAsync_When_Category_Is_Used_Should_Require_Replacement()
+    {
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#AABBCC" };
+            context.Categories.Add(category);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 5 });
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = await context.MonthPlans.Select(x => x.Id).SingleAsync(),
+                Name = "Paragon",
+                CategoryId = categoryId,
+                PlannedAmount = 10,
+                ActualAmount = 10,
+                Order = 1
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.DeleteCategoryAsync(new DeleteCategoryRequest { Id = categoryId }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeleteCategoryAsync_When_Replacement_Is_Provided_Should_Reassign_Expenses_And_LineItems()
+    {
+        int categoryId;
+        int replacementCategoryId;
+        int replacementTagId;
+        int expenseId;
+        int lineItemId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#AABBCC" };
+            var replacement = new Category { Name = "Dom", Color = "#112233" };
+            context.Categories.AddRange(category, replacement);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 5 });
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+            replacementCategoryId = replacement.Id;
+
+            var oldTag = new Tag { Name = "Stary", CategoryId = categoryId };
+            var replacementTag = new Tag { Name = "Nowy", CategoryId = replacementCategoryId };
+            context.Tags.AddRange(oldTag, replacementTag);
+            await context.SaveChangesAsync();
+            replacementTagId = replacementTag.Id;
+
+            var expense = new Expense
+            {
+                MonthPlanId = await context.MonthPlans.Select(x => x.Id).SingleAsync(),
+                Name = "Paragon",
+                CategoryId = categoryId,
+                TagId = oldTag.Id,
+                PlannedAmount = 10,
+                ActualAmount = 10,
+                Order = 1
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+
+            var lineItem = new ExpenseLineItem
+            {
+                ExpenseId = expenseId,
+                Description = "Pozycja",
+                Amount = 10,
+                OccurredAt = new DateOnly(2026, 5, 10),
+                TagId = oldTag.Id
+            };
+            context.ExpenseLineItems.Add(lineItem);
+            await context.SaveChangesAsync();
+            lineItemId = lineItem.Id;
+        }
+
+        var service = CreateService();
+        await service.DeleteCategoryAsync(new DeleteCategoryRequest
+        {
+            Id = categoryId,
+            ReplacementCategoryId = replacementCategoryId,
+            ReplacementTagId = replacementTagId
+        }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var reassignedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        var reassignedLineItem = await verifyContext.ExpenseLineItems.SingleAsync(x => x.Id == lineItemId);
+        var deletedCategory = await verifyContext.Categories.IgnoreQueryFilters().SingleAsync(x => x.Id == categoryId);
+
+        Assert.Equal(replacementCategoryId, reassignedExpense.CategoryId);
+        Assert.Equal(replacementTagId, reassignedExpense.TagId);
+        Assert.Equal(replacementTagId, reassignedLineItem.TagId);
+        Assert.True(deletedCategory.IsDeleted);
+    }
+
     // ── CreateTagAsync ───────────────────────────────────────────────────────
 
     /// <summary>
@@ -535,6 +637,86 @@ public sealed class CategoryServiceTests
         {
             CategoryId = categoryId,
             Name = "BIEDRONKA"
+        }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateTagAsync_Should_Allow_Same_Child_Tag_Name_Under_Different_Parents()
+    {
+        int categoryId;
+        int groceriesTagId;
+        int cosmeticsTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#AABBCC" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var groceries = new Tag { Name = "Spozywcze", CategoryId = categoryId };
+            var cosmetics = new Tag { Name = "Kosmetyki", CategoryId = categoryId };
+            context.Tags.AddRange(groceries, cosmetics);
+            await context.SaveChangesAsync();
+            groceriesTagId = groceries.Id;
+            cosmeticsTagId = cosmetics.Id;
+
+            context.Tags.Add(new Tag
+            {
+                Name = "Allegro",
+                CategoryId = categoryId,
+                ParentTagId = groceriesTagId
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+
+        var result = await service.CreateTagAsync(new CreateTagRequest
+        {
+            CategoryId = categoryId,
+            ParentTagId = cosmeticsTagId,
+            Name = "Allegro"
+        }, CancellationToken.None);
+
+        Assert.Equal("Allegro", result.Name);
+        Assert.Equal(cosmeticsTagId, result.ParentTagId);
+    }
+
+    [Fact]
+    public async Task CreateTagAsync_Should_Reject_Same_Child_Tag_Name_Under_Same_Parent()
+    {
+        int categoryId;
+        int parentTagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Zakupy", Color = "#AABBCC" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+            categoryId = category.Id;
+
+            var parentTag = new Tag { Name = "Spozywcze", CategoryId = categoryId };
+            context.Tags.Add(parentTag);
+            await context.SaveChangesAsync();
+            parentTagId = parentTag.Id;
+
+            context.Tags.Add(new Tag
+            {
+                Name = "Allegro",
+                CategoryId = categoryId,
+                ParentTagId = parentTagId
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<ConflictException>(() => service.CreateTagAsync(new CreateTagRequest
+        {
+            CategoryId = categoryId,
+            ParentTagId = parentTagId,
+            Name = "ALLEGRO"
         }, CancellationToken.None));
     }
 
@@ -919,5 +1101,100 @@ public sealed class CategoryServiceTests
 
         Assert.Null(detachedChild1.ParentTagId);
         Assert.Null(detachedChild2.ParentTagId);
+    }
+
+    [Fact]
+    public async Task DeleteTagAsync_When_Tag_Is_Used_Should_Require_Replacement_Or_Clear()
+    {
+        int tagId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#AABBCC" };
+            context.Categories.Add(category);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 5 });
+            await context.SaveChangesAsync();
+
+            var tag = new Tag { Name = "Biedronka", CategoryId = category.Id };
+            context.Tags.Add(tag);
+            await context.SaveChangesAsync();
+            tagId = tag.Id;
+
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = await context.MonthPlans.Select(x => x.Id).SingleAsync(),
+                Name = "Paragon",
+                CategoryId = category.Id,
+                TagId = tagId,
+                PlannedAmount = 10,
+                ActualAmount = 10,
+                Order = 1
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.DeleteTagAsync(new DeleteTagRequest { Id = tagId }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeleteTagAsync_When_Clear_Is_Selected_Should_Remove_Tag_From_Expenses()
+    {
+        int tagId;
+        int expenseId;
+        int lineItemId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var category = new Category { Name = "Spozywcze", Color = "#AABBCC" };
+            context.Categories.Add(category);
+            context.MonthPlans.Add(new MonthPlan { Year = 2026, Month = 5 });
+            await context.SaveChangesAsync();
+
+            var tag = new Tag { Name = "Biedronka", CategoryId = category.Id };
+            context.Tags.Add(tag);
+            await context.SaveChangesAsync();
+            tagId = tag.Id;
+
+            var expense = new Expense
+            {
+                MonthPlanId = await context.MonthPlans.Select(x => x.Id).SingleAsync(),
+                Name = "Paragon",
+                CategoryId = category.Id,
+                TagId = tagId,
+                PlannedAmount = 10,
+                ActualAmount = 10,
+                Order = 1
+            };
+            context.Expenses.Add(expense);
+            await context.SaveChangesAsync();
+            expenseId = expense.Id;
+
+            var lineItem = new ExpenseLineItem
+            {
+                ExpenseId = expenseId,
+                Description = "Pozycja",
+                Amount = 10,
+                OccurredAt = new DateOnly(2026, 5, 10),
+                TagId = tagId
+            };
+            context.ExpenseLineItems.Add(lineItem);
+            await context.SaveChangesAsync();
+            lineItemId = lineItem.Id;
+        }
+
+        var service = CreateService();
+        await service.DeleteTagAsync(new DeleteTagRequest { Id = tagId, ClearAssignments = true }, CancellationToken.None);
+
+        await using var verifyContext = TestDbContextFactory.CreateDbContext(_dbName);
+        var updatedExpense = await verifyContext.Expenses.SingleAsync(x => x.Id == expenseId);
+        var updatedLineItem = await verifyContext.ExpenseLineItems.SingleAsync(x => x.Id == lineItemId);
+        var deletedTag = await verifyContext.Tags.IgnoreQueryFilters().SingleAsync(x => x.Id == tagId);
+
+        Assert.Null(updatedExpense.TagId);
+        Assert.Null(updatedLineItem.TagId);
+        Assert.True(deletedTag.IsDeleted);
     }
 }

@@ -6,6 +6,7 @@ using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto;
+using HouseholdBudgetMate.Abstractions.Contracts.Recurring.Dto;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Abstractions.Parsing;
 using HouseholdBudgetMate.Application.Kernel.Timing;
@@ -42,10 +43,10 @@ public partial class RecurringPage
     private List<RegularIncomeDefinitionDto> _incomeDefinitions = [];
     private List<RegularExpenseDefinitionDto> _expenseDefinitions = [];
     private List<LoanDto> _loans = [];
-    private IReadOnlyList<IncomeDefinitionRow> _incomeRows = [];
-    private IReadOnlyList<ExpenseDefinitionRow> _expenseRows = [];
-    private IReadOnlyList<LoanRecurringItem> _loanRecurringItems = [];
-    private RecurringOverviewModel _overview = new();
+    private IReadOnlyList<IncomeDefinitionRowDto> _incomeRows = [];
+    private IReadOnlyList<ExpenseDefinitionRowDto> _expenseRows = [];
+    private IReadOnlyList<LoanRecurringItemDto> _loanRecurringItems = [];
+    private RecurringOverviewDto _overview = new();
 
     private CreateRegularIncomeDefinitionRequest _newIncomeDefinition = new()
     {
@@ -147,13 +148,13 @@ public partial class RecurringPage
             .OrderByDescending(x => x.IsActive)
             .ThenBy(x => x.DayOfMonth)
             .ThenBy(x => x.Name)
-            .Select(x => new IncomeDefinitionRow(x.Id, x.Name, x.Amount, x.DayOfMonth, x.AccountId, x.AccountName, x.IsActive))
+            .Select(x => new IncomeDefinitionRowDto(x.Id, x.Name, x.Amount, x.DayOfMonth, x.AccountId, x.AccountName, x.IsActive))
             .ToList();
 
         _expenseRows = _expenseDefinitions
             .OrderBy(x => x.Order)
             .ThenBy(x => x.Name)
-            .Select(x => new ExpenseDefinitionRow(
+            .Select(x => new ExpenseDefinitionRowDto(
                 x.Id,
                 x.Order,
                 x.Name,
@@ -172,14 +173,14 @@ public partial class RecurringPage
                 .Where(i => !i.IsPaid)
                 .OrderBy(i => i.DueDate)
                 .Take(1)
-                .Select(i => new LoanRecurringItem(x.Name, $"{i.Month:D2}/{i.Year}", i.Amount, i.IsPaid)))
+                .Select(i => new LoanRecurringItemDto(x.Name, $"{i.Month:D2}/{i.Year}", i.Amount, i.IsPaid)))
             .OrderBy(x => x.LoanName)
             .ToList();
 
         var activeIncomeAmount = _incomeRows.Where(x => x.IsActive).Sum(x => x.Amount);
         var activeExpenseAmount = _expenseRows.Where(x => x.IsActive).Sum(x => x.Amount);
 
-        _overview = new RecurringOverviewModel(
+        _overview = new RecurringOverviewDto(
             activeIncomeAmount,
             activeExpenseAmount,
             activeIncomeAmount - activeExpenseAmount,
@@ -230,7 +231,7 @@ public partial class RecurringPage
         }
     }
 
-    private async Task OpenIncomeEditDialogAsync(IncomeDefinitionRow definition)
+    private async Task OpenIncomeEditDialogAsync(IncomeDefinitionRowDto definition)
     {
         var parameters = new DialogParameters
         {
@@ -277,7 +278,7 @@ public partial class RecurringPage
         }
     }
 
-    private async Task ToggleIncomeDefinitionActiveAsync(IncomeDefinitionRow definition)
+    private async Task ToggleIncomeDefinitionActiveAsync(IncomeDefinitionRowDto definition)
     {
         _isBusy = true;
 
@@ -306,7 +307,7 @@ public partial class RecurringPage
         }
     }
 
-    private async Task DeleteIncomeDefinitionPermanentlyAsync(IncomeDefinitionRow definition)
+    private async Task DeleteIncomeDefinitionPermanentlyAsync(IncomeDefinitionRowDto definition)
     {
         if (!await ConfirmAsync("Usuń wpływ", $"Usunąć cykliczny wpływ '{definition.Name}' na stałe? Tej operacji nie można cofnąć."))
         {
@@ -448,7 +449,7 @@ public partial class RecurringPage
         }
     }
 
-    private async Task OpenExpenseEditDialogAsync(ExpenseDefinitionRow definition)
+    private async Task OpenExpenseEditDialogAsync(ExpenseDefinitionRowDto definition)
     {
         var parameters = new DialogParameters
         {
@@ -496,7 +497,7 @@ public partial class RecurringPage
         }
     }
 
-    private async Task ToggleExpenseDefinitionActiveAsync(ExpenseDefinitionRow definition)
+    private async Task ToggleExpenseDefinitionActiveAsync(ExpenseDefinitionRowDto definition)
     {
         _isBusy = true;
 
@@ -526,7 +527,7 @@ public partial class RecurringPage
         }
     }
 
-    private async Task DeleteExpenseDefinitionPermanentlyAsync(ExpenseDefinitionRow definition)
+    private async Task DeleteExpenseDefinitionPermanentlyAsync(ExpenseDefinitionRowDto definition)
     {
         if (!await ConfirmAsync("Usuń wydatek", $"Usunąć cykliczny wydatek '{definition.Name}' na stałe? Tej operacji nie można cofnąć."))
         {
@@ -699,33 +700,4 @@ public partial class RecurringPage
         }
     };
 
-    private sealed record RecurringOverviewModel(
-        decimal ActiveIncomeAmount = 0,
-        decimal ActiveExpenseAmount = 0,
-        decimal NetRecurringAmount = 0,
-        int ActiveIncomeCount = 0,
-        int ActiveExpenseCount = 0);
-
-    private sealed record IncomeDefinitionRow(
-        int Id,
-        string Name,
-        decimal Amount,
-        int DayOfMonth,
-        int AccountId,
-        string AccountName,
-        bool IsActive);
-
-    private sealed record ExpenseDefinitionRow(
-        int Id,
-        int Order,
-        string Name,
-        int CategoryId,
-        string CategoryName,
-        int? TagId,
-        string? TagName,
-        decimal Amount,
-        bool IsActive,
-        bool ShowRemainingInUI);
-
-    private sealed record LoanRecurringItem(string LoanName, string Label, decimal Amount, bool IsPaid);
 }

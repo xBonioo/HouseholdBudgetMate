@@ -2,9 +2,12 @@ using System.Text.Json;
 using FluentAssertions;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Audit.Requests;
+using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests;
+using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Application.Auditing;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
 using HouseholdBudgetMate.Application.Services;
+using HouseholdBudgetMate.Domain;
 using HouseholdBudgetMate.Domain.Entities;
 using HouseholdBudgetMate.Domain.Infrastructure;
 using HouseholdBudgetMate.Migrations;
@@ -541,8 +544,7 @@ public sealed class AuditTrailTests
 
             setupContext.Incomes.Add(new Income
             {
-                Year = 2026,
-                Month = 5,
+                MonthPlanId = await setupContext.MonthPlans.Select(x => x.Id).SingleAsync(),
                 Name = "Wynagrodzenie",
                 Amount = 5000,
                 AccountId = await setupContext.Accounts.Select(x => x.Id).SingleAsync(),
@@ -566,8 +568,7 @@ public sealed class AuditTrailTests
 
         var incomeDiff = results.Single(x => x.EntityType == nameof(Income)).DiffItems;
         incomeDiff.Single(x => x.PropertyName == "AccountId").NewValue.Should().Be("Konto rodzinne");
-        incomeDiff.Single(x => x.PropertyName == "Month").NewValue.Should().Be("maj");
-        incomeDiff.Single(x => x.PropertyName == "Year").NewValue.Should().Be("2026");
+        incomeDiff.Single(x => x.PropertyName == "MonthPlanId").NewValue.Should().Be("maj 2026");
 
         var expenseDiff = results.Single(x => x.EntityType == nameof(Expense)).DiffItems;
         expenseDiff.Single(x => x.PropertyName == "CategoryId").NewValue.Should().Be("Dom");
@@ -703,6 +704,99 @@ public sealed class AuditTrailTests
         await service.Invoking(x => x.SearchAsync(new SearchAuditLogsRequest(), CancellationToken.None))
             .Should()
             .ThrowAsync<ForbiddenException>();
+    }
+
+    [Fact]
+    public async Task AuditService_WhenCurrentUserIsNotAdmin_Should_ReturnOnlyOwnLoanOperations()
+    {
+        var currentUser = CreateCurrentUserContext("standard-user", "owner-user");
+        var options = NewOptions(currentUser);
+
+        await using (var setupContext = new ApplicationDbContext(options, currentUser))
+        {
+            setupContext.Users.AddRange(
+                new User
+                {
+                    Id = "standard-user",
+                    Username = "Standard",
+                    PasswordHash = "hash",
+                    IsAdmin = false,
+                    BudgetOwnerUserId = "owner-user"
+                },
+                new User
+                {
+                    Id = "other-user",
+                    Username = "Other",
+                    PasswordHash = "hash",
+                    IsAdmin = false,
+                    BudgetOwnerUserId = "other-owner"
+                });
+
+            var ownerLoan = new Loan
+            {
+                Name = "Kredyt rodzinny",
+                LoanType = (int)LoanType.Cash,
+                InterestMode = (int)LoanInterestMode.Fixed,
+                Principal = 1000,
+                InterestRate = 5,
+                RepaymentDayOfMonth = 10,
+                StartDate = new DateOnly(2026, 1, 1),
+                EndDate = new DateOnly(2026, 12, 1),
+                IsActive = true
+            };
+            var otherLoan = new Loan
+            {
+                Name = "Obcy kredyt",
+                LoanType = (int)LoanType.Cash,
+                InterestMode = (int)LoanInterestMode.Fixed,
+                Principal = 1000,
+                InterestRate = 5,
+                RepaymentDayOfMonth = 10,
+                StartDate = new DateOnly(2026, 1, 1),
+                EndDate = new DateOnly(2026, 12, 1),
+                IsActive = true
+            };
+            setupContext.Loans.AddRange(ownerLoan, otherLoan);
+            await setupContext.SaveChangesAsync();
+
+            setupContext.LoanOperationAudits.AddRange(
+                new LoanOperationAudit
+                {
+                    LoanId = ownerLoan.Id,
+                    BudgetOwnerUserId = "owner-user",
+                    UserId = "standard-user",
+                    OperationType = LoanOperationAuditTypes.LoanPrepayment,
+                    Status = LoanOperationAuditStatuses.Active,
+                    OccurredAtUtc = new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+                    ScheduleVersionBefore = "before",
+                    ScheduleVersionAfter = "after",
+                    OperationPayloadJson = """{"amount":250,"strategy":"ReduceInstallment","prepaymentDate":"2026-07-01"}"""
+                },
+                new LoanOperationAudit
+                {
+                    LoanId = otherLoan.Id,
+                    BudgetOwnerUserId = "other-owner",
+                    UserId = "other-user",
+                    OperationType = LoanOperationAuditTypes.LoanRateEntry,
+                    Status = LoanOperationAuditStatuses.Active,
+                    OccurredAtUtc = new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+                    ScheduleVersionBefore = "before",
+                    ScheduleVersionAfter = "after",
+                    OperationPayloadJson = """{"effectiveFrom":"2026-07-01","referenceRate":5.25}"""
+                });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var service = new AuditService(new TestContextFactory(options, currentUser), currentUser);
+
+        var results = await service.SearchLoanOperationsAsync(new SearchAuditLogsRequest(), CancellationToken.None);
+
+        results.Should().ContainSingle();
+        results[0].LoanName.Should().Be("Kredyt rodzinny");
+        results[0].OperationType.Should().Be(LoanOperationAuditTypes.LoanPrepayment);
+        results[0].OperationContext.Should().Contain("250").And.Contain("2026-07-01");
+        results[0].CanRevert.Should().BeFalse();
+        results[0].RevertBlockedReason.Should().Contain("Harmonogram");
     }
 
     [Fact]

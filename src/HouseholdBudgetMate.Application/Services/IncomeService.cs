@@ -161,7 +161,6 @@ public sealed class IncomeService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var monthPlan = await dbContext.MonthPlans
-            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
         if (monthPlan?.IsClosed == true)
         {
@@ -178,12 +177,13 @@ public sealed class IncomeService(
             return;
         }
 
+        monthPlan ??= await CreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+
         var existingDefinitionIds = await dbContext.Incomes
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(x => x.UserId == dbContext.CurrentBudgetOwnerUserId
-                        && x.Year == year
-                        && x.Month == month
+                        && x.MonthPlanId == monthPlan.Id
                         && x.IsRegular
                         && x.RegularIncomeDefinitionId.HasValue)
             .Select(x => x.RegularIncomeDefinitionId!.Value)
@@ -200,8 +200,7 @@ public sealed class IncomeService(
             var day = Math.Min(definition.DayOfMonth, DateTime.DaysInMonth(year, month));
             dbContext.Incomes.Add(new Income
             {
-                Year = year,
-                Month = month,
+                MonthPlanId = monthPlan.Id,
                 Name = definition.Name,
                 Amount = definition.Amount,
                 ExpectedDayOfMonth = new DateOnly(year, month, day),
@@ -225,8 +224,6 @@ public sealed class IncomeService(
         YearMonthValidator.ValidateOrThrowBadRequest(new YearMonthRequest(year, month));
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await EnsureMonthIsOpenAsync(dbContext, year, month, cancellationToken);
-
         var definition = await dbContext.RegularIncomeDefinitions
                              .AsNoTracking()
                              .FirstOrDefaultAsync(x => x.Id == definitionId, cancellationToken)
@@ -237,13 +234,15 @@ public sealed class IncomeService(
             return false;
         }
 
+        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
+
         var existsInMonth = await dbContext.Incomes
             .IgnoreQueryFilters()
             .AsNoTracking()
             .AnyAsync(
                 x => x.UserId == dbContext.CurrentBudgetOwnerUserId
-                     && x.Year == year
-                     && x.Month == month
+                     && x.MonthPlanId == monthPlan.Id
                      && x.IsRegular
                      && x.RegularIncomeDefinitionId == definitionId,
                 cancellationToken);
@@ -256,8 +255,7 @@ public sealed class IncomeService(
         var day = Math.Min(definition.DayOfMonth, DateTime.DaysInMonth(year, month));
         dbContext.Incomes.Add(new Income
         {
-            Year = year,
-            Month = month,
+            MonthPlanId = monthPlan.Id,
             Name = definition.Name,
             Amount = definition.Amount,
             ExpectedDayOfMonth = new DateOnly(year, month, day),
@@ -279,9 +277,20 @@ public sealed class IncomeService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var incomes = await dbContext.Incomes
+        var monthPlanId = await dbContext.MonthPlans
             .AsNoTracking()
             .Where(x => x.Year == year && x.Month == month)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!monthPlanId.HasValue)
+        {
+            return [];
+        }
+
+        var incomes = await dbContext.Incomes
+            .AsNoTracking()
+            .Where(x => x.MonthPlanId == monthPlanId.Value)
+            .Include(x => x.MonthPlan)
             .Include(x => x.Account)
             .OrderBy(x => x.ExpectedDayOfMonth)
             .ThenBy(x => x.Name)
@@ -296,17 +305,17 @@ public sealed class IncomeService(
         var normalizedName = request.Name;
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await EnsureMonthIsOpenAsync(dbContext, request.Year, request.Month, cancellationToken);
-
         var account = await dbContext.Accounts
                           .AsNoTracking()
                           .FirstOrDefaultAsync(x => x.Id == request.AccountId, cancellationToken)
                       ?? throw new NotFoundException("Account not found.");
 
+        var monthPlan = await GetOrCreateMonthPlanAsync(dbContext, request.Year, request.Month, cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(monthPlan);
+
         var income = new Income
         {
-            Year = request.Year,
-            Month = request.Month,
+            MonthPlanId = monthPlan.Id,
             Name = normalizedName,
             Amount = request.Amount,
             ExpectedDayOfMonth = request.ExpectedDayOfMonth,
@@ -322,8 +331,8 @@ public sealed class IncomeService(
         return new IncomeDto
         {
             Id = income.Id,
-            Year = income.Year,
-            Month = income.Month,
+            Year = monthPlan.Year,
+            Month = monthPlan.Month,
             Name = income.Name,
             Amount = income.Amount,
             ExpectedDayOfMonth = income.ExpectedDayOfMonth,
@@ -341,15 +350,16 @@ public sealed class IncomeService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var income = await dbContext.Incomes
+                         .Include(x => x.MonthPlan)
                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                      ?? throw new NotFoundException("Income not found.");
 
-        await EnsureMonthIsOpenAsync(dbContext, income.Year, income.Month, cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(income.MonthPlan);
 
         DateInMonthValidator.ValidateOrThrowBadRequest(new DateInMonthRequest(
             request.ExpectedDayOfMonth,
-            income.Year,
-            income.Month,
+            income.MonthPlan.Year,
+            income.MonthPlan.Month,
             "Expected day must belong to selected month and year."));
 
         var account = await dbContext.Accounts
@@ -368,8 +378,8 @@ public sealed class IncomeService(
         return new IncomeDto
         {
             Id = income.Id,
-            Year = income.Year,
-            Month = income.Month,
+            Year = income.MonthPlan.Year,
+            Month = income.MonthPlan.Month,
             Name = income.Name,
             Amount = income.Amount,
             ExpectedDayOfMonth = income.ExpectedDayOfMonth,
@@ -386,10 +396,11 @@ public sealed class IncomeService(
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var income = await dbContext.Incomes
+                         .Include(x => x.MonthPlan)
                          .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
                      ?? throw new NotFoundException("Income not found.");
 
-        await EnsureMonthIsOpenAsync(dbContext, income.Year, income.Month, cancellationToken);
+        BudgetHelper.EnsureMonthIsOpen(income.MonthPlan);
 
         income.IsDeleted = true;
         income.DeletedAtUtc = dateTimeProvider.GetUtcDateTime();
@@ -466,11 +477,13 @@ public sealed class IncomeService(
             }
         }
 
-        var incomesTotal = await dbContext.Incomes
-            .AsNoTracking()
-            .Where(x => x.Year == year && x.Month == month)
-            .Where(x => x.ExpectedDayOfMonth <= today)
-            .SumAsync(x => x.Amount, cancellationToken);
+        var incomesTotal = monthPlan is null
+            ? 0m
+            : await dbContext.Incomes
+                .AsNoTracking()
+                .Where(x => x.MonthPlanId == monthPlan.Id)
+                .Where(x => x.ExpectedDayOfMonth <= today)
+                .SumAsync(x => x.Amount, cancellationToken);
 
         decimal expensesTotal = 0;
         decimal savingsTransfersTotal = 0;
@@ -506,16 +519,39 @@ public sealed class IncomeService(
         };
     }
 
-    private static async Task EnsureMonthIsOpenAsync(
+    private static async Task<MonthPlan> GetOrCreateMonthPlanAsync(
         ApplicationDbContext dbContext,
         int year,
         int month,
         CancellationToken cancellationToken)
     {
         var monthPlan = await dbContext.MonthPlans
-            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Year == year && x.Month == month, cancellationToken);
 
-        BudgetHelper.EnsureMonthIsOpen(monthPlan);
+        if (monthPlan is not null)
+        {
+            return monthPlan;
+        }
+
+        return await CreateMonthPlanAsync(dbContext, year, month, cancellationToken);
+    }
+
+    private static async Task<MonthPlan> CreateMonthPlanAsync(
+        ApplicationDbContext dbContext,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var monthPlan = new MonthPlan
+        {
+            Year = year,
+            Month = month,
+            IsClosed = false
+        };
+
+        dbContext.MonthPlans.Add(monthPlan);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return monthPlan;
     }
 }

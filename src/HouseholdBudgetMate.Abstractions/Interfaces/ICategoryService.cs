@@ -10,6 +10,9 @@ public interface ICategoryService
     Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest request, CancellationToken cancellationToken);
     Task<TagDto> CreateTagAsync(CreateTagRequest request, CancellationToken cancellationToken);
 
+    Task<CategoryDeletionImpactDto> GetCategoryDeletionImpactAsync(int categoryId, CancellationToken cancellationToken);
+    Task<TagDeletionImpactDto> GetTagDeletionImpactAsync(int tagId, CancellationToken cancellationToken);
+
     Task<CategoryDto> UpdateCategoryAsync(UpdateCategoryRequest request, CancellationToken cancellationToken);
     Task<TagDto> UpdateTagAsync(UpdateTagRequest request, CancellationToken cancellationToken);
 

@@ -533,6 +533,15 @@ public sealed class ExpenseService(
                 x.ClosingBalance))
             .ToListAsync(cancellationToken);
 
+        var closedMonthKeys = await dbContext.MonthPlans
+            .AsNoTracking()
+            .Where(x => x.IsClosed)
+            .Select(x => new { x.Year, x.Month })
+            .ToListAsync(cancellationToken);
+        var closedMonthKeySet = closedMonthKeys
+            .Select(x => ToMonthKey(x.Year, x.Month))
+            .ToHashSet();
+
         var timeline = new List<DashboardMonthlySavingsDto>(month - firstMonthInYear + 1);
         for (var i = firstMonthInYear; i <= month; i++)
         {
@@ -542,19 +551,20 @@ public sealed class ExpenseService(
             var currentMonthDate = new DateTime(year, i, 1);
             var previousMonthDate = currentMonthDate.AddMonths(-1);
 
-            var currentGeneralMoney = SumLatestClosingBalances(accountBalances, year, i, includeSavings: false);
-            var previousGeneralMoney = SumLatestClosingBalances(accountBalances, previousMonthDate.Year, previousMonthDate.Month,
-                includeSavings: false);
-            var currentSavingsMoney = SumLatestClosingBalances(accountBalances, year, i, includeSavings: true);
-            var previousSavingsMoney = SumLatestClosingBalances(accountBalances, previousMonthDate.Year, previousMonthDate.Month,
-                includeSavings: true);
-
-            var generalMoneyDelta = currentGeneralMoney - previousGeneralMoney;
-            var savingsMoneyDelta = currentSavingsMoney - previousSavingsMoney;
+            var currentAccountsMoney = SumAccountsOverviewClosingBalances(
+                accountBalances,
+                year,
+                i,
+                closedMonthKeySet.Contains(ToMonthKey(year, i)));
+            var previousAccountsMoney = SumAccountsOverviewClosingBalances(
+                accountBalances,
+                previousMonthDate.Year,
+                previousMonthDate.Month,
+                closedMonthKeySet.Contains(ToMonthKey(previousMonthDate.Year, previousMonthDate.Month)));
 
             var plannedAmount = expenseData?.Planned ?? 0m;
             var spentAmount = expenseData?.Spent ?? 0m;
-            var savedAmount = generalMoneyDelta + savingsMoneyDelta;
+            var savedAmount = currentAccountsMoney - previousAccountsMoney;
 
             timeline.Add(new DashboardMonthlySavingsDto
             {
@@ -900,28 +910,33 @@ public sealed class ExpenseService(
                 x.ClosingBalance))
             .ToListAsync(cancellationToken);
 
+        var closedMonthKeys = await dbContext.MonthPlans
+            .AsNoTracking()
+            .Where(x => x.IsClosed)
+            .Select(x => new { x.Year, x.Month })
+            .ToListAsync(cancellationToken);
+        var closedMonthKeySet = closedMonthKeys
+            .Select(x => ToMonthKey(x.Year, x.Month))
+            .ToHashSet();
+
         var monthlySavedAmounts = new Dictionary<int, decimal>(populatedMonths.Count);
         foreach (var monthNumber in populatedMonths)
         {
             var currentMonthDate = new DateTime(year, monthNumber, 1);
             var previousMonthDate = currentMonthDate.AddMonths(-1);
 
-            var currentGeneralMoney = SumLatestClosingBalances(accountBalanceSnapshots, year, monthNumber, includeSavings: false);
-            var previousGeneralMoney = SumLatestClosingBalances(
+            var currentAccountsMoney = SumAccountsOverviewClosingBalances(
+                accountBalanceSnapshots,
+                year,
+                monthNumber,
+                closedMonthKeySet.Contains(ToMonthKey(year, monthNumber)));
+            var previousAccountsMoney = SumAccountsOverviewClosingBalances(
                 accountBalanceSnapshots,
                 previousMonthDate.Year,
                 previousMonthDate.Month,
-                includeSavings: false);
-            var currentSavingsMoney = SumLatestClosingBalances(accountBalanceSnapshots, year, monthNumber, includeSavings: true);
-            var previousSavingsMoney = SumLatestClosingBalances(
-                accountBalanceSnapshots,
-                previousMonthDate.Year,
-                previousMonthDate.Month,
-                includeSavings: true);
+                closedMonthKeySet.Contains(ToMonthKey(previousMonthDate.Year, previousMonthDate.Month)));
 
-            monthlySavedAmounts[monthNumber] =
-                (currentGeneralMoney - previousGeneralMoney) +
-                (currentSavingsMoney - previousSavingsMoney);
+            monthlySavedAmounts[monthNumber] = currentAccountsMoney - previousAccountsMoney;
         }
 
         var monthlyFinance = populatedMonths
@@ -2590,21 +2605,30 @@ public sealed class ExpenseService(
         return Math.Max(actualAmount - plannedAmount, 0m);
     }
 
-    private static decimal SumLatestClosingBalances(
+    private static decimal SumAccountsOverviewClosingBalances(
         IReadOnlyList<AccountBalanceSnapshot> balances,
         int year,
         int month,
-        bool includeSavings)
+        bool isClosedMonth)
     {
         return balances
-            .Where(x => (x.AccountType == (int)AccountType.Savings) == includeSavings)
+            .Where(x => isClosedMonth || IsAccountApplicableForMonth(
+                    x.ActiveFromUtc,
+                    x.IsArchived,
+                    x.ArchivedAtUtc,
+                    x.UpdatedAtUtc,
+                    year,
+                    month))
             .GroupBy(x => x.AccountId)
             .Sum(group => group
-                .Where(x => x.Year < year || (x.Year == year && x.Month <= month))
-                .OrderByDescending(x => x.Year)
-                .ThenByDescending(x => x.Month)
+                .Where(x => x.Year == year && x.Month == month)
                 .Select(x => x.ClosingBalance)
                 .FirstOrDefault());
+    }
+
+    private static int ToMonthKey(int year, int month)
+    {
+        return (year * 12) + month;
     }
 
     private static decimal? GetClosingBalanceForApplicableAccountInMonth(

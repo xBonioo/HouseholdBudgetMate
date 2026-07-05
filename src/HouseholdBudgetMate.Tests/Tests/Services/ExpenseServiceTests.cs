@@ -3019,6 +3019,48 @@ public sealed class ExpenseServiceTests
         Assert.DoesNotContain(summary.SavingsTimeline, x => x.Month is 1 or 2);
     }
 
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Not_Carry_Archived_Account_Balance_Into_Current_Month()
+    {
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account
+            {
+                Name = "Archived cash",
+                Type = (int)AccountType.Cash,
+                IsArchived = true,
+                ArchivedAtUtc = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+                UpdatedAtUtc = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc)
+            };
+
+            context.Accounts.Add(account);
+            context.MonthPlans.AddRange(
+                new MonthPlan { Year = 2026, Month = 5 },
+                new MonthPlan { Year = 2026, Month = 6 });
+            await context.SaveChangesAsync();
+
+            accountId = account.Id;
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = accountId,
+                Year = 2026,
+                Month = 5,
+                ClosingBalance = 200m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(-200m, summary.SavedAmountThisMonth);
+        Assert.Equal(200m, summary.SavingsTimeline.Single(x => x.Month == 5).SavedAmount);
+        Assert.Equal(-200m, summary.SavingsTimeline.Single(x => x.Month == 6).SavedAmount);
+    }
+
     /// <summary>
     /// Seeds one regular expense and one SupportsLineItems expense that has two line items.
     /// Verifies that TransactionCount=3 (1 regular + 2 line items) instead of 2 (1 regular + 1 parent).

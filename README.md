@@ -1,8 +1,8 @@
 # Household Budget Mate
 
-Household Budget Mate to webowa aplikacja do prowadzenia budżetu domowego. Aktualny zakres projektu to aplikacja web dla jednego gospodarstwa domowego: planowanie miesiąca, zapisywanie rzeczywistych i nieoczekiwanych wydatków, przychody, konta, kredyty, oszczędności, profile PIN oraz audyt zmian.
+Household Budget Mate to webowa aplikacja do prowadzenia budżetu domowego dla jednego gospodarstwa. Obejmuje planowanie miesiąca, rzeczywiste i nieoczekiwane wydatki, przychody, konta, oszczędności, kredyty, wydatki cykliczne, profile PIN, backup oraz audyt zmian finansowych.
 
-Najważniejszym widokiem jest bieżący obraz miesiąca: `Live balance`, `Pozostało w planie`, kontekst oszczędności i informacja, kiedy wynik wymaga uzupełnienia brakujących sald kont. Aplikacja nie ma obecnie publicznego Web API. API pod integracje, np. Home Assistant albo inne scenariusze smart home, jest kierunkiem na przyszłość.
+Najważniejszym widokiem jest bieżący obraz miesiąca: `Live balance`, `Pozostało w planie`, `Konta + oszczędności`, kontekst transferów oszczędnościowych i informacja, kiedy wynik wymaga uzupełnienia sald kont. Aplikacja nie ma obecnie publicznego Web API. Integracje, np. Home Assistant albo inne scenariusze smart home, pozostają kierunkiem na przyszłość.
 
 ## Stack
 
@@ -13,6 +13,10 @@ Najważniejszym widokiem jest bieżący obraz miesiąca: `Live balance`, `Pozost
 - PostgreSQL + Npgsql
 - Serilog
 - xUnit, FluentAssertions, NetArchTest
+- Playwright
+- ast-grep
+- dependency-cruiser
+- GitHub Actions
 - Docker / Docker Compose
 - Render Blueprint
 - WiX/MSI dla instalatora Windows
@@ -30,8 +34,21 @@ src/
   HouseholdBudgetMate.Tray/          # pomocnicza aplikacja tray dla lokalnego użycia
   HouseholdBudgetMate.Installer/     # projekt instalatora MSI
   HouseholdBudgetMate.Tests/         # testy usług, setupu, UI contract i architektury
-context/                             # wymagania, architektura, test plan, wdroĹĽenie, zmiany i archiwum
+e2e/                                 # testy Playwright
+ast-grep/                            # reguły i testy ast-grep
+tools/codex-review/                  # narzędzia strukturalnego AI code review
+context/                             # wymagania, architektura, test plan, zmiany i archiwum
 ```
+
+## Domeny funkcjonalne
+
+- **Dashboard i Plan**: miesięczny obraz budżetu, planowane/rzeczywiste wydatki, line items, wydatki nieoczekiwane, transfery oszczędnościowe i zamykanie miesięcy.
+- **Konta**: salda miesięczne, aktywne i archiwalne konta, `Konta + oszczędności`, podgląd brakujących sald i kondycji budżetu.
+- **Przychody i cykliczne**: przychody miesięczne, definicje cykliczne oraz synchronizacja z planem miesiąca.
+- **Kredyty**: harmonogramy, raty, koszty, nadpłaty, preview zmian harmonogramu, audyt i cofanie operacji kredytowych.
+- **Kategorie i tagi**: hierarchia tagów, wpływ usunięcia i przepinanie historii.
+- **Backup i restore**: eksport, import, walidacja, preview restore i ustawienia backupu.
+- **Admin i audyt**: profile PIN, role admin/member, audyt zmian finansowych, konfiguracja i readiness.
 
 ## Zasady architektury
 
@@ -40,14 +57,17 @@ context/                             # wymagania, architektura, test plan, wdro�
 - Serwisy aplikacyjne używają `IDbContextFactory<ApplicationDbContext>` i tworzą kontekst per operacja.
 - Encje domenowe nie są zwracane do UI. Granicą zewnętrzną są DTO i requesty z `HouseholdBudgetMate.Abstractions`.
 - `ApplicationDbContext` i migracje EF Core są w `HouseholdBudgetMate.Migrations`.
-- Mapowanie jest jawne, najczęściej w rozszerzeniach w `HouseholdBudgetMate.Application/Mapping`.
+- Mapowanie jest jawne, zwykle w rozszerzeniach w `HouseholdBudgetMate.Application/Mapping`.
 - Walidacja requestów odbywa się w serwisach aplikacyjnych przez FluentValidation.
 - Czas w logice aplikacyjnej powinien przechodzić przez `IDateTimeProvider`.
+- Dane budżetu nie powinny być widoczne przed odblokowaniem profilu PIN.
+- `AuditLogs` są historią zmian finansowych i nie są czyszczone przez retencję logów operacyjnych.
 
 ## Wymagania lokalne
 
 - .NET SDK 10
 - PostgreSQL
+- Node.js + npm, jeżeli uruchamiasz testy E2E albo narzędzia jakościowe frontend/JS
 - Docker Desktop, jeżeli uruchamiasz wariant kontenerowy
 - PowerShell 5+ na Windows
 - WiX Toolset, jeżeli budujesz instalator MSI
@@ -60,6 +80,12 @@ Host=localhost;Port=5432;Database=household_budget_mate_dev;Username=postgres;Pa
 
 ## Szybkie uruchomienie lokalne
 
+Przywróć pakiety .NET:
+
+```powershell
+dotnet restore HouseholdBudgetMate.slnx
+```
+
 Uruchom aplikację web:
 
 ```powershell
@@ -69,7 +95,7 @@ dotnet run --project src/HouseholdBudgetMate.Web
 Uruchom testy:
 
 ```powershell
-dotnet test
+dotnet test HouseholdBudgetMate.slnx
 ```
 
 Zbuduj rozwiązanie:
@@ -77,6 +103,46 @@ Zbuduj rozwiązanie:
 ```powershell
 dotnet build HouseholdBudgetMate.slnx
 ```
+
+Jeżeli lokalnie działa już aplikacja w trybie Debug i blokuje pliki DLL, uruchom testy w konfiguracji Release:
+
+```powershell
+dotnet test src/HouseholdBudgetMate.Tests/HouseholdBudgetMate.Tests.csproj -c Release
+```
+
+## Narzędzia jakości
+
+Zainstaluj zależności npm:
+
+```powershell
+npm install
+```
+
+Uruchom Playwright:
+
+```powershell
+npx playwright test
+```
+
+Uruchom ast-grep:
+
+```powershell
+npm run ast-grep:scan
+```
+
+Uruchom dependency-cruiser:
+
+```powershell
+npm run depcruise
+```
+
+Wygeneruj graf zależności:
+
+```powershell
+npm run depcruise:graph
+```
+
+Repo zawiera także workflow GitHub Actions dla strukturalnego AI code review w `tools/codex-review/`. Narzędzie ma własny `package.json`, test kontraktu i gate Definition of Done.
 
 ## Docker Compose
 
@@ -125,7 +191,7 @@ Migracje są trzymane w projekcie `HouseholdBudgetMate.Migrations`, a startup pr
 Dodanie migracji:
 
 ```powershell
-dotnet ef migrations add AddLoanPercentageChargeAndOriginalInfo --project src/HouseholdBudgetMate.Migrations --startup-project src/HouseholdBudgetMate.Web
+dotnet ef migrations add AddMeaningfulMigrationName --project src/HouseholdBudgetMate.Migrations --startup-project src/HouseholdBudgetMate.Web
 ```
 
 Usunięcie ostatniej, jeszcze nieutrwalonej migracji:
@@ -216,30 +282,36 @@ Przed wpisaniem realnych danych gospodarstwa upewnij się, że masz backup, spra
 
 ## Testy i jakość
 
-Podstawowe komendy:
-
-```powershell
-dotnet test
-```
-
-```powershell
-dotnet build HouseholdBudgetMate.slnx
-```
-
 Testy obejmują m.in.:
 
 - reguły usług aplikacyjnych,
 - konfigurację i setup,
 - dostęp PIN i granice sesji,
 - miesięczną pętlę budżetową,
+- spójność między Plan, Dashboard, Accounts i Statistics,
+- kredyty, nadpłaty, preview harmonogramu i cofanie operacji,
+- backup i restore,
 - audyt,
 - architekturę i kierunek zależności.
 
 Nowe testy powinny chronić zachowanie użytkownika albo istotną granicę techniczną. Nie warto pisać testów, które tylko kopiują implementację.
 
-## Roadmapa
+## Dokumentacja projektu
 
-Aktualnie projekt jest aplikacją web. Najbliższy kierunek rozwoju to dalsze usprawnienia planowania miesięcy: kopiowanie planów, sugestie z historii, wydatki cykliczne i lepszy kontekst roczny.
+Root README jest szybkim wejściem do repo. Szczegółowe wymagania, decyzje i plany są w `context/`:
+
+- `context/foundation/prd.md` - wymagania produktu.
+- `context/foundation/roadmap.md` - roadmapa i stan product slices.
+- `context/foundation/architecture/architecture-guide.md` - przewodnik architektoniczny.
+- `context/foundation/test-plan.md` - strategia testów.
+- `context/foundation/tech-stack.md` - kontekst stosu technologicznego.
+- `context/foundation/deploy-plan.md` - plan wdrożenia.
+- `context/changes/` - aktywne zmiany.
+- `context/archive/` - zakończone zmiany.
+
+## Kierunek rozwoju
+
+Aktualny nacisk projektu to wiarygodność danych miesięcznych, spójność między ekranami, bezpieczne użycie realnych danych, stabilizacja przepływów kredytowych, backup/restore oraz dalsze porządkowanie jakości automatycznej.
 
 Możliwe przyszłe integracje:
 
@@ -247,4 +319,5 @@ Możliwe przyszłe integracje:
 - scenariusze smart home,
 - automatyzacje i powiadomienia,
 - OCR/paragony,
-- bezpieczny dostęp do plików.
+- Web API,
+- bezpieczny dostęp do plików poza lokalnym użyciem.

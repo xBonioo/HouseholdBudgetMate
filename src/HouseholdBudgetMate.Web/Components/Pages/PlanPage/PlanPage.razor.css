@@ -41,7 +41,7 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
 	gap: 16px;
-	position: relative; /* Dodane dla pozycjonowania absolutnego panelu wpĹ‚ywĂłw */
+	position: relative; /* Dodane dla pozycjonowania absolutnego panelu wpływów */
 }
 
 .plan-left-column,

@@ -99,7 +99,7 @@ else
                                     @GetLoanOperationLabel(operation.OperationType)
                                 </MudChip>
                             </MudTd>
-                            <MudTd DataLabel="SzczegĂłĹ‚y">@operation.OperationContext</MudTd>
+                            <MudTd DataLabel="Szczegóły">@operation.OperationContext</MudTd>
                             <MudTd DataLabel="Status">
                                 <MudStack Spacing="0">
                                     <MudText Typo="Typo.body2">@GetLoanOperationStatusLabel(operation.Status)</MudText>
@@ -125,7 +125,7 @@ else
                         </RowTemplate>
                         <PagerContent>
                             <MudTablePager PageSizeOptions="@PageSizeOptions"
-                                           RowsPerPageString="Wierszy na stronÄ™"
+                                           RowsPerPageString="Wierszy na stronę"
                                            InfoFormat="{first_item}-{last_item} z {all_items}"/>
                         </PagerContent>
                     </MudTable>

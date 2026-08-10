@@ -1132,35 +1132,31 @@ public sealed class LoanService(
             throw new BadRequestException("Last installment date cannot extend the current loan period.");
         }
 
-        var targetPrincipal = ResolvePrincipalForTargetInstallmentAmount(
+        var targetProjection = ResolveProjectionForTargetInstallmentAmount(
             loan,
             request.InstallmentAmount,
             scheduleStart,
             request.LastInstallmentDate,
             remainingPrincipal);
-        if (targetPrincipal > remainingPrincipal)
-        {
-            throw new BadRequestException("Installment amount does not imply a lower remaining principal.");
-        }
 
         var originalEndDate = loan.EndDate;
-        loan.EndDate = request.LastInstallmentDate;
+        loan.EndDate = targetProjection.ScheduleEnd;
         IReadOnlyList<ScheduleRowDto> schedule;
         try
         {
-            schedule = BuildSchedule(loan, targetPrincipal, scheduleStart, request.LastInstallmentDate);
+            schedule = BuildSchedule(loan, targetProjection.Principal, scheduleStart, targetProjection.ScheduleEnd);
         }
         finally
         {
             loan.EndDate = originalEndDate;
         }
 
-        var prepaymentAmount = decimal.Round(remainingPrincipal - targetPrincipal, 2, MidpointRounding.AwayFromZero);
+        var prepaymentAmount = decimal.Round(remainingPrincipal - targetProjection.Principal, 2, MidpointRounding.AwayFromZero);
 
         return new ScheduleChangeProjection(
             ComputeLoanScheduleVersion(loan, includePrepaymentExpenseIdentity: prepaymentAmount > 0),
             scheduleStart,
-            request.LastInstallmentDate,
+            targetProjection.ScheduleEnd,
             affectedInstallments,
             schedule,
             null,
@@ -1695,6 +1691,8 @@ public sealed class LoanService(
         LoanRateEntry? RateEntry,
         decimal PrepaymentAmount);
 
+    private sealed record InstallmentAmountProjection(decimal Principal, DateOnly ScheduleEnd);
+
     private static string ComputeLoanScheduleVersion(Loan loan, bool includePrepaymentExpenseIdentity = false)
     {
         var builder = new StringBuilder();
@@ -2227,7 +2225,7 @@ public sealed class LoanService(
         return decimal.Round(principal * (decimal)(rate * factor / (factor - 1)), 2, MidpointRounding.AwayFromZero);
     }
 
-    private static decimal ResolvePrincipalForTargetInstallmentAmount(
+    private static InstallmentAmountProjection ResolveProjectionForTargetInstallmentAmount(
         Loan loan,
         decimal targetInstallmentAmount,
         DateOnly scheduleStart,
@@ -2238,15 +2236,20 @@ public sealed class LoanService(
         var maxInstallmentAmount = maxSchedule[0].Amount;
         if (targetInstallmentAmount > maxInstallmentAmount)
         {
-            var suggestedLastInstallmentDate = FindSuggestedLastInstallmentDate(
+            var shortenedLastInstallmentDate = FindSuggestedLastInstallmentDate(
                 loan,
                 targetInstallmentAmount,
                 scheduleStart,
                 scheduleEnd,
                 maxPrincipal);
 
-            var message = suggestedLastInstallmentDate.HasValue
-                ? $"Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty. Spróbuj podać wcześniejszą datę ostatniej raty, na przykład {suggestedLastInstallmentDate:yyyy-MM-dd}."
+            if (shortenedLastInstallmentDate.HasValue)
+            {
+                return new InstallmentAmountProjection(maxPrincipal, shortenedLastInstallmentDate.Value);
+            }
+
+            var message = scheduleEnd > scheduleStart
+                ? "Kwota raty jest zbyt wysoka nawet po maksymalnym skróceniu okresu kredytowania."
                 : "Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty.";
 
             throw new BadRequestException(message);
@@ -2254,7 +2257,7 @@ public sealed class LoanService(
 
         if (targetInstallmentAmount == maxInstallmentAmount)
         {
-            return maxPrincipal;
+            return new InstallmentAmountProjection(maxPrincipal, scheduleEnd);
         }
 
         var low = 0m;
@@ -2273,7 +2276,7 @@ public sealed class LoanService(
             }
         }
 
-        return decimal.Round(low, 2, MidpointRounding.AwayFromZero);
+        return new InstallmentAmountProjection(decimal.Round(low, 2, MidpointRounding.AwayFromZero), scheduleEnd);
     }
 
     private static DateOnly? FindSuggestedLastInstallmentDate(

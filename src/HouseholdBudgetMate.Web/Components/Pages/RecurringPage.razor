@@ -35,10 +35,6 @@
                            Href="@CurrentMonthPlanHref">
                     Otwórz bieżący plan
                 </MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CreditScore"
-                           Href="/loans">
-                    Kredyty
-                </MudButton>
             </div>
         </div>
     </MudPaper>
@@ -362,48 +358,6 @@
             </RowTemplate>
         </MudTable>
     </MudPaper>
-
-    @* <MudPaper Class="hb-panel recurring-panel">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="recurring-section-heading">
-            <div>
-                <MudText Typo="Typo.h6">Raty kredytów</MudText>
-                <MudText Typo="Typo.body2" Class="hb-muted">Podgląd najbliższej niezapłaconej raty każdego aktywnego kredytu.</MudText>
-            </div>
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small" Href="/loans">
-                Zarządzaj kredytami
-            </MudButton>
-        </MudStack>
-
-        <MudTable Items="_loanRecurringItems" Dense="true" Hover="true" Class="recurring-table">
-            <HeaderContent>
-                <MudTh>Kredyt</MudTh>
-                <MudTh>Następna rata</MudTh>
-                <MudTh>Kwota</MudTh>
-                <MudTh>Status</MudTh>
-            </HeaderContent>
-            <NoRecordsContent>
-                <div class="recurring-empty-state">
-                    <MudIcon Icon="@Icons.Material.Filled.CreditScore" Color="Color.Info"/>
-                    <MudText Typo="Typo.subtitle2">Brak aktywnych rat kredytowych.</MudText>
-                    <MudText Typo="Typo.body2" Class="hb-muted">Jeśli dodasz kredyt, najbliższa rata pojawi się tutaj jako stałe zobowiązanie.</MudText>
-                </div>
-            </NoRecordsContent>
-            <RowTemplate Context="item">
-                <MudTd DataLabel="Kredyt">
-                    <MudText Typo="Typo.body2" Class="recurring-row-title">@item.LoanName</MudText>
-                </MudTd>
-                <MudTd DataLabel="Następna rata">@item.Label</MudTd>
-                <MudTd DataLabel="Kwota">
-                    <span class="recurring-warning">@FormatMoney(item.Amount)</span>
-                </MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="string" Color="@(item.IsPaid ? Color.Success : Color.Warning)" Variant="Variant.Outlined">
-                        @(item.IsPaid ? "Zapłacona" : "Do zapłaty")
-                    </MudChip>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    </MudPaper> *@
 </div>
 
 <MudOverlay Visible="@_isBusy" Absolute="true" DarkBackground="true">

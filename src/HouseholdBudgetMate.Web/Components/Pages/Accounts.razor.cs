@@ -5,7 +5,6 @@ using HouseholdBudgetMate.Abstractions.Contracts.Categories.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Common.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
-using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto;
 using HouseholdBudgetMate.Abstractions.Enums;
 using HouseholdBudgetMate.Abstractions.Extensions;
 using HouseholdBudgetMate.Abstractions.Interfaces;
@@ -25,7 +24,6 @@ public partial class Accounts
     [Inject] private ICategoryService CategoryService { get; set; } = default!;
     [Inject] private IExpenseService ExpenseService { get; set; } = default!;
     [Inject] private IIncomeService IncomeService { get; set; } = default!;
-    [Inject] private ILoanService LoanService { get; set; } = default!;
     [Inject] private IDialogService DialogService { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
 
@@ -56,7 +54,7 @@ public partial class Accounts
     private LiveBalanceDto _liveBalance = new();
     private AccountsOverviewDto _overview = new();
     private SavingsTransferSummaryDto _savingsSummary = new();
-    private DebtSummaryDto _debtSummary = new();
+    private decimal _savedAmountSelectedMonth;
 
     private UpdateAccountRequest? _editModel;
     private string? _editNameError;
@@ -122,7 +120,6 @@ public partial class Accounts
             _hasSelectedMonthPlan = _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == _selectedMonth);
             _canEditSelectedMonth = CanSelectAccountPeriod(_selectedYear, _selectedMonth) && !IsSelectedMonthClosed();
             await LoadSelectedMonthFinancialPictureAsync();
-            _debtSummary = await LoanService.GetDebtSummaryAsync(_selectedYear, _selectedMonth, CancellationToken.None);
 
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
@@ -293,7 +290,6 @@ public partial class Accounts
             _hasSelectedMonthPlan = _availablePlanMonths.Any(x => x.Year == _selectedYear && x.Month == _selectedMonth);
             _canEditSelectedMonth = CanSelectAccountPeriod(_selectedYear, _selectedMonth) && !IsSelectedMonthClosed();
             await LoadSelectedMonthFinancialPictureAsync();
-            _debtSummary = await LoanService.GetDebtSummaryAsync(_selectedYear, _selectedMonth, CancellationToken.None);
             SyncSelectedMonthAmounts();
             RebuildPresentationModels();
             MarkDirtyStatePristine();
@@ -347,6 +343,7 @@ public partial class Accounts
             .Sum(x => x.Amount);
 
         var allAccountsBalance = _balanceRows.Sum(x => x.Amount);
+        _savedAmountSelectedMonth = CalculateSavedAmountSelectedMonth();
 
         _savingsSummary = new SavingsTransferSummaryDto(
             _selectedMonthPlan?.SavingsTransfers.Sum(x => x.Amount) ?? 0,
@@ -374,7 +371,7 @@ public partial class Accounts
             allAccountsBalance,
             _liveBalance.IncomesTotal,
             _liveBalance.ExpensesTotal,
-            _debtSummary.ActiveDebt,
+            0,
             _overspentCategories.Count,
             _accounts.Count,
             _accounts.Count(x => !x.IsArchived),
@@ -401,6 +398,24 @@ public partial class Accounts
 
                 return new BudgetHealthItemDto(category.Name, limit, spent, limit - spent);
             });
+    }
+
+    private decimal CalculateSavedAmountSelectedMonth()
+    {
+        if (_balanceRows.Count == 0 || _balanceRows.Any(x => !x.HasRecordedBalance))
+        {
+            return 0m;
+        }
+
+        var currentTotal = _balanceRows.Sum(x => x.Amount);
+        var previousMonthDate = new DateTime(_selectedYear, _selectedMonth, 1).AddMonths(-1);
+        var previousTotal = GetAccountsForSelectedMonth()
+            .Sum(account => account.MonthBalances
+                .Where(balance => balance.Year == previousMonthDate.Year && balance.Month == previousMonthDate.Month)
+                .Select(balance => balance.ClosingBalance)
+                .FirstOrDefault());
+
+        return currentTotal - previousTotal;
     }
 
     private AccountBalanceRowDto ToAccountBalanceRowDto(AccountDto account)
@@ -860,13 +875,6 @@ public partial class Accounts
     {
         return $"{value.ToString("0.00", _culture)} PLN";
     }
-
-    private static string FormatActiveLoanCount(int count) => count switch
-    {
-        1 => "1 aktywny kredyt",
-        >= 2 and <= 4 => $"{count} aktywne kredyty",
-        _ => $"{count} aktywnych kredytów"
-    };
 
     private static string FormatMonthlyTransferCount(int count) => count switch
     {

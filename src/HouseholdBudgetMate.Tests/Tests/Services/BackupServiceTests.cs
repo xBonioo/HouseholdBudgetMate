@@ -318,7 +318,8 @@ public sealed class BackupServiceTests
             {
                 Content = new MemoryStream(backup.Content),
                 FileName = backup.FileName,
-                ConfirmationPhrase = "RESTORE BACKUP"
+                ConfirmationPhrase = "RESTORE BACKUP",
+                Sections = BackupSection.FullApp
             },
             CancellationToken.None);
 
@@ -399,7 +400,8 @@ public sealed class BackupServiceTests
             {
                 Content = new MemoryStream(backup.Content),
                 FileName = backup.FileName,
-                ConfirmationPhrase = "RESTORE BACKUP"
+                ConfirmationPhrase = "RESTORE BACKUP",
+                Sections = BackupSection.FullApp
             },
             CancellationToken.None);
 
@@ -412,7 +414,7 @@ public sealed class BackupServiceTests
     }
 
     [Fact]
-    public async Task RestoreBackupAsync_Should_Reject_BudgetOnly_Backup_Before_Deleting_Data()
+    public async Task RestoreBackupAsync_Should_Restore_Selected_Budget_Section_Without_Deleting_Unselected_Data()
     {
         await using var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
@@ -436,21 +438,88 @@ public sealed class BackupServiceTests
             CancellationToken.None);
 
         await MutateVisibleStateAsync(options, currentUser);
+        await using (var context = new ApplicationDbContext(options, currentUser))
+        {
+            context.Logs.Add(new LogEntry
+            {
+                Message = "Keep this operational log",
+                MessageTemplate = "Keep this operational log",
+                Level = "Information",
+                Timestamp = new DateTime(2026, 6, 8, 12, 0, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
 
-        await Assert.ThrowsAsync<BadRequestException>(() => service.RestoreBackupAsync(
+        var restoreResult = await service.RestoreBackupAsync(
             new RestoreBackupRequest
             {
                 Content = new MemoryStream(backup.Content),
                 FileName = backup.FileName,
-                ConfirmationPhrase = "RESTORE BACKUP"
+                ConfirmationPhrase = "RESTORE BACKUP",
+                Sections = BackupSection.Budget
             },
-            CancellationToken.None));
+            CancellationToken.None);
 
-        Assert.Equal("Changed expense", await GetExpenseNameAsync(options, currentUser));
+        await using var verify = new ApplicationDbContext(options, currentUser);
+        Assert.True(restoreResult.IsSuccess);
+        Assert.Equal("Rent, utilities", await GetExpenseNameAsync(options, currentUser));
+        Assert.Equal("Keep this operational log", await verify.Logs.AsNoTracking().Select(x => x.Message).SingleAsync());
+        Assert.Contains(restoreResult.RestoredCounts, x => x.Key == "expenses" && x.Value > 0);
+        Assert.DoesNotContain(restoreResult.RestoredCounts, x => x.Key == "logs");
     }
 
     [Fact]
-    public async Task PreviewRestoreAsync_Should_Return_Counts_And_Block_NonFull_Backup()
+    public async Task RestoreBackupAsync_Should_Restore_Selected_User_Budget_Without_Touching_Other_User_Budget()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var visibleUser = CreateVisibleUserContext();
+        var otherUser = new CurrentUserContext();
+        otherUser.SetInteractiveUser(OtherUserId, OtherUserId);
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        var factory = new ScopedDbContextFactory(options, visibleUser);
+        await using (var setup = new ApplicationDbContext(options, visibleUser))
+        {
+            await setup.Database.EnsureCreatedAsync();
+        }
+
+        await SeedProfileAsync(options, visibleUser);
+        await SeedOtherProfileAsync(options, visibleUser);
+        await SeedVisibleBudgetAsync(options, visibleUser);
+        await SeedOtherBudgetAsync(options, otherUser);
+
+        var service = CreateService(factory, visibleUser);
+        var backup = await service.CreateBackupAsync(
+            new CreateBackupRequest { Sections = BackupSection.FullApp },
+            CancellationToken.None);
+
+        await MutateVisibleStateAsync(options, visibleUser);
+        await MutateOtherStateAsync(options, otherUser);
+
+        var restoreResult = await service.RestoreBackupAsync(
+            new RestoreBackupRequest
+            {
+                Content = new MemoryStream(backup.Content),
+                FileName = backup.FileName,
+                ConfirmationPhrase = "RESTORE BACKUP",
+                Sections = BackupSection.Budget,
+                UserSections = new Dictionary<string, BackupSection>
+                {
+                    [User.DefaultUserId] = BackupSection.Budget
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(restoreResult.IsSuccess);
+        Assert.Equal("Rent, utilities", await GetExpenseNameAsync(options, visibleUser));
+        Assert.Equal("Changed other expense", await GetExpenseNameAsync(options, otherUser));
+    }
+
+    [Fact]
+    public async Task PreviewRestoreAsync_Should_Return_Counts_And_Restorable_Sections()
     {
         var dbName = Guid.NewGuid().ToString();
         var currentUser = CreateVisibleUserContext();
@@ -478,8 +547,14 @@ public sealed class BackupServiceTests
 
         Assert.True(fullPreview.IsAllowed);
         Assert.Contains(fullPreview.CountsByTable, x => x.Key == "expenses" && x.Value > 0);
-        Assert.False(budgetOnlyPreview.IsAllowed);
-        Assert.Contains(budgetOnlyPreview.Errors, x => x.Contains("full-app backup", StringComparison.OrdinalIgnoreCase));
+        Assert.True(fullPreview.RestorableSections.HasFlag(BackupSection.Profiles));
+        Assert.Contains(fullPreview.Users, x => x.UserId == User.DefaultUserId && x.AvailableSections.HasFlag(BackupSection.Budget));
+        Assert.Contains(fullPreview.Users, x => x.UserId == VisibleUserId && x.AvailableSections.HasFlag(BackupSection.Profiles));
+        Assert.True(budgetOnlyPreview.IsAllowed);
+        Assert.True(budgetOnlyPreview.RestorableSections.HasFlag(BackupSection.Budget));
+        Assert.True(budgetOnlyPreview.RestorableSections.HasFlag(BackupSection.Taxonomy));
+        Assert.False(budgetOnlyPreview.RestorableSections.HasFlag(BackupSection.Profiles));
+        Assert.Empty(budgetOnlyPreview.Errors);
     }
 
     [Theory]
@@ -555,7 +630,8 @@ public sealed class BackupServiceTests
             {
                 Content = new MemoryStream(tampered),
                 FileName = backup.FileName,
-                ConfirmationPhrase = "RESTORE BACKUP"
+                ConfirmationPhrase = "RESTORE BACKUP",
+                Sections = BackupSection.FullApp
             },
             CancellationToken.None));
 

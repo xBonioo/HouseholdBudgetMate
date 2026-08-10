@@ -111,6 +111,11 @@
                 <MudText Typo="Typo.caption" Class="hb-muted">Suma wszystkich kont dla wybranego miesiąca</MudText>
             </MudPaper>
             <MudPaper Class="hb-kpi-card accounts-kpi-card">
+                <MudText Typo="Typo.caption" Class="hb-muted">Zaoszczędzone w miesiącu</MudText>
+                <MudText Class="hb-kpi-value">@FormatMoney(_savedAmountSelectedMonth)</MudText>
+                <MudText Typo="Typo.caption" Class="hb-muted">Po zapisaniu sald miesiąca</MudText>
+            </MudPaper>
+            <MudPaper Class="hb-kpi-card accounts-kpi-card">
                 <MudText Typo="Typo.caption" Class="hb-muted">Wpływy / wydatki</MudText>
                 <MudText Class="hb-kpi-value accounts-kpi-pair">
                     <span class="accounts-positive">@FormatMoney(_overview.IncomesTotal)</span>
@@ -118,11 +123,6 @@
                     <span class="accounts-negative">@FormatMoney(_overview.ExpensesTotal)</span>
                 </MudText>
                 <MudText Typo="Typo.caption" Class="hb-muted">Ruchy wybranego miesiąca</MudText>
-            </MudPaper>
-            <MudPaper Class="hb-kpi-card accounts-kpi-card">
-                <MudText Typo="Typo.caption" Class="hb-muted">Aktywny dług</MudText>
-                <MudText Class="hb-kpi-value">@FormatMoney(_debtSummary.ActiveDebt)</MudText>
-                <MudText Typo="Typo.caption" Class="hb-muted">@FormatActiveLoanCount(_debtSummary.ActiveLoanCount)</MudText>
             </MudPaper>
             <MudPaper Class="@AttentionKpiClass">
                 <MudText Typo="Typo.caption" Class="hb-muted">Kategorie przekroczone</MudText>
@@ -204,8 +204,8 @@
         </MudPaper>
 
         <MudPaper Class="hb-panel accounts-panel">
-            <MudText Typo="Typo.h6">Oszczędności i dług</MudText>
-            <MudText Typo="Typo.body2" Class="hb-muted">Krótki obraz celów oszczędnościowych i zobowiązań.</MudText>
+            <MudText Typo="Typo.h6">Oszczędności</MudText>
+            <MudText Typo="Typo.body2" Class="hb-muted">Krótki obraz celów oszczędnościowych.</MudText>
 
             <div class="accounts-summary-split">
                 <div class="accounts-summary-box">
@@ -214,20 +214,7 @@
                     <MudText Typo="Typo.h6">@FormatMoney(_savingsSummary.MonthlyTransfers)</MudText>
                     <MudText Typo="Typo.caption" Class="hb-muted">@FormatMonthlyTransferCount(_savingsSummary.TransferCount)</MudText>
                 </div>
-                <div class="accounts-summary-box">
-                    <MudIcon Icon="@Icons.Material.Filled.CreditScore" Color="Color.Warning"/>
-                    <MudText Typo="Typo.caption" Class="hb-muted">Pozostały kapitał</MudText>
-                    <MudText Typo="Typo.h6">@FormatMoney(_debtSummary.ActiveDebt)</MudText>
-                    <MudText Typo="Typo.caption" Class="hb-muted">@FormatActiveLoanCount(_debtSummary.ActiveLoanCount)</MudText>
-                </div>
             </div>
-
-            @if (_debtSummary.ActiveLoanCount == 0)
-            {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
-                    Brak aktywnych kredytów do pokazania w tym podsumowaniu.
-                </MudAlert>
-            }
         </MudPaper>
     </div>
 

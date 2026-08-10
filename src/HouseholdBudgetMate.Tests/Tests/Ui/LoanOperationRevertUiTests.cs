@@ -5,41 +5,29 @@ namespace HouseholdBudgetMate.Tests.Tests.Ui;
 public sealed class LoanOperationRevertUiTests
 {
     [Fact]
-    public void AuditPage_Should_Render_Revert_Actions_Only_For_Supported_Loan_Operations()
+    public void AuditPage_Should_Not_Render_Loan_Operation_Revert_Actions_When_Loans_Are_Disabled()
     {
         var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Audit.razor");
 
-        markup.Should().Contain("Operacje kredytowe");
-        markup.Should().Contain("LoanOperationAuditTypes.LoanPrepayment");
-        markup.Should().Contain("LoanOperationAuditTypes.LoanRateEntry");
-        markup.Should().Contain("IsSupportedLoanOperation(operation)");
-        markup.Should().Contain("Cofnij");
-        markup.Should().Contain("Disabled=\"@(!operation.CanRevert)\"");
+        markup.Should().NotContain("Operacje kredytowe");
+        markup.Should().NotContain("LoanOperationAuditTypes.LoanPrepayment");
+        markup.Should().NotContain("LoanOperationAuditTypes.LoanRateEntry");
+        markup.Should().NotContain("IsSupportedLoanOperation(operation)");
+        markup.Should().NotContain("ConfirmRevertAsync");
+        markup.Should().NotContain("LoanService.RevertLoanOperationAsync");
+        markup.Should().NotContain("LoanOperationAuditId = operation.Id");
     }
 
     [Fact]
-    public void AuditPage_Should_Confirm_Revert_Call_LoanService_And_Refresh()
+    public void AuditPage_Should_Limit_Entity_Audit_To_Admins_Without_Loan_Operation_Search()
     {
         var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Audit.razor");
 
-        markup.Should().Contain("ConfirmRevertAsync");
-        markup.Should().Contain("ConfirmDialog.Message");
-        markup.Should().Contain("LoanService.RevertLoanOperationAsync");
-        markup.Should().Contain("LoanOperationAuditId = operation.Id");
-        markup.Should().Contain("ExpectedScheduleVersion = operation.ScheduleVersionAfter");
-        markup.Should().Contain("await SearchCoreAsync()");
-    }
-
-    [Fact]
-    public void AuditPage_Should_Show_Block_Reasons_And_Limit_Entity_Audit_To_Admins()
-    {
-        var markup = ReadRepoFile("src/HouseholdBudgetMate.Web/Components/Pages/Audit.razor");
-
-        markup.Should().Contain("RevertBlockedReason");
-        markup.Should().Contain("GetLoanOperationStatusLabel");
+        markup.Should().NotContain("RevertBlockedReason");
+        markup.Should().NotContain("GetLoanOperationStatusLabel");
         markup.Should().Contain("if (!HasBudgetSession)");
         markup.Should().Contain("if (IsAdminSession)");
-        markup.Should().Contain("SearchLoanOperationsAsync");
+        markup.Should().NotContain("SearchLoanOperationsAsync");
         markup.Should().Contain("SearchAsync");
     }
 

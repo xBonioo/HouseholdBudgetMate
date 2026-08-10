@@ -2,17 +2,13 @@
 @using HouseholdBudgetMate.Abstractions.Contracts.Audit.Dto
 @using HouseholdBudgetMate.Abstractions.Contracts.Audit.Requests
 @using HouseholdBudgetMate.Abstractions.Contracts.Common.Dto
-@using HouseholdBudgetMate.Abstractions.Contracts.Loans.Requests
 @using HouseholdBudgetMate.Abstractions.Contracts.Users.Dto
 @using HouseholdBudgetMate.Abstractions.Interfaces
-@using HouseholdBudgetMate.Application.Kernel.Exceptions
-@using HouseholdBudgetMate.Domain
 @using HouseholdBudgetMate.Web.Components.Dialogs
 @using HouseholdBudgetMate.Web.Services
 @using MudBlazor
 
 @inject IAuditService AuditService
-@inject ILoanService LoanService
 @inject IUserService UserService
 @inject IUserSessionService UserSessionService
 @inject NavigationManager NavigationManager
@@ -47,92 +43,6 @@ else
                 </MudChip>
             </MudStack>
         </MudPaper>
-
-        <MudPaper Class="pa-4 mt-4 hb-panel">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
-                <MudText Typo="Typo.h6">Operacje kredytowe</MudText>
-                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    <MudSelect T="string"
-                               Label="Typ operacji"
-                               @bind-Value="_loanOperationType"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Clearable="true">
-                        @foreach (var option in LoanOperationTypeOptions)
-                        {
-                            <MudSelectItem Value="@option.Value">@option.Label</MudSelectItem>
-                        }
-                    </MudSelect>
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Search"
-                               OnClick="SearchAsync"
-                               Disabled="_isLoading">
-                        Szukaj
-                    </MudButton>
-                </MudStack>
-            </MudStack>
-
-            @if (_loanOperations.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Class="hb-muted">Brak operacji kredytowych dla wybranych filtrów.</MudText>
-            }
-            else
-            {
-                <div style="overflow-x: auto;">
-                    <MudTable Items="_loanOperations" Dense="true" Hover="true" RowsPerPage="50">
-                        <HeaderContent>
-                            <MudTh>Data</MudTh>
-                            <MudTh>Użytkownik</MudTh>
-                            <MudTh>Kredyt</MudTh>
-                            <MudTh>Operacja</MudTh>
-                            <MudTh>Szczegóły</MudTh>
-                            <MudTh>Status</MudTh>
-                            <MudTh>Akcje</MudTh>
-                        </HeaderContent>
-                        <RowTemplate Context="operation">
-                            <MudTd DataLabel="Data" Style="white-space: nowrap;">@FormatDate(operation.OccurredAtUtc)</MudTd>
-                            <MudTd DataLabel="Użytkownik">@operation.UserName</MudTd>
-                            <MudTd DataLabel="Kredyt">@operation.LoanName</MudTd>
-                            <MudTd DataLabel="Operacja">
-                                <MudChip T="string" Size="Size.Small" Color="@GetLoanOperationColor(operation.OperationType)">
-                                    @GetLoanOperationLabel(operation.OperationType)
-                                </MudChip>
-                            </MudTd>
-                            <MudTd DataLabel="Szczegóły">@operation.OperationContext</MudTd>
-                            <MudTd DataLabel="Status">
-                                <MudStack Spacing="0">
-                                    <MudText Typo="Typo.body2">@GetLoanOperationStatusLabel(operation.Status)</MudText>
-                                    @if (!operation.CanRevert && !string.IsNullOrWhiteSpace(operation.RevertBlockedReason))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Warning">@operation.RevertBlockedReason</MudText>
-                                    }
-                                </MudStack>
-                            </MudTd>
-                            <MudTd DataLabel="Akcje">
-                                @if (IsSupportedLoanOperation(operation))
-                                {
-                                    <MudButton Variant="Variant.Outlined"
-                                               Color="Color.Warning"
-                                               Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.Undo"
-                                               Disabled="@(!operation.CanRevert)"
-                                               OnClick="() => RevertLoanOperationAsync(operation)">
-                                        Cofnij
-                                    </MudButton>
-                                }
-                            </MudTd>
-                        </RowTemplate>
-                        <PagerContent>
-                            <MudTablePager PageSizeOptions="@PageSizeOptions"
-                                           RowsPerPageString="Wierszy na stronę"
-                                           InfoFormat="{first_item}-{last_item} z {all_items}"/>
-                        </PagerContent>
-                    </MudTable>
-                </div>
-            }
-        </MudPaper>
-
         @if (IsAdminSession)
         {
         <MudPaper Class="pa-4 mt-4 hb-panel">
@@ -301,7 +211,6 @@ else
         new("ExpenseLineItem", "Pozycja wydatku"),
         new("MonthSavingsTransferItem", "Oszczędności"),
         new("Category", "Kategoria"),
-        new("LoanInstallment", "Rata kredytu"),
         new("RegularExpenseDefinition", "Cykliczny wydatek"),
         new("RegularIncomeDefinition", "Cykliczny wpływ")
     ];
@@ -312,25 +221,17 @@ else
         new("Update", "Aktualizacja"),
         new("Delete", "Usunięcie")
     ];
-    private static readonly IReadOnlyList<SelectOptionDto> LoanOperationTypeOptions =
-    [
-        new(LoanOperationAuditTypes.LoanPrepayment, "Nadplata kredytu"),
-        new(LoanOperationAuditTypes.LoanRateEntry, "Aktualizacja WIBOR"),
-        new(LoanOperationAuditTypes.LoanOperationRevert, "Cofniecie")
-    ];
 
     private static readonly int[] PageSizeOptions = [50];
 
     private bool _isLoading;
     private string? _entityType;
     private string? _operation;
-    private string? _loanOperationType;
     private string? _userId;
     private DateTime? _fromDate;
     private DateTime? _toDate;
     private List<UserDto> _users = [];
     private IReadOnlyList<AuditLogDto> _logs = [];
-    private IReadOnlyList<LoanOperationAuditDto> _loanOperations = [];
     private readonly HashSet<int> _expandedLogIds = [];
 
     private bool HasBudgetSession => UserSessionService.CurrentUser is not null;
@@ -396,16 +297,6 @@ else
         var toUtc = ToUtcEndOfDay(_toDate);
         var userId = string.IsNullOrWhiteSpace(_userId) ? null : _userId;
 
-        _loanOperations = await AuditService.SearchLoanOperationsAsync(
-            new SearchAuditLogsRequest
-            {
-                Operation = string.IsNullOrWhiteSpace(_loanOperationType) ? null : _loanOperationType,
-                UserId = userId,
-                FromUtc = fromUtc,
-                ToUtc = toUtc
-            },
-            CancellationToken.None);
-
         if (!IsAdminSession)
         {
             _logs = [];
@@ -470,89 +361,6 @@ else
             "Delete" => Color.Error,
             _ => Color.Default
         };
-    }
-
-    private static bool IsSupportedLoanOperation(LoanOperationAuditDto operation)
-    {
-        return operation.OperationType is LoanOperationAuditTypes.LoanPrepayment
-            or LoanOperationAuditTypes.LoanRateEntry;
-    }
-
-    private static string GetLoanOperationLabel(string operationType)
-    {
-        return LoanOperationTypeOptions.FirstOrDefault(x => x.Value == operationType)?.Label ?? operationType;
-    }
-
-    private static string GetLoanOperationStatusLabel(string status)
-    {
-        return status switch
-        {
-            LoanOperationAuditStatuses.Active => "Aktywna",
-            LoanOperationAuditStatuses.Reverted => "Cofnieta",
-            _ => status
-        };
-    }
-
-    private static Color GetLoanOperationColor(string operationType)
-    {
-        return operationType switch
-        {
-            LoanOperationAuditTypes.LoanPrepayment => Color.Success,
-            LoanOperationAuditTypes.LoanRateEntry => Color.Info,
-            LoanOperationAuditTypes.LoanOperationRevert => Color.Secondary,
-            _ => Color.Default
-        };
-    }
-
-    private async Task RevertLoanOperationAsync(LoanOperationAuditDto operation)
-    {
-        if (!await ConfirmRevertAsync(operation))
-        {
-            return;
-        }
-
-        _isLoading = true;
-
-        try
-        {
-            await LoanService.RevertLoanOperationAsync(
-                new RevertLoanOperationRequest
-                {
-                    LoanOperationAuditId = operation.Id,
-                    ExpectedScheduleVersion = operation.ScheduleVersionAfter
-                },
-                CancellationToken.None);
-
-            Snackbar.Add("Operacja kredytowa została cofnięta.", Severity.Success);
-            await SearchCoreAsync();
-        }
-        catch (ConflictException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Warning);
-            await SearchCoreAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Nie można cofnąć operacji kredytowej: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isLoading = false;
-        }
-    }
-
-    private async Task<bool> ConfirmRevertAsync(LoanOperationAuditDto operation)
-    {
-        var message = $"Cofnąć operacje {GetLoanOperationLabel(operation.OperationType)} dla kredytu {operation.LoanName}? "
-                      + $"{operation.OperationContext}. Jeśli po tej zmianie harmonogram kredytu został zmieniony, cofanie zostanie zablokowane.";
-        var parameters = new DialogParameters
-        {
-            [nameof(ConfirmDialog.Message)] = message
-        };
-        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Cofnij operacje kredytu", parameters, options);
-        var result = await dialog.Result;
-        return result is not null && !result.Canceled;
     }
 
     private static string FormatDate(DateTime changedAtUtc)

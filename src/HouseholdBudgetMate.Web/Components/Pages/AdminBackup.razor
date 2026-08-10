@@ -11,6 +11,7 @@
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 @implements IAsyncDisposable
 
@@ -38,10 +39,6 @@ else
                 </MudChip>
             </MudStack>
 
-            @if (!string.IsNullOrWhiteSpace(_statusMessage))
-            {
-                <MudAlert Severity="@_statusSeverity" Dense="true" Class="mt-4">@_statusMessage</MudAlert>
-            }
         </MudPaper>
 
         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
@@ -211,9 +208,87 @@ else
 
                 @if (_restorePreview is not null)
                 {
-                    <MudAlert Severity="@(_restorePreview.IsAllowed ? Severity.Success : Severity.Error)" Dense="true">
-                        @(_restorePreview.IsAllowed ? "Backup przeszedł walidację i może zostać przywrócony." : "Backup nie może zostać przywrócony.")
-                    </MudAlert>
+                    @if (_restorePreview.IsAllowed)
+                    {
+                        <MudText Typo="Typo.subtitle2">Co przywrócić z backupu</MudText>
+                        @if (_restorePreview.Users.Count > 0)
+                        {
+                            <MudTable Items="@_restorePreview.Users" Dense="true" Hover="true">
+                                <HeaderContent>
+                                    <MudTh>Profil / budżet</MudTh>
+                                    <MudTh>Budżet</MudTh>
+                                    <MudTh>Profil i PIN</MudTh>
+                                    <MudTh>Audyt</MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="user">
+                                    <MudTd>
+                                        <MudText>@user.Username</MudText>
+                                        <MudText Typo="Typo.caption" Class="hb-muted">@user.UserId</MudText>
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudCheckBox T="bool"
+                                                     Value="@IsRestoreUserSectionSelected(user.UserId, BackupSection.Budget)"
+                                                     ValueChanged="@((bool value) => OnRestoreUserSectionChanged(user.UserId, BackupSection.Budget, value))"
+                                                     Disabled="@(!user.AvailableSections.HasFlag(BackupSection.Budget))" />
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudCheckBox T="bool"
+                                                     Value="@IsRestoreUserSectionSelected(user.UserId, BackupSection.Profiles)"
+                                                     ValueChanged="@((bool value) => OnRestoreUserSectionChanged(user.UserId, BackupSection.Profiles, value))"
+                                                     Disabled="@(!user.AvailableSections.HasFlag(BackupSection.Profiles))" />
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudCheckBox T="bool"
+                                                     Value="@IsRestoreUserSectionSelected(user.UserId, BackupSection.Audit)"
+                                                     ValueChanged="@((bool value) => OnRestoreUserSectionChanged(user.UserId, BackupSection.Audit, value))"
+                                                     Disabled="@(!user.AvailableSections.HasFlag(BackupSection.Audit))" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudGrid>
+                                <MudItem xs="12" sm="6" md="4">
+                                    <MudCheckBox T="bool"
+                                                 Label="Dane budżetowe"
+                                                 Value="@_restoreBudget"
+                                                 ValueChanged="@OnRestoreBudgetChanged"
+                                                 Disabled="@(!IsRestoreSectionAvailable(BackupSection.Budget))" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="4">
+                                    <MudCheckBox T="bool"
+                                                 Label="Profile i hashe PIN"
+                                                 @bind-Value="_restoreProfiles"
+                                                 Disabled="@(!IsRestoreSectionAvailable(BackupSection.Profiles))" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="4">
+                                    <MudCheckBox T="bool"
+                                                 Label="Kategorie i tagi"
+                                                 @bind-Value="_restoreTaxonomy"
+                                                 Disabled="@(!IsRestoreSectionAvailable(BackupSection.Taxonomy) || _restoreBudget)" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="4">
+                                    <MudCheckBox T="bool"
+                                                 Label="Audyt"
+                                                 @bind-Value="_restoreAudit"
+                                                 Disabled="@(!IsRestoreSectionAvailable(BackupSection.Audit))" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6" md="4">
+                                    <MudCheckBox T="bool"
+                                                 Label="Logi"
+                                                 @bind-Value="_restoreLogs"
+                                                 Disabled="@(!IsRestoreSectionAvailable(BackupSection.Logs))" />
+                                </MudItem>
+                            </MudGrid>
+                        }
+                        @if (_restoreBudget && IsRestoreSectionAvailable(BackupSection.Taxonomy))
+                        {
+                            <MudText Typo="Typo.caption" Class="hb-muted">
+                                Dane budżetowe przywracają też powiązane kategorie i tagi z pliku backupu.
+                            </MudText>
+                        }
+                    }
                     @if (_restorePreview.CountsByTable.Count > 0)
                     {
                         <MudText Typo="Typo.subtitle2">Restore preview counts</MudText>
@@ -250,16 +325,6 @@ else
                     Przywróć backup
                 </MudButton>
 
-                @if (_lastRestoreResult is not null)
-                {
-                    <MudAlert Severity="@(_lastRestoreResult.IsSuccess ? Severity.Success : Severity.Error)" Dense="true">
-                        @_lastRestoreResult.Message
-                        @if (!string.IsNullOrWhiteSpace(_lastRestoreResult.PreRestoreBackupPath))
-                        {
-                            <span> Pre-restore backup: @_lastRestoreResult.PreRestoreBackupPath</span>
-                        }
-                    </MudAlert>
-                }
             </MudStack>
         </MudPaper>
 
@@ -361,8 +426,6 @@ else
     private const string RestoreConfirmationPhrase = "RESTORE BACKUP";
 
     private bool _isBusy;
-    private string? _statusMessage;
-    private Severity _statusSeverity = Severity.Info;
 
     private int _csvYear = DateTime.Now.Year;
     private int? _csvMonth = DateTime.Now.Month;
@@ -386,7 +449,12 @@ else
     private string _restoreFileName = string.Empty;
     private string _restoreConfirmation = string.Empty;
     private BackupRestorePreviewDto? _restorePreview;
-    private BackupRestoreResultDto? _lastRestoreResult;
+    private bool _restoreBudget;
+    private bool _restoreProfiles;
+    private bool _restoreTaxonomy;
+    private bool _restoreAudit;
+    private bool _restoreLogs;
+    private Dictionary<string, BackupSection> _restoreUserSections = new(StringComparer.Ordinal);
     private ElementReference _restoreDropZone;
     private IJSObjectReference? _backupDropZoneModule;
     private IJSObjectReference? _backupDropZoneRegistration;
@@ -497,8 +565,8 @@ else
         _restoreFileContent = buffer.ToArray();
         _restoreFileName = file.Name;
         _restorePreview = null;
-        _lastRestoreResult = null;
         _restoreConfirmation = string.Empty;
+        ApplyRestoreSections(BackupSection.None);
     }
 
     private async Task ValidateRestoreAsync()
@@ -507,6 +575,8 @@ else
         {
             await using var stream = new MemoryStream(_restoreFileContent);
             _restorePreview = await BackupService.PreviewRestoreAsync(stream, _restoreFileName, CancellationToken.None);
+            ApplyRestoreSections(_restorePreview.RestorableSections);
+            ApplyRestoreUserSections(_restorePreview.Users);
             if (_restorePreview.IsAllowed)
             {
                 ShowSuccess("Backup przeszedł walidację. Wpisz RESTORE BACKUP, aby przywrócić dane.");
@@ -529,22 +599,24 @@ else
         await RunAdminActionAsync(async () =>
         {
             await using var stream = new MemoryStream(_restoreFileContent);
-            _lastRestoreResult = await BackupService.RestoreBackupAsync(
+            var restoreResult = await BackupService.RestoreBackupAsync(
                 new RestoreBackupRequest
                 {
                     Content = stream,
                     FileName = _restoreFileName,
-                    ConfirmationPhrase = _restoreConfirmation.Trim()
+                    ConfirmationPhrase = _restoreConfirmation.Trim(),
+                    Sections = BuildRestoreSections(),
+                    UserSections = BuildRestoreUserSections()
                 },
                 CancellationToken.None);
 
-            if (_lastRestoreResult.IsSuccess)
+            if (restoreResult.IsSuccess)
             {
-                ShowSuccess(_lastRestoreResult.Message);
+                ShowSuccess(restoreResult.Message);
             }
             else
             {
-                ShowError(_lastRestoreResult.Message);
+                ShowError(restoreResult.Message);
             }
         });
     }
@@ -621,6 +693,7 @@ else
     private bool HasValidRestoreRequest =>
         _restoreFileContent.Length > 0
         && _restorePreview?.IsAllowed == true
+        && BuildRestoreSections() != BackupSection.None
         && IsRestoreConfirmationValid();
 
     private bool IsRestoreConfirmationValid()
@@ -631,6 +704,82 @@ else
 
     private BackupSection BuildScheduleSections()
         => BuildSections(_scheduleBudget, _scheduleProfiles, _scheduleTaxonomy, _scheduleAudit, _scheduleLogs, _scheduleSettingsMetadata);
+
+    private BackupSection BuildRestoreSections()
+    {
+        if (_restoreUserSections.Count > 0)
+        {
+            return _restoreUserSections.Values.Aggregate(BackupSection.None, (current, sections) => current | sections);
+        }
+
+        var sections = BackupSection.None;
+        if (_restoreBudget) sections |= BackupSection.Budget;
+        if (_restoreProfiles) sections |= BackupSection.Profiles;
+        if (_restoreTaxonomy) sections |= BackupSection.Taxonomy;
+        if (_restoreAudit) sections |= BackupSection.Audit;
+        if (_restoreLogs) sections |= BackupSection.Logs;
+
+        if (_restoreBudget && IsRestoreSectionAvailable(BackupSection.Taxonomy))
+        {
+            sections |= BackupSection.Taxonomy;
+        }
+
+        return sections & (_restorePreview?.RestorableSections ?? BackupSection.None);
+    }
+
+    private IReadOnlyDictionary<string, BackupSection> BuildRestoreUserSections()
+        => _restoreUserSections
+            .Where(x => x.Value != BackupSection.None)
+            .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+
+    private bool IsRestoreSectionAvailable(BackupSection section)
+        => _restorePreview?.RestorableSections.HasFlag(section) == true;
+
+    private Task OnRestoreBudgetChanged(bool value)
+    {
+        _restoreBudget = value;
+        if (value && IsRestoreSectionAvailable(BackupSection.Taxonomy))
+        {
+            _restoreTaxonomy = true;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ApplyRestoreSections(BackupSection sections)
+    {
+        _restoreBudget = sections.HasFlag(BackupSection.Budget);
+        _restoreProfiles = sections.HasFlag(BackupSection.Profiles);
+        _restoreTaxonomy = sections.HasFlag(BackupSection.Taxonomy);
+        _restoreAudit = sections.HasFlag(BackupSection.Audit);
+        _restoreLogs = sections.HasFlag(BackupSection.Logs);
+        _restoreUserSections = new Dictionary<string, BackupSection>(StringComparer.Ordinal);
+    }
+
+    private void ApplyRestoreUserSections(IReadOnlyList<BackupRestoreUserScopeDto> users)
+    {
+        _restoreUserSections = users
+            .ToDictionary(
+                x => x.UserId,
+                x => x.AvailableSections & (BackupSection.Budget | BackupSection.Profiles | BackupSection.Audit | BackupSection.Taxonomy),
+                StringComparer.Ordinal);
+    }
+
+    private bool IsRestoreUserSectionSelected(string userId, BackupSection section)
+        => _restoreUserSections.TryGetValue(userId, out var sections) && sections.HasFlag(section);
+
+    private Task OnRestoreUserSectionChanged(string userId, BackupSection section, bool value)
+    {
+        _restoreUserSections.TryGetValue(userId, out var sections);
+        sections = value ? sections | section : sections & ~section;
+        if (section == BackupSection.Budget && value)
+        {
+            sections |= BackupSection.Taxonomy;
+        }
+
+        _restoreUserSections[userId] = sections;
+        return Task.CompletedTask;
+    }
 
     private static BackupSection BuildSections(
         bool budget,
@@ -668,7 +817,6 @@ else
     private async Task RunAdminActionAsync(Func<Task> action)
     {
         _isBusy = true;
-        _statusMessage = null;
 
         try
         {
@@ -686,14 +834,12 @@ else
 
     private void ShowSuccess(string message)
     {
-        _statusMessage = message;
-        _statusSeverity = Severity.Success;
+        Snackbar.Add(message, Severity.Success);
     }
 
     private void ShowError(string message)
     {
-        _statusMessage = message;
-        _statusSeverity = Severity.Error;
+        Snackbar.Add(message, Severity.Error);
     }
 
     public async ValueTask DisposeAsync()

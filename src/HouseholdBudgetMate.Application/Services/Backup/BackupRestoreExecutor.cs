@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using HouseholdBudgetMate.Abstractions.Contracts.Backup;
 using HouseholdBudgetMate.Abstractions.Contracts.Backup.Dto;
 using HouseholdBudgetMate.Application.Helpers;
 using HouseholdBudgetMate.Application.Kernel.Exceptions;
@@ -14,20 +15,41 @@ internal sealed class BackupRestoreExecutor
     public async Task<BackupRestoreResultDto> RestoreAsync(
         ApplicationDbContext dbContext,
         BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection,
         CancellationToken cancellationToken)
     {
         var state = new RestoreState();
         var restoredCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         var unhandledRecords = new List<string>();
 
-        await ClearExistingDataAsync(dbContext, cancellationToken);
+        await ClearExistingDataAsync(dbContext, selection, cancellationToken);
 
-        await RestoreTaxonomyAsync(dbContext, envelope, state, restoredCounts, cancellationToken);
-        await RestoreProfilesAsync(dbContext, envelope, state, restoredCounts, cancellationToken);
-        await RestoreBudgetAsync(dbContext, envelope, state, restoredCounts, cancellationToken);
-        await RestoreAuditAndLogsAsync(dbContext, envelope, state, restoredCounts, cancellationToken);
+        if (selection.Sections.HasFlag(BackupSection.Taxonomy))
+        {
+            await RestoreTaxonomyAsync(dbContext, envelope, state, restoredCounts, cancellationToken);
+        }
 
-        unhandledRecords.AddRange(GetUnhandledRecords(envelope, state.HandledPortableIds));
+        if (selection.Sections.HasFlag(BackupSection.Profiles))
+        {
+            await RestoreProfilesAsync(dbContext, envelope, selection, state, restoredCounts, cancellationToken);
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Budget))
+        {
+            await RestoreBudgetAsync(dbContext, envelope, selection, state, restoredCounts, cancellationToken);
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Audit))
+        {
+            await RestoreAuditAsync(dbContext, envelope, selection, state, restoredCounts, cancellationToken);
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Logs))
+        {
+            await RestoreLogsAsync(dbContext, envelope, state, restoredCounts, cancellationToken);
+        }
+
+        unhandledRecords.AddRange(GetUnhandledRecords(envelope, selection, state.HandledPortableIds));
 
         if (unhandledRecords.Count > 0)
         {
@@ -37,31 +59,38 @@ internal sealed class BackupRestoreExecutor
         return new BackupRestoreResultDto
         {
             IsSuccess = true,
-            Message = "Backup restored successfully.",
+            Message = "Backup przywrócony pomyślnie.",
             RestoredCounts = restoredCounts
         };
     }
 
-    private static async Task ClearExistingDataAsync(ApplicationDbContext dbContext, CancellationToken cancellationToken)
+    private static async Task ClearExistingDataAsync(
+        ApplicationDbContext dbContext,
+        BackupRestoreSelection selection,
+        CancellationToken cancellationToken)
     {
-        await DeleteAndSaveAsync(dbContext, dbContext.ExpenseLineItems, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Expenses, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.MonthSavingsTransferItems, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.LoanCharges, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.LoanRateEntries, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.LoanInstallments, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.RegularExpenseDefinitions, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.RegularIncomeDefinitions, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.AccountMonthBalances, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Incomes, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.AnnualPlans, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Loans, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.MonthPlans, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Accounts, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Tags, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Categories, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.AuditLogs, cancellationToken);
-        await DeleteAndSaveAsync(dbContext, dbContext.Logs, cancellationToken);
+        if (selection.Sections.HasFlag(BackupSection.Budget))
+        {
+            await DeleteBudgetDataAsync(dbContext, selection, cancellationToken);
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Taxonomy)
+            && selection.Sections.HasFlag(BackupSection.Budget)
+            && !selection.HasUserScope)
+        {
+            await DeleteAndSaveAsync(dbContext, dbContext.Tags, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.Categories, cancellationToken);
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Audit))
+        {
+            await DeleteAuditDataAsync(dbContext, selection, cancellationToken);
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Logs))
+        {
+            await DeleteAndSaveAsync(dbContext, dbContext.Logs, cancellationToken);
+        }
     }
 
     private static async Task DeleteAndSaveAsync<TEntity>(
@@ -86,6 +115,84 @@ internal sealed class BackupRestoreExecutor
         }
     }
 
+    private static async Task DeleteBudgetDataAsync(
+        ApplicationDbContext dbContext,
+        BackupRestoreSelection selection,
+        CancellationToken cancellationToken)
+    {
+        if (!selection.HasUserScope)
+        {
+            await DeleteAndSaveAsync(dbContext, dbContext.ExpenseLineItems, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.Expenses, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.MonthSavingsTransferItems, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.LoanCharges, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.LoanRateEntries, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.LoanInstallments, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.RegularExpenseDefinitions, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.RegularIncomeDefinitions, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.AccountMonthBalances, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.Incomes, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.AnnualPlans, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.Loans, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.MonthPlans, cancellationToken);
+            await DeleteAndSaveAsync(dbContext, dbContext.Accounts, cancellationToken);
+            return;
+        }
+
+        var owners = selection.BudgetOwnerUserIds;
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.ExpenseLineItems.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.Expenses.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.MonthSavingsTransferItems.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.LoanCharges.IgnoreQueryFilters().Where(x => owners.Contains(x.Loan.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.LoanRateEntries.IgnoreQueryFilters().Where(x => owners.Contains(x.Loan.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.LoanInstallments.IgnoreQueryFilters().Where(x => owners.Contains(x.Loan.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.RegularExpenseDefinitions.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.RegularIncomeDefinitions.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.AccountMonthBalances.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.Incomes.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.AnnualPlans.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.Loans.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.MonthPlans.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.Accounts.IgnoreQueryFilters().Where(x => owners.Contains(x.UserId)), cancellationToken);
+    }
+
+    private static async Task DeleteAuditDataAsync(
+        ApplicationDbContext dbContext,
+        BackupRestoreSelection selection,
+        CancellationToken cancellationToken)
+    {
+        if (!selection.HasUserScope)
+        {
+            await DeleteAndSaveAsync(dbContext, dbContext.AuditLogs, cancellationToken);
+            return;
+        }
+
+        var owners = selection.AuditBudgetOwnerUserIds;
+        await DeleteQueryAndSaveAsync(dbContext, dbContext.AuditLogs.IgnoreQueryFilters().Where(x => owners.Contains(x.BudgetOwnerUserId)), cancellationToken);
+    }
+
+    private static async Task DeleteQueryAndSaveAsync<TEntity>(
+        ApplicationDbContext dbContext,
+        IQueryable<TEntity> query,
+        CancellationToken cancellationToken)
+        where TEntity : class
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            await query.ExecuteDeleteAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
+            return;
+        }
+
+        var entities = await query.ToListAsync(cancellationToken);
+        if (entities.Count > 0)
+        {
+            dbContext.Set<TEntity>().RemoveRange(entities);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
+        }
+    }
+
     private static async Task RestoreTaxonomyAsync(
         ApplicationDbContext dbContext,
         BackupEnvelopeDto envelope,
@@ -97,7 +204,7 @@ internal sealed class BackupRestoreExecutor
         foreach (var record in categories)
         {
             var category = new Category();
-            ApplyFields(category, record);
+            ApplyFields(category, record, skipId: true);
             dbContext.Categories.Add(category);
             await dbContext.SaveChangesAsync(cancellationToken);
             state.Map(record.PortableId, category.Id);
@@ -146,11 +253,14 @@ internal sealed class BackupRestoreExecutor
     private static async Task RestoreProfilesAsync(
         ApplicationDbContext dbContext,
         BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection,
         RestoreState state,
         IDictionary<string, int> restoredCounts,
         CancellationToken cancellationToken)
     {
-        var users = envelope.Payload.Profiles?.Records.Where(x => x.Table == "users").ToList() ?? [];
+        var users = (envelope.Payload.Profiles?.Records.Where(x => x.Table == "users") ?? [])
+            .Where(x => !x.Fields.TryGetValue(nameof(User.Id), out var userId) || userId is null || selection.IncludesProfile(userId))
+            .ToList();
         var existingUsers = await dbContext.Users
             .ToDictionaryAsync(x => x.Id, StringComparer.Ordinal, cancellationToken);
 
@@ -178,11 +288,14 @@ internal sealed class BackupRestoreExecutor
     private static async Task RestoreBudgetAsync(
         ApplicationDbContext dbContext,
         BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection,
         RestoreState state,
         IDictionary<string, int> restoredCounts,
         CancellationToken cancellationToken)
     {
-        var accounts = envelope.Payload.Budget?.Records.Where(x => x.Table == "accounts").ToList() ?? [];
+        var recordsByTable = GetSelectedBudgetRecordsByTable(envelope, selection);
+
+        var accounts = recordsByTable.GetValueOrDefault("accounts", []);
         foreach (var record in accounts)
         {
             var account = new Account();
@@ -194,7 +307,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["accounts"] = accounts.Count;
 
-        var monthPlans = envelope.Payload.Budget?.Records.Where(x => x.Table == "monthPlans").ToList() ?? [];
+        var monthPlans = recordsByTable.GetValueOrDefault("monthPlans", []);
         foreach (var record in monthPlans)
         {
             var monthPlan = new MonthPlan();
@@ -206,7 +319,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["monthPlans"] = monthPlans.Count;
 
-        var annualPlans = envelope.Payload.Budget?.Records.Where(x => x.Table == "annualPlans").ToList() ?? [];
+        var annualPlans = recordsByTable.GetValueOrDefault("annualPlans", []);
         foreach (var record in annualPlans)
         {
             var annualPlan = new AnnualPlan();
@@ -218,7 +331,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["annualPlans"] = annualPlans.Count;
 
-        var regularExpenses = envelope.Payload.Budget?.Records.Where(x => x.Table == "regularExpenseDefinitions").ToList() ?? [];
+        var regularExpenses = recordsByTable.GetValueOrDefault("regularExpenseDefinitions", []);
         foreach (var record in regularExpenses)
         {
             var definition = new RegularExpenseDefinition();
@@ -230,7 +343,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["regularExpenseDefinitions"] = regularExpenses.Count;
 
-        var regularIncomes = envelope.Payload.Budget?.Records.Where(x => x.Table == "regularIncomeDefinitions").ToList() ?? [];
+        var regularIncomes = recordsByTable.GetValueOrDefault("regularIncomeDefinitions", []);
         foreach (var record in regularIncomes)
         {
             var definition = new RegularIncomeDefinition();
@@ -242,7 +355,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["regularIncomeDefinitions"] = regularIncomes.Count;
 
-        var loans = envelope.Payload.Budget?.Records.Where(x => x.Table == "loans").ToList() ?? [];
+        var loans = recordsByTable.GetValueOrDefault("loans", []);
         foreach (var record in loans)
         {
             var loan = new Loan();
@@ -254,7 +367,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["loans"] = loans.Count;
 
-        var balances = envelope.Payload.Budget?.Records.Where(x => x.Table == "accountMonthBalances").ToList() ?? [];
+        var balances = recordsByTable.GetValueOrDefault("accountMonthBalances", []);
         foreach (var record in balances)
         {
             var balance = new AccountMonthBalance();
@@ -266,7 +379,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["accountMonthBalances"] = balances.Count;
 
-        var incomes = envelope.Payload.Budget?.Records.Where(x => x.Table == "incomes").ToList() ?? [];
+        var incomes = recordsByTable.GetValueOrDefault("incomes", []);
         foreach (var record in incomes)
         {
             var income = new Income();
@@ -292,7 +405,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["incomes"] = incomes.Count;
 
-        var installments = envelope.Payload.Budget?.Records.Where(x => x.Table == "loanInstallments").ToList() ?? [];
+        var installments = recordsByTable.GetValueOrDefault("loanInstallments", []);
         foreach (var record in installments)
         {
             var installment = new LoanInstallment();
@@ -304,7 +417,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["loanInstallments"] = installments.Count;
 
-        var rateEntries = envelope.Payload.Budget?.Records.Where(x => x.Table == "loanRateEntries").ToList() ?? [];
+        var rateEntries = recordsByTable.GetValueOrDefault("loanRateEntries", []);
         foreach (var record in rateEntries)
         {
             var entry = new LoanRateEntry();
@@ -316,7 +429,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["loanRateEntries"] = rateEntries.Count;
 
-        var charges = envelope.Payload.Budget?.Records.Where(x => x.Table == "loanCharges").ToList() ?? [];
+        var charges = recordsByTable.GetValueOrDefault("loanCharges", []);
         foreach (var record in charges)
         {
             var charge = new LoanCharge();
@@ -328,7 +441,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["loanCharges"] = charges.Count;
 
-        var expenses = envelope.Payload.Budget?.Records.Where(x => x.Table == "expenses").ToList() ?? [];
+        var expenses = recordsByTable.GetValueOrDefault("expenses", []);
         foreach (var record in expenses)
         {
             var expense = new Expense();
@@ -346,7 +459,7 @@ internal sealed class BackupRestoreExecutor
         }
         restoredCounts["expenses"] = expenses.Count;
 
-        var lineItems = envelope.Payload.Budget?.Records.Where(x => x.Table == "expenseLineItems").ToList() ?? [];
+        var lineItems = recordsByTable.GetValueOrDefault("expenseLineItems", []);
         var affectedExpenseIds = new HashSet<int>();
         foreach (var record in lineItems)
         {
@@ -362,7 +475,7 @@ internal sealed class BackupRestoreExecutor
 
         await RecalculateRestoredExpenseActualAmountsAsync(dbContext, affectedExpenseIds, cancellationToken);
 
-        var transfers = envelope.Payload.Budget?.Records.Where(x => x.Table == "monthSavingsTransferItems").ToList() ?? [];
+        var transfers = recordsByTable.GetValueOrDefault("monthSavingsTransferItems", []);
         foreach (var record in transfers)
         {
             var transfer = new MonthSavingsTransferItem();
@@ -373,6 +486,53 @@ internal sealed class BackupRestoreExecutor
             state.MarkHandled(record.PortableId);
         }
         restoredCounts["monthSavingsTransferItems"] = transfers.Count;
+    }
+
+    private static Dictionary<string, List<BackupRecordDto>> GetSelectedBudgetRecordsByTable(
+        BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection)
+    {
+        var records = envelope.Payload.Budget?.Records.ToList() ?? [];
+        if (!selection.HasUserScope)
+        {
+            return records
+                .GroupBy(x => x.Table, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.ToList(), StringComparer.Ordinal);
+        }
+
+        var selectedIds = records
+            .Where(x => x.Fields.TryGetValue("UserId", out var userId) && userId is not null && selection.IncludesBudgetOwner(userId))
+            .Select(x => x.PortableId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var record in records)
+            {
+                if (selectedIds.Contains(record.PortableId))
+                {
+                    continue;
+                }
+
+                if (record.Fields.TryGetValue("UserId", out var userId) && userId is not null)
+                {
+                    continue;
+                }
+
+                if (record.References.Values.Any(selectedIds.Contains))
+                {
+                    selectedIds.Add(record.PortableId);
+                    changed = true;
+                }
+            }
+        }
+
+        return records
+            .Where(x => selectedIds.Contains(x.PortableId))
+            .GroupBy(x => x.Table, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.ToList(), StringComparer.Ordinal);
     }
 
     private static async Task<int> ResolveLegacyIncomeMonthPlanIdAsync(
@@ -435,14 +595,19 @@ internal sealed class BackupRestoreExecutor
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task RestoreAuditAndLogsAsync(
+    private static async Task RestoreAuditAsync(
         ApplicationDbContext dbContext,
         BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection,
         RestoreState state,
         IDictionary<string, int> restoredCounts,
         CancellationToken cancellationToken)
     {
-        var audits = envelope.Payload.Audit?.Records.Where(x => x.Table == "auditLogs").ToList() ?? [];
+        var audits = (envelope.Payload.Audit?.Records.Where(x => x.Table == "auditLogs") ?? [])
+            .Where(x => !x.Fields.TryGetValue(nameof(AuditLog.BudgetOwnerUserId), out var userId)
+                        || userId is null
+                        || selection.IncludesAuditOwner(userId))
+            .ToList();
         foreach (var record in audits)
         {
             var audit = new AuditLog();
@@ -453,7 +618,15 @@ internal sealed class BackupRestoreExecutor
             state.MarkHandled(record.PortableId);
         }
         restoredCounts["auditLogs"] = audits.Count;
+    }
 
+    private static async Task RestoreLogsAsync(
+        ApplicationDbContext dbContext,
+        BackupEnvelopeDto envelope,
+        RestoreState state,
+        IDictionary<string, int> restoredCounts,
+        CancellationToken cancellationToken)
+    {
         var logs = envelope.Payload.Logs?.Records.Where(x => x.Table == "logs").ToList() ?? [];
         foreach (var record in logs)
         {
@@ -467,31 +640,64 @@ internal sealed class BackupRestoreExecutor
         restoredCounts["logs"] = logs.Count;
     }
 
-    private static IReadOnlyList<string> GetUnhandledRecords(BackupEnvelopeDto envelope, ISet<string> handledPortableIds)
+    private static IReadOnlyList<string> GetUnhandledRecords(
+        BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection,
+        ISet<string> handledPortableIds)
     {
-        return EnumerateRecords(envelope)
+        return EnumerateSelectedRecords(envelope, selection)
             .Where(x => !handledPortableIds.Contains(x.PortableId))
             .Select(x => x.PortableId)
             .ToList();
     }
 
-    private static IEnumerable<BackupRecordDto> EnumerateRecords(BackupEnvelopeDto envelope)
+    private static IEnumerable<BackupRecordDto> EnumerateSelectedRecords(
+        BackupEnvelopeDto envelope,
+        BackupRestoreSelection selection)
     {
-        foreach (var section in new[]
-                 {
-                     envelope.Payload.Taxonomy,
-                     envelope.Payload.Profiles,
-                     envelope.Payload.Budget,
-                     envelope.Payload.Audit,
-                     envelope.Payload.Logs
-                 })
+        if (selection.Sections.HasFlag(BackupSection.Taxonomy) && envelope.Payload.Taxonomy is not null)
         {
-            if (section is null)
+            foreach (var record in envelope.Payload.Taxonomy.Records)
             {
-                continue;
+                yield return record;
             }
+        }
 
-            foreach (var record in section.Records)
+        if (selection.Sections.HasFlag(BackupSection.Profiles) && envelope.Payload.Profiles is not null)
+        {
+            foreach (var record in envelope.Payload.Profiles.Records
+                         .Where(x => x.Table != "users"
+                                     || !x.Fields.TryGetValue(nameof(User.Id), out var userId)
+                                     || userId is null
+                                     || selection.IncludesProfile(userId)))
+            {
+                yield return record;
+            }
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Budget))
+        {
+            foreach (var record in GetSelectedBudgetRecordsByTable(envelope, selection).Values.SelectMany(x => x))
+            {
+                yield return record;
+            }
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Audit) && envelope.Payload.Audit is not null)
+        {
+            foreach (var record in envelope.Payload.Audit.Records
+                         .Where(x => x.Table != "auditLogs"
+                                     || !x.Fields.TryGetValue(nameof(AuditLog.BudgetOwnerUserId), out var userId)
+                                     || userId is null
+                                     || selection.IncludesAuditOwner(userId)))
+            {
+                yield return record;
+            }
+        }
+
+        if (selection.Sections.HasFlag(BackupSection.Logs) && envelope.Payload.Logs is not null)
+        {
+            foreach (var record in envelope.Payload.Logs.Records)
             {
                 yield return record;
             }

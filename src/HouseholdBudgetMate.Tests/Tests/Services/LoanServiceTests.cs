@@ -1511,7 +1511,7 @@ public sealed class LoanServiceTests
     }
 
     [Fact]
-    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Suggest_Earlier_Last_Installment_Date_When_Amount_Is_Too_High()
+    public async Task ApplyLoanInstallmentAmountChangeAsync_Should_Shorten_Period_When_Amount_Is_Higher_Than_Selected_End_Date()
     {
         var service = CreateService(new DateTime(2026, 7, 16, 12, 0, 0, DateTimeKind.Utc));
         var loan = await service.CreateLoanAsync(new CreateLoanRequest
@@ -1541,19 +1541,21 @@ public sealed class LoanServiceTests
         using var dbContext = TestDbContextFactory.CreateDbContext(_dbName);
         var july2026Id = dbContext.LoanInstallments.Single(x => x.LoanId == loan.Id && x.DueDate == new DateOnly(2026, 7, 15)).Id;
 
-        var ex = await Assert.ThrowsAsync<BadRequestException>(async () => await service.ApplyLoanInstallmentAmountChangeAsync(
-            new ApplyLoanInstallmentAmountChangeRequest
-            {
-                LoanInstallmentId = july2026Id,
-                InstallmentAmount = 4600m,
-                LastInstallmentDate = new DateOnly(2054, 4, 15),
-                ExpectedScheduleVersion = "ignored"
-            },
-            CancellationToken.None));
+        var request = new ApplyLoanInstallmentAmountChangeRequest
+        {
+            LoanInstallmentId = july2026Id,
+            InstallmentAmount = 4600m,
+            LastInstallmentDate = new DateOnly(2054, 4, 15)
+        };
+        var preview = await service.PreviewApplyLoanInstallmentAmountChangeAsync(request, CancellationToken.None);
+        request.ExpectedScheduleVersion = preview.SourceVersion;
 
-        ex.Message.Should().Contain("Kwota raty jest zbyt wysoka dla wybranej daty ostatniej raty.");
-        ex.Message.Should().Contain("Spróbuj podać wcześniejszą datę ostatniej raty, na przykład");
-        ex.Message.Should().Contain("2053-08-15");
+        var updated = await service.ApplyLoanInstallmentAmountChangeAsync(request, CancellationToken.None);
+
+        updated.EndDate.Should().Be(new DateOnly(2053, 8, 15));
+        updated.Installments.Should().Contain(x => x.DueDate == new DateOnly(2053, 8, 15));
+        updated.Installments.Should().NotContain(x => x.DueDate > new DateOnly(2053, 8, 15));
+        updated.Installments.Single(x => x.DueDate == new DateOnly(2026, 7, 15)).Amount.Should().BeGreaterThanOrEqualTo(4600m);
     }
 
     /// <summary>

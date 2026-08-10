@@ -201,12 +201,16 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsMarkup.Should().Contain("Live balance");
         accountsMarkup.Should().Contain("Konta bie\u017c\u0105ce");
         accountsMarkup.Should().Contain("Konta + oszcz\u0119dno\u015bci");
+        accountsMarkup.Should().Contain("Zaoszcz\u0119dzone w miesi\u0105cu");
+        accountsMarkup.Should().Contain("_savedAmountSelectedMonth");
         accountsMarkup.Should().Contain("Wp\u0142ywy / wydatki");
         accountsMarkup.Should().Contain("Pozosta\u0142o z limitu koperty");
-        accountsMarkup.Should().Contain("Oszcz\u0119dno\u015bci i d\u0142ug");
+        accountsMarkup.Should().Contain("Oszcz\u0119dno\u015bci");
+        accountsMarkup.Should().NotContain("Oszcz\u0119dno\u015bci i d\u0142ug");
         accountsMarkup.Should().Contain("Transfery oszcz\u0119dno\u015bciowe");
         accountsMarkup.Should().Contain("FormatMonthlyTransferCount(_savingsSummary.TransferCount)");
-        accountsMarkup.Should().Contain("FormatActiveLoanCount(_debtSummary.ActiveLoanCount)");
+        accountsMarkup.Should().NotContain("FormatActiveLoanCount(_debtSummary.ActiveLoanCount)");
+        accountsMarkup.Should().NotContain("_debtSummary");
         accountsMarkup.Should().Contain("Salda kont");
         accountsMarkup.Should().NotContain(RemainingInPlanLabel);
 
@@ -217,10 +221,11 @@ public sealed class MonthlyBudgetingLoopUiTests
         accountsCode.Should().Contain("IncomeService.GetLiveBalanceAsync");
         accountsCode.Should().Contain("HasCompleteBalanceBase");
         accountsCode.Should().Contain("MissingBalanceAccountNames");
+        accountsCode.Should().Contain("CalculateSavedAmountSelectedMonth");
         accountsCode.Should().Contain(PreviousClosingBalanceGuidance);
         accountsCode.Should().Contain(StoredZeroBalanceGuidance);
-        accountsCode.Should().Contain("1 aktywny kredyt");
-        accountsCode.Should().Contain("aktywnych kredyt\u00f3w");
+        accountsCode.Should().NotContain("1 aktywny kredyt");
+        accountsCode.Should().NotContain("aktywnych kredyt\u00f3w");
         accountsCode.Should().Contain("1 wpis w miesi\u0105cu");
         accountsCode.Should().Contain("wpis\u00f3w w miesi\u0105cu");
         accountsMarkup.Should().Contain("Disabled=\"@(!CanMoveSelectedPeriod(-1))\"");

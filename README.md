@@ -45,7 +45,7 @@ context/                             # wymagania, architektura, test plan, zmian
 - **Dashboard i Plan**: miesięczny obraz budżetu, planowane/rzeczywiste wydatki, line items, wydatki nieoczekiwane, transfery oszczędnościowe i zamykanie miesięcy.
 - **Konta**: salda miesięczne, aktywne i archiwalne konta, `Konta + oszczędności`, podgląd brakujących sald i kondycji budżetu.
 - **Przychody i cykliczne**: przychody miesięczne, definicje cykliczne oraz synchronizacja z planem miesiąca.
-- **Kredyty**: harmonogramy, raty, koszty, nadpłaty, preview zmian harmonogramu, audyt i cofanie operacji kredytowych.
+- **Kredyty**: funkcja jest obecnie wyłączona w aplikacji.
 - **Kategorie i tagi**: hierarchia tagów, wpływ usunięcia i przepinanie historii.
 - **Backup i restore**: eksport, import, walidacja, preview restore i ustawienia backupu.
 - **Admin i audyt**: profile PIN, role admin/member, audyt zmian finansowych, konfiguracja i readiness.

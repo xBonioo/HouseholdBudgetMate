@@ -532,6 +532,7 @@ public sealed class ExpenseService(
                 x.Month,
                 x.ClosingBalance))
             .ToListAsync(cancellationToken);
+        accountBalances.AddRange(await LoadAccountBalanceMetadataSnapshotsAsync(dbContext, cancellationToken));
 
         var closedMonthKeys = await dbContext.MonthPlans
             .AsNoTracking()
@@ -551,11 +552,20 @@ public sealed class ExpenseService(
             var currentMonthDate = new DateTime(year, i, 1);
             var previousMonthDate = currentMonthDate.AddMonths(-1);
 
-            var currentAccountsMoney = SumAccountsOverviewClosingBalances(
+            var currentMonthKey = ToMonthKey(year, i);
+            var isCurrentMonthClosed = closedMonthKeySet.Contains(currentMonthKey);
+            var hasCompleteCurrentMonthBalances = HasCompleteAccountsOverviewClosingBalances(
                 accountBalances,
                 year,
                 i,
-                closedMonthKeySet.Contains(ToMonthKey(year, i)));
+                isCurrentMonthClosed);
+            var currentAccountsMoney = hasCompleteCurrentMonthBalances
+                ? SumAccountsOverviewClosingBalances(
+                    accountBalances,
+                    year,
+                    i,
+                    isCurrentMonthClosed)
+                : 0m;
             var previousAccountsMoney = SumAccountsOverviewClosingBalances(
                 accountBalances,
                 previousMonthDate.Year,
@@ -564,7 +574,7 @@ public sealed class ExpenseService(
 
             var plannedAmount = expenseData?.Planned ?? 0m;
             var spentAmount = expenseData?.Spent ?? 0m;
-            var savedAmount = currentAccountsMoney - previousAccountsMoney;
+            var savedAmount = hasCompleteCurrentMonthBalances ? currentAccountsMoney - previousAccountsMoney : 0m;
 
             timeline.Add(new DashboardMonthlySavingsDto
             {
@@ -909,6 +919,7 @@ public sealed class ExpenseService(
                 x.Month,
                 x.ClosingBalance))
             .ToListAsync(cancellationToken);
+        accountBalanceSnapshots.AddRange(await LoadAccountBalanceMetadataSnapshotsAsync(dbContext, cancellationToken));
 
         var closedMonthKeys = await dbContext.MonthPlans
             .AsNoTracking()
@@ -925,18 +936,27 @@ public sealed class ExpenseService(
             var currentMonthDate = new DateTime(year, monthNumber, 1);
             var previousMonthDate = currentMonthDate.AddMonths(-1);
 
-            var currentAccountsMoney = SumAccountsOverviewClosingBalances(
+            var currentMonthKey = ToMonthKey(year, monthNumber);
+            var isCurrentMonthClosed = closedMonthKeySet.Contains(currentMonthKey);
+            var hasCompleteCurrentMonthBalances = HasCompleteAccountsOverviewClosingBalances(
                 accountBalanceSnapshots,
                 year,
                 monthNumber,
-                closedMonthKeySet.Contains(ToMonthKey(year, monthNumber)));
+                isCurrentMonthClosed);
+            var currentAccountsMoney = hasCompleteCurrentMonthBalances
+                ? SumAccountsOverviewClosingBalances(
+                    accountBalanceSnapshots,
+                    year,
+                    monthNumber,
+                    isCurrentMonthClosed)
+                : 0m;
             var previousAccountsMoney = SumAccountsOverviewClosingBalances(
                 accountBalanceSnapshots,
                 previousMonthDate.Year,
                 previousMonthDate.Month,
                 closedMonthKeySet.Contains(ToMonthKey(previousMonthDate.Year, previousMonthDate.Month)));
 
-            monthlySavedAmounts[monthNumber] = currentAccountsMoney - previousAccountsMoney;
+            monthlySavedAmounts[monthNumber] = hasCompleteCurrentMonthBalances ? currentAccountsMoney - previousAccountsMoney : 0m;
         }
 
         var monthlyFinance = populatedMonths
@@ -2624,6 +2644,61 @@ public sealed class ExpenseService(
                 .Where(x => x.Year == year && x.Month == month)
                 .Select(x => x.ClosingBalance)
                 .FirstOrDefault());
+    }
+
+    private static async Task<List<AccountBalanceSnapshot>> LoadAccountBalanceMetadataSnapshotsAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Accounts
+            .AsNoTracking()
+            .Select(x => new AccountBalanceSnapshot(
+                x.Id,
+                x.Type,
+                x.ActiveFromUtc,
+                x.IsArchived,
+                x.ArchivedAtUtc,
+                x.UpdatedAtUtc,
+                0,
+                0,
+                0m))
+            .ToListAsync(cancellationToken);
+    }
+
+    private static bool HasCompleteAccountsOverviewClosingBalances(
+        IReadOnlyList<AccountBalanceSnapshot> balances,
+        int year,
+        int month,
+        bool isClosedMonth)
+    {
+        if (isClosedMonth)
+        {
+            return balances.Any(x => x.Year == year && x.Month == month);
+        }
+
+        var requiredAccountIds = balances
+            .Where(x => isClosedMonth || IsAccountApplicableForMonth(
+                x.ActiveFromUtc,
+                x.IsArchived,
+                x.ArchivedAtUtc,
+                x.UpdatedAtUtc,
+                year,
+                month))
+            .Select(x => x.AccountId)
+            .Distinct()
+            .ToHashSet();
+
+        if (requiredAccountIds.Count == 0)
+        {
+            return false;
+        }
+
+        var recordedAccountIds = balances
+            .Where(x => x.Year == year && x.Month == month)
+            .Select(x => x.AccountId)
+            .ToHashSet();
+
+        return requiredAccountIds.All(recordedAccountIds.Contains);
     }
 
     private static int ToMonthKey(int year, int month)

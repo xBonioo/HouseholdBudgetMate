@@ -395,7 +395,8 @@ public sealed class MonthlyBudgetingLoopTests
         decimal? categoryRemaining,
         decimal plannedAmount,
         decimal spentAmount,
-        decimal incomeAmount)
+        decimal incomeAmount,
+        decimal savedAmount = 0m)
     {
         Assert.Equal(Year, dashboard.Year);
         Assert.Equal(Month, dashboard.Month);
@@ -406,7 +407,7 @@ public sealed class MonthlyBudgetingLoopTests
         Assert.Equal(plannedAmount, timelineMonth.PlannedAmount);
         Assert.Equal(spentAmount, timelineMonth.SpentAmount);
         Assert.Equal(incomeAmount, timelineMonth.IncomeAmount);
-        Assert.Equal(0m, timelineMonth.SavedAmount);
+        Assert.Equal(savedAmount, timelineMonth.SavedAmount);
 
         if (categoryRemaining.HasValue)
         {

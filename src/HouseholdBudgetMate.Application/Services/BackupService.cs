@@ -20,6 +20,8 @@ public sealed class BackupService(
 {
     private const string CsvContentType = "text/csv; charset=utf-8";
     private const string JsonContentType = "application/json; charset=utf-8";
+    private const BackupSection RestorableSections =
+        BackupSection.Budget | BackupSection.Taxonomy | BackupSection.Profiles | BackupSection.Audit | BackupSection.Logs;
 
     private static readonly string[] CsvHeaders =
     [
@@ -136,11 +138,14 @@ public sealed class BackupService(
         return new BackupRestorePreviewDto
         {
             FileName = fileName,
+            IncludedSections = envelope?.Manifest.IncludedSections ?? BackupSection.None,
+            RestorableSections = GetRestorableSections(envelope),
+            Users = envelope is null ? [] : BuildRestoreUserScopes(envelope),
             CountsByTable = envelope?.Manifest.CountsByTable ?? new Dictionary<string, int>(),
             Warnings = validation.Warnings,
-            IsAllowed = validation.IsValid && IsFullRestoreEnvelope(envelope),
-            Errors = validation.IsValid && !IsFullRestoreEnvelope(envelope)
-                ? ["Restore requires a full-app backup with budget, taxonomy, and profile sections."]
+            IsAllowed = validation.IsValid && GetRestorableSections(envelope) != BackupSection.None,
+            Errors = validation.IsValid && GetRestorableSections(envelope) == BackupSection.None
+                ? ["Backup does not contain any restorable sections."]
                 : validation.Errors
         };
     }
@@ -160,10 +165,12 @@ public sealed class BackupService(
         }
 
         var envelope = validator.ParseEnvelope(contentBytes);
-        if (!IsFullRestoreEnvelope(envelope))
+        var selectedSections = NormalizeRestoreSections(request.Sections, request.UserSections, envelope);
+        if (selectedSections == BackupSection.None)
         {
-            throw new BadRequestException("Restore requires a full-app backup with budget, taxonomy, and profile sections.");
+            throw new BadRequestException("Select at least one section to restore.");
         }
+        var restoreSelection = new BackupRestoreSelection(selectedSections, NormalizeRestoreUserSections(request.UserSections, envelope));
 
         var preRestoreBackupPath = await CreatePreRestoreBackupAsync(cancellationToken);
 
@@ -177,7 +184,7 @@ public sealed class BackupService(
             {
                 await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
                 await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-                var result = await RestoreEnvelopeAsync(dbContext, envelope, validation.Warnings, preRestoreBackupPath, cancellationToken);
+                var result = await RestoreEnvelopeAsync(dbContext, envelope, restoreSelection, validation.Warnings, preRestoreBackupPath, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
                 return result;
@@ -185,7 +192,7 @@ public sealed class BackupService(
         }
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await RestoreEnvelopeAsync(dbContext, envelope, validation.Warnings, preRestoreBackupPath, cancellationToken);
+        return await RestoreEnvelopeAsync(dbContext, envelope, restoreSelection, validation.Warnings, preRestoreBackupPath, cancellationToken);
     }
 
     public Task<BackupSettingsDto> GetBackupSettingsAsync(CancellationToken cancellationToken)
@@ -256,12 +263,13 @@ public sealed class BackupService(
     private static async Task<BackupRestoreResultDto> RestoreEnvelopeAsync(
         ApplicationDbContext dbContext,
         BackupEnvelopeDto envelope,
+        BackupRestoreSelection restoreSelection,
         IReadOnlyList<string> validationWarnings,
         string preRestoreBackupPath,
         CancellationToken cancellationToken)
     {
         var executor = new BackupRestoreExecutor();
-        var result = await executor.RestoreAsync(dbContext, envelope, cancellationToken);
+        var result = await executor.RestoreAsync(dbContext, envelope, restoreSelection, cancellationToken);
 
         return new BackupRestoreResultDto
         {
@@ -279,6 +287,136 @@ public sealed class BackupService(
         {
             throw new BadRequestException("Typed confirmation phrase does not match.");
         }
+
+        if (request.Sections == BackupSection.None)
+        {
+            throw new BadRequestException("Select at least one section to restore.");
+        }
+    }
+
+    private static BackupSection GetRestorableSections(BackupEnvelopeDto? envelope)
+    {
+        if (envelope is null)
+        {
+            return BackupSection.None;
+        }
+
+        return envelope.Manifest.IncludedSections & RestorableSections;
+    }
+
+    private static IReadOnlyList<BackupRestoreUserScopeDto> BuildRestoreUserScopes(BackupEnvelopeDto envelope)
+    {
+        var profileUsers = (envelope.Payload.Profiles?.Records ?? [])
+            .Where(x => x.Table == "users")
+            .Select(x => new
+            {
+                UserId = x.Fields.TryGetValue(nameof(User.Id), out var id) ? id ?? string.Empty : string.Empty,
+                Username = x.Fields.TryGetValue(nameof(User.Username), out var username) ? username ?? string.Empty : string.Empty,
+                BudgetOwnerUserId = x.Fields.TryGetValue(nameof(User.BudgetOwnerUserId), out var ownerId) ? ownerId ?? string.Empty : string.Empty,
+                IsAdmin = x.Fields.TryGetValue(nameof(User.IsAdmin), out var isAdminText)
+                          && bool.TryParse(isAdminText, out var isAdmin)
+                          && isAdmin
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.UserId))
+            .ToDictionary(x => x.UserId, x => x, StringComparer.Ordinal);
+
+        var budgetOwnerIds = (envelope.Payload.Budget?.Records ?? [])
+            .Select(x => x.Fields.TryGetValue("UserId", out var userId) ? userId : null)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var auditOwnerIds = (envelope.Payload.Audit?.Records ?? [])
+            .Where(x => x.Table == "auditLogs")
+            .Select(x => x.Fields.TryGetValue(nameof(AuditLog.BudgetOwnerUserId), out var userId) ? userId : null)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var allUserIds = profileUsers.Keys
+            .Concat(budgetOwnerIds)
+            .Concat(auditOwnerIds)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        return allUserIds.Select(userId =>
+        {
+            var sections = BackupSection.None;
+            if (profileUsers.ContainsKey(userId))
+            {
+                sections |= BackupSection.Profiles;
+            }
+
+            if (budgetOwnerIds.Contains(userId))
+            {
+                sections |= BackupSection.Budget | BackupSection.Taxonomy;
+            }
+
+            if (auditOwnerIds.Contains(userId))
+            {
+                sections |= BackupSection.Audit;
+            }
+
+            profileUsers.TryGetValue(userId, out var profile);
+            return new BackupRestoreUserScopeDto
+            {
+                UserId = userId,
+                Username = profile?.Username ?? userId,
+                BudgetOwnerUserId = profile?.BudgetOwnerUserId ?? userId,
+                IsAdmin = profile?.IsAdmin ?? false,
+                AvailableSections = sections
+            };
+        }).ToList();
+    }
+
+    private static BackupSection NormalizeRestoreSections(
+        BackupSection requestedSections,
+        IReadOnlyDictionary<string, BackupSection> requestedUserSections,
+        BackupEnvelopeDto envelope)
+    {
+        var availableSections = GetRestorableSections(envelope);
+        var selectedSections = requestedUserSections.Count > 0
+            ? requestedUserSections.Values.Aggregate(BackupSection.None, (current, sections) => current | sections)
+            : requestedSections;
+
+        selectedSections &= availableSections;
+
+        if (selectedSections.HasFlag(BackupSection.Budget))
+        {
+            selectedSections |= BackupSection.Taxonomy & availableSections;
+        }
+
+        return selectedSections;
+    }
+
+    private static IReadOnlyDictionary<string, BackupSection> NormalizeRestoreUserSections(
+        IReadOnlyDictionary<string, BackupSection> requestedUserSections,
+        BackupEnvelopeDto envelope)
+    {
+        if (requestedUserSections.Count == 0)
+        {
+            return new Dictionary<string, BackupSection>();
+        }
+
+        var availableByUser = BuildRestoreUserScopes(envelope)
+            .ToDictionary(x => x.UserId, x => x.AvailableSections, StringComparer.Ordinal);
+
+        return requestedUserSections
+            .Select(x =>
+            {
+                var sections = availableByUser.TryGetValue(x.Key, out var availableSections)
+                    ? x.Value & availableSections
+                    : BackupSection.None;
+                if (sections.HasFlag(BackupSection.Budget))
+                {
+                    sections |= BackupSection.Taxonomy;
+                }
+
+                return new KeyValuePair<string, BackupSection>(x.Key, sections);
+            })
+            .Where(x => x.Value != BackupSection.None)
+            .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
     }
 
     private static void ValidateBackupPeriodRange(CreateBackupRequest request)
@@ -512,19 +650,6 @@ public sealed class BackupService(
         return request.IncludeAllBudgetOwners
                || request.Sections == BackupSection.FullApp
                || request.Sections.HasFlag(BackupSection.Profiles);
-    }
-
-    private static bool IsFullRestoreEnvelope(BackupEnvelopeDto? envelope)
-    {
-        if (envelope is null)
-        {
-            return false;
-        }
-
-        var sections = envelope.Manifest.IncludedSections;
-        return sections.HasFlag(BackupSection.Budget)
-               && sections.HasFlag(BackupSection.Taxonomy)
-               && sections.HasFlag(BackupSection.Profiles);
     }
 
     private static async Task<string?> WriteBackupFileAsync(

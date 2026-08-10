@@ -3056,9 +3056,93 @@ public sealed class ExpenseServiceTests
         var service = CreateService();
         var summary = await service.GetDashboardSummaryAsync(2026, 6, CancellationToken.None);
 
-        Assert.Equal(-200m, summary.SavedAmountThisMonth);
+        Assert.Equal(0m, summary.SavedAmountThisMonth);
         Assert.Equal(200m, summary.SavingsTimeline.Single(x => x.Month == 5).SavedAmount);
-        Assert.Equal(-200m, summary.SavingsTimeline.Single(x => x.Month == 6).SavedAmount);
+        Assert.Equal(0m, summary.SavingsTimeline.Single(x => x.Month == 6).SavedAmount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsync_Should_Return_Zero_SavedAmount_Until_Current_Month_Balances_Are_Saved()
+    {
+        int accountId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            context.Accounts.Add(account);
+            context.MonthPlans.AddRange(
+                new MonthPlan { Year = 2026, Month = 5 },
+                new MonthPlan { Year = 2026, Month = 6 });
+            await context.SaveChangesAsync();
+
+            accountId = account.Id;
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = accountId,
+                Year = 2026,
+                Month = 5,
+                ClosingBalance = 1200m
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var summary = await service.GetDashboardSummaryAsync(2026, 6, CancellationToken.None);
+
+        Assert.Equal(0m, summary.SavedAmountThisMonth);
+        Assert.Equal(1200m, summary.SavingsTimeline.Single(x => x.Month == 5).SavedAmount);
+        Assert.Equal(0m, summary.SavingsTimeline.Single(x => x.Month == 6).SavedAmount);
+        Assert.Equal(1200m, summary.SavedAmountYearToDate);
+    }
+
+    [Fact]
+    public async Task GetYearStatisticsAsync_Should_Return_Zero_SavedAmount_Until_Current_Month_Balances_Are_Saved()
+    {
+        int accountId;
+        int categoryId;
+
+        await using (var context = TestDbContextFactory.CreateDbContext(_dbName))
+        {
+            var account = new Account { Name = "Bank", Type = (int)AccountType.Bank };
+            var category = new Category { Name = "Dom", Color = "#1976D2" };
+            context.Accounts.Add(account);
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            accountId = account.Id;
+            categoryId = category.Id;
+
+            var may = new MonthPlan { Year = 2026, Month = 5 };
+            var june = new MonthPlan { Year = 2026, Month = 6 };
+            context.MonthPlans.AddRange(may, june);
+            await context.SaveChangesAsync();
+
+            context.AccountMonthBalances.Add(new AccountMonthBalance
+            {
+                AccountId = accountId,
+                Year = 2026,
+                Month = 5,
+                ClosingBalance = 1200m
+            });
+            context.Expenses.Add(new Expense
+            {
+                MonthPlanId = june.Id,
+                Order = 1,
+                Name = "Czynsz",
+                CategoryId = categoryId,
+                PlannedAmount = 1000m,
+                ActualAmount = 1000m,
+                ShowRemainingInUI = true
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+        var statistics = await service.GetYearStatisticsAsync(2026, CancellationToken.None);
+
+        Assert.Equal(0m, statistics.MonthlyFinance.Single(x => x.Month == 6).SavedAmount);
     }
 
     /// <summary>

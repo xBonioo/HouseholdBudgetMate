@@ -22,6 +22,13 @@ public sealed class BackupUiTests
         page.Should().Contain("Przeciągnij plik backupu JSON tutaj");
         page.Should().Contain("RESTORE BACKUP");
         page.Should().Contain("Restore preview counts");
+        page.Should().Contain("Co przywrócić z backupu");
+        page.Should().Contain("Profil / budżet");
+        page.Should().Contain("Dane budżetowe");
+        page.Should().Contain("BuildRestoreUserSections");
+        page.Should().Contain("UserSections = BuildRestoreUserSections()");
+        page.Should().Contain("BuildRestoreSections");
+        page.Should().Contain("Sections = BuildRestoreSections()");
         page.Should().Contain("Harmonogram backupu");
         page.Should().Contain("Harmonogram działa tylko wtedy, gdy proces aplikacji jest uruchomiony");
         page.Should().Contain("Ścieżka backupu");
@@ -41,6 +48,8 @@ public sealed class BackupUiTests
         page.Should().Contain("IsRestoreConfirmationValid");
         page.Should().Contain("StringComparison.OrdinalIgnoreCase");
         page.Should().Contain("ConfirmationPhrase = _restoreConfirmation.Trim()");
+        page.Should().Contain("Snackbar.Add(message, Severity.Success)");
+        page.Should().Contain("Snackbar.Add(message, Severity.Error)");
         page.Should().Contain("registerBackupDropZone");
         page.Should().Contain("DisposeAsync");
 

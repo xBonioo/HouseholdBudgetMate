@@ -5,7 +5,6 @@ using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Expenses.Requests;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Incomes.Requests;
-using HouseholdBudgetMate.Abstractions.Contracts.Loans.Dto;
 using HouseholdBudgetMate.Abstractions.Contracts.Recurring.Dto;
 using HouseholdBudgetMate.Abstractions.Interfaces;
 using HouseholdBudgetMate.Abstractions.Parsing;
@@ -24,7 +23,6 @@ public partial class RecurringPage
     [Inject] private IExpenseService ExpenseService { get; set; } = default!;
     [Inject] private IAccountService AccountService { get; set; } = default!;
     [Inject] private ICategoryService CategoryService { get; set; } = default!;
-    [Inject] private ILoanService LoanService { get; set; } = default!;
     [Inject] private IDateTimeProvider DateTimeProvider { get; set; } = default!;
     [Inject] private IDialogService DialogService { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
@@ -42,10 +40,8 @@ public partial class RecurringPage
     private List<CategoryDto> _categories = [];
     private List<RegularIncomeDefinitionDto> _incomeDefinitions = [];
     private List<RegularExpenseDefinitionDto> _expenseDefinitions = [];
-    private List<LoanDto> _loans = [];
     private IReadOnlyList<IncomeDefinitionRowDto> _incomeRows = [];
     private IReadOnlyList<ExpenseDefinitionRowDto> _expenseRows = [];
-    private IReadOnlyList<LoanRecurringItemDto> _loanRecurringItems = [];
     private RecurringOverviewDto _overview = new();
 
     private CreateRegularIncomeDefinitionRequest _newIncomeDefinition = new()
@@ -110,7 +106,6 @@ public partial class RecurringPage
 
             _incomeDefinitions = (await IncomeService.GetRegularDefinitionsAsync(CancellationToken.None)).ToList();
             _expenseDefinitions = (await ExpenseService.GetRegularExpenseDefinitionsAsync(CancellationToken.None)).ToList();
-            _loans = (await LoanService.GetAllAsync(CancellationToken.None)).ToList();
 
             EnsureCreateDefaults();
             RebuildPresentationModels();
@@ -165,16 +160,6 @@ public partial class RecurringPage
                 x.Amount,
                 x.IsActive,
                 x.ShowRemainingInUI))
-            .ToList();
-
-        _loanRecurringItems = _loans
-            .Where(x => x.IsActive)
-            .SelectMany(x => x.Installments
-                .Where(i => !i.IsPaid)
-                .OrderBy(i => i.DueDate)
-                .Take(1)
-                .Select(i => new LoanRecurringItemDto(x.Name, $"{i.Month:D2}/{i.Year}", i.Amount, i.IsPaid)))
-            .OrderBy(x => x.LoanName)
             .ToList();
 
         var activeIncomeAmount = _incomeRows.Where(x => x.IsActive).Sum(x => x.Amount);
